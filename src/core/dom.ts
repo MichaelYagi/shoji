@@ -26,7 +26,7 @@ function iconButton(className: string, icon: string, label: string): HTMLButtonE
   const button = document.createElement('button');
   button.type = 'button';
   button.className = className;
-  button.setAttribute('aria-label', label);
+  button.ariaLabel = button.title = label;
   button.innerHTML = icon;
   return button;
 }

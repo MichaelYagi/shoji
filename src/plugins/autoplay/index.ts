@@ -30,6 +30,7 @@ export const Autoplay: ShojiPlugin = {
     button.type = 'button';
     button.className = 'shoji-toolbar-button';
     button.setAttribute('aria-label', playLabel);
+    button.title = playLabel;
     button.innerHTML = PLAY_ICON;
 
     const progress = document.createElement('div');
@@ -65,6 +66,7 @@ export const Autoplay: ShojiPlugin = {
       playing = isPlaying;
       button.innerHTML = isPlaying ? PAUSE_ICON : PLAY_ICON;
       button.setAttribute('aria-label', isPlaying ? pauseLabel : playLabel);
+      button.title = isPlaying ? pauseLabel : playLabel;
     }
 
     function onVideoEnded(): void {

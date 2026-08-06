@@ -413,7 +413,7 @@ export class Gallery {
     button.type = 'button';
     button.className = 'shoji-toolbar-button';
     if (spec.icon) {
-      button.setAttribute('aria-label', spec.label);
+      button.ariaLabel = button.title = spec.label;
       button.innerHTML = spec.icon;
     } else {
       button.textContent = spec.label;

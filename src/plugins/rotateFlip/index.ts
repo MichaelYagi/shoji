@@ -49,6 +49,7 @@ export const RotateFlip: ShojiPlugin = {
       button.className = 'shoji-toolbar-button';
       button.innerHTML = icon;
       button.setAttribute('aria-label', label);
+      button.title = label;
       return button;
     }
 

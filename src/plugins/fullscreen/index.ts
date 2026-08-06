@@ -74,6 +74,7 @@ export const Fullscreen: ShojiPlugin = {
     button.className = 'shoji-toolbar-button';
     button.innerHTML = EXPAND_ICON;
     button.setAttribute('aria-label', enterLabel);
+    button.title = enterLabel;
     button.setAttribute('aria-pressed', 'false');
 
     function isActive(): boolean {
@@ -83,6 +84,7 @@ export const Fullscreen: ShojiPlugin = {
     function setState(active: boolean): void {
       button.innerHTML = active ? COMPRESS_ICON : EXPAND_ICON;
       button.setAttribute('aria-label', active ? exitLabel : enterLabel);
+      button.title = active ? exitLabel : enterLabel;
       button.setAttribute('aria-pressed', String(active));
     }
 
