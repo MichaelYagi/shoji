@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Dynamic mode</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html" aria-current="page">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+    </nav>
+    <p>
+      No DOM scanning at all — the host builds a <code>GalleryItem[]</code> array itself (including
+      a video item constructed by hand) and renders its own thumbnail grid, calling
+      <code>gallery.open(index)</code> directly on click. "Shuffle" calls
+      <code>updateSlides()</code> to prove the active slide survives a full reorder.
+    </p>
+    <div id="thumbs" class="thumb-grid"></div>
+    <button id="shuffle" type="button">Shuffle items (updateSlides)</button>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./dynamic-mode.ts"></script>
+  </body>
+</html>

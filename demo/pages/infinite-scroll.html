@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Infinite scroll</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html" aria-current="page">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+    </nav>
+    <p>
+      A ported version of a real production pattern: dynamic mode seeded from a paginated "backend"
+      (mocked here — chunks of your real photos, with simulated network latency), an
+      <code>IntersectionObserver</code> sentinel that loads more as you scroll,
+      <code>updateSlides()</code> on each page instead of hand-maintained index bookkeeping, and
+      id-based click-to-open (<code>gallery.open(index); gallery.goTo(index);</code>) so it works
+      whether the lightbox is closed or already open on something else.
+    </p>
+    <div id="gallery" class="thumb-grid"></div>
+    <p id="sentinel">Loading…</p>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./infinite-scroll.ts"></script>
+  </body>
+</html>

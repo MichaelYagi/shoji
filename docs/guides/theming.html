@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Theming</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./theming.html" aria-current="page">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Theming</h1>
+    <p>
+      No hardcoded colors or sizes anywhere in Shoji's CSS or JS — everything routes through
+      <code>--shoji-*</code> custom properties. Dark is the default theme; add the
+      <code>shoji-light</code> class to a gallery's container (or any ancestor) to switch to light:
+    </p>
+    <pre><code>&lt;div id="gallery" class="shoji-light"&gt;...&lt;/div&gt;</code></pre>
+    <p>
+      Override any property the same way — scoped to one gallery, or globally on <code>:root</code>:
+    </p>
+    <pre><code>#gallery {
+  --shoji-color-accent: #ff6b4a;
+  --shoji-duration: 200ms;
+}</code></pre>
+
+    <h2>Colors</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Dark (default)</th>
+          <th>Light (<code>.shoji-light</code>)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-color-bg</code></td>
+          <td><span class="swatch" style="background: #0b0b0d"></span><code>#0b0b0d</code></td>
+          <td><span class="swatch" style="background: #fafafa"></span><code>#fafafa</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-color-fg</code></td>
+          <td><span class="swatch" style="background: #f5f5f5"></span><code>#f5f5f5</code></td>
+          <td><span class="swatch" style="background: #111111"></span><code>#111111</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-color-accent</code></td>
+          <td colspan="2">
+            <span class="swatch" style="background: #4da3ff"></span><code>#4da3ff</code> — same in
+            both themes; also drives <code>--shoji-focus-ring</code> and the autoplay progress bar
+            (<code>--shoji-progress</code>)
+          </td>
+        </tr>
+        <tr>
+          <td><code>--shoji-color-backdrop</code></td>
+          <td><code>rgba(0, 0, 0, 0.92)</code></td>
+          <td><code>rgba(255, 255, 255, 0.96)</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-color-toolbar-bg</code></td>
+          <td><code>rgba(20, 20, 22, 0.85)</code></td>
+          <td><code>rgba(255, 255, 255, 0.9)</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-color-disabled</code></td>
+          <td><code>rgba(245, 245, 245, 0.35)</code></td>
+          <td><code>rgba(17, 17, 17, 0.35)</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Motion</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Default</th>
+          <th>Used for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-duration</code></td>
+          <td>
+            <code>300ms</code> (forced to <code>0ms</code> under
+            <code>prefers-reduced-motion: reduce</code>)
+          </td>
+          <td>Open/close, slide transitions, layout FLIP animations.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-easing</code></td>
+          <td><code>cubic-bezier(0.4, 0, 0.2, 1)</code></td>
+          <td>Open/close/zoom-transition curve.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-momentum-easing</code></td>
+          <td><code>cubic-bezier(0.2, 0, 0, 1)</code></td>
+          <td>
+            Drag-release settle animations specifically — a snap tuned for "released mid-motion,"
+            distinct from <code>--shoji-easing</code>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Spacing &amp; typography</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-spacing-sm</code></td>
+          <td><code>0.5rem</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-spacing-md</code></td>
+          <td><code>1rem</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-spacing-lg</code></td>
+          <td><code>1.5rem</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-font-family</code></td>
+          <td>
+            System-font stack (San Francisco / Segoe UI / Roboto per platform) — no webfont
+            download. Applied once on the dialog and inherited by everything inside it.
+          </td>
+        </tr>
+        <tr>
+          <td><code>--shoji-focus-ring</code></td>
+          <td><code>2px solid var(--shoji-color-accent)</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Z-index layers</h2>
+    <p>No <code>!important</code> anywhere — a documented, layered scale instead:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Value</th>
+          <th>Layer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-z-backdrop</code></td>
+          <td><code>0</code></td>
+          <td>The dimming backdrop behind the dialog.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-z-slides</code></td>
+          <td><code>10</code></td>
+          <td>Slide media.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-z-overlay</code></td>
+          <td><code>20</code></td>
+          <td>Plugin overlays mounted via <code>ctx.ui.overlay()</code>.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-z-toolbar</code></td>
+          <td><code>30</code></td>
+          <td>Toolbar (close/prev/next + plugin buttons).</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-z-toast</code></td>
+          <td><code>40</code></td>
+          <td>Above everything else.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Layout plugin properties</h2>
+    <p>
+      Set internally by the plugin per relayout (<code>columnWidth</code>/gutter feed into these),
+      not typically hand-authored — but overridable the same way as any custom property. Full list
+      in the <a href="../api/index.html">API reference</a>'s <code>LayoutOptions</code> —
+      <code>--shoji-layout-column-width</code>, <code>--shoji-layout-gutter</code>,
+      <code>--shoji-layout-tile-aspect</code>, and the <code>--shoji-layout-heading-*</code> family
+      for section heading typography.
+    </p>
+
+    <h2>Icons</h2>
+    <p>
+      Inline SVG sprites, <code>stroke: currentColor</code> — they inherit
+      <code>--shoji-color-fg</code> automatically and are overridable per-button via each plugin's
+      <code>icon</code> option (see <a href="./plugins.html">Plugins</a>).
+    </p>
+
+    <footer>
+      See also <a href="./plugins.html">Plugins</a> for per-plugin CSS hooks like
+      <code>activeThumbnail</code>'s <code>activeClass</code>.
+    </footer>
+  </body>
+</html>

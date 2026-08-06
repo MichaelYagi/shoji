@@ -1,0 +1,207 @@
+export interface ZoomTransitionTarget {
+  /** The thumbnail element to animate to/from. */
+  origin: HTMLElement;
+  /** The `.shoji-slide-media` element being animated — not `.shoji-slide` itself, whose transform is already owned by pool-offset positioning. */
+  target: HTMLElement;
+  /** `item.width / item.height`, when known — `target` is always its full flex-box size, never the (usually smaller, letterboxed) rendered photo inside it; see `effectiveTargetBox`. */
+  aspectRatio?: number;
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/** `"300ms"` / `"0.3s"` → milliseconds. Reads the *actual* computed value, not an assumed default, so a host overriding `--shoji-duration` still gets a correct fallback timeout below. */
+function parseCssTime(value: string): number {
+  const first = value.split(',')[0]?.trim() ?? '';
+  if (first.endsWith('ms')) return parseFloat(first);
+  if (first.endsWith('s')) return parseFloat(first) * 1000;
+  return 0;
+}
+
+interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The `object-fit: contain` box for `aspectRatio` within `container` — computed analytically since the real image may not be loaded/attached yet. */
+function containedBox(container: Box, aspectRatio: number): Box {
+  const containerRatio = container.width / container.height;
+  const width = aspectRatio > containerRatio ? container.width : container.height * aspectRatio;
+  const height = aspectRatio > containerRatio ? container.width / aspectRatio : container.height;
+  return {
+    left: container.left + (container.width - width) / 2,
+    top: container.top + (container.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+/**
+ * `target`'s effective visual box, not necessarily its own
+ * `getBoundingClientRect()`. `target` is always its full flex-box size; the
+ * photo inside is usually *smaller*, letterboxed to its own aspect ratio —
+ * a real bug used the container's full rect, making the animation scale
+ * from/to a box far bigger than the photo ever renders at, visibly
+ * shrinking it to something much smaller than the thumbnail whenever the
+ * aspect ratios didn't match (the common case). Preferred sources: the real
+ * rendered media child, if attached; else an analytical contain-box from
+ * `aspectRatio`; else the container's own rect as a last resort.
+ */
+function effectiveTargetBox(target: HTMLElement, aspectRatio?: number): Box {
+  const child = target.firstElementChild;
+  if (child instanceof HTMLElement) {
+    const rect = child.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) return rect;
+  }
+  const containerRect = target.getBoundingClientRect();
+  if (aspectRatio && containerRect.width > 0 && containerRect.height > 0) {
+    return containedBox(containerRect, aspectRatio);
+  }
+  return containerRect;
+}
+
+/**
+ * Center-to-center translate + a single uniform scale that lands `target`'s
+ * effective box (`effectiveTargetBox` above) *within* `origin`'s box,
+ * without distorting it. `null` if either has no real size — nothing sane
+ * to animate. One scale factor, not independent scaleX/scaleY: origin and
+ * the photo essentially never share an exact aspect ratio, and scaling each
+ * axis independently to force a rect match visibly squeezes/stretches the
+ * image. `Math.min` keeps the box fully contained within origin's rect
+ * (same tradeoff `object-fit: contain` makes); center always lands exactly
+ * on origin's center, only the unconstrained axis's edges fall short.
+ */
+function computeTransform(
+  origin: HTMLElement,
+  target: HTMLElement,
+  aspectRatio?: number,
+): string | null {
+  const originRect = origin.getBoundingClientRect();
+  const targetRect = effectiveTargetBox(target, aspectRatio);
+  if (
+    targetRect.width === 0 ||
+    targetRect.height === 0 ||
+    originRect.width === 0 ||
+    originRect.height === 0
+  ) {
+    return null;
+  }
+  const scale = Math.min(
+    originRect.width / targetRect.width,
+    originRect.height / targetRect.height,
+  );
+  const translateX =
+    originRect.left + originRect.width / 2 - (targetRect.left + targetRect.width / 2);
+  const translateY =
+    originRect.top + originRect.height / 2 - (targetRect.top + targetRect.height / 2);
+  return `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+}
+
+/**
+ * Waits for `target`'s own transform transition to end (with a safety-net
+ * timeout in case transitionend never fires — an interrupted/removed
+ * element, or a browser quirk) then calls `cb` exactly once. Exported: the
+ * gesture-driven drag-to-navigate/drag-to-close settle animations (§2.4,
+ * `Gallery.ts`) reuse this same wait-with-fallback logic rather than
+ * duplicating it — same instant-jump-then-transition FLIP family of moves
+ * as the zoom transition, just on a different element/property pairing.
+ */
+export function waitForTransitionEnd(target: HTMLElement, cb: () => void): void {
+  const durationMs = parseCssTime(getComputedStyle(target).transitionDuration);
+  let done = false;
+  const finish = (): void => {
+    if (done) return;
+    done = true;
+    target.removeEventListener('transitionend', onEnd);
+    cb();
+  };
+  const onEnd = (event: Event): void => {
+    if (event.target === target && (event as TransitionEvent).propertyName === 'transform')
+      finish();
+  };
+  target.addEventListener('transitionend', onEnd);
+  setTimeout(finish, durationMs + 100);
+}
+
+/**
+ * A real bug: unconditionally clearing `transform` here could wipe out a
+ * value another plugin (rotateFlip) legitimately set on the *same* element
+ * in the time between this animation starting and its cleanup callback
+ * firing (transitionend, or the fallback timeout — either can land well
+ * after a quick click elsewhere). Only clears `transform` if it still
+ * matches what this animation itself last wrote — nothing else has touched
+ * it since — otherwise leaves it alone. `transition`/`transformOrigin`
+ * are always safe to clear; nothing else in this codebase sets them.
+ */
+function clearInlineTransform(target: HTMLElement, expectedTransform: string): void {
+  target.style.transition = '';
+  target.style.transformOrigin = '';
+  if (target.style.transform === expectedTransform) target.style.transform = '';
+}
+
+/**
+ * FLIP-style open: `target` starts visually at `origin`'s position/size (an
+ * instant, untransitioned jump), then transitions to its natural layout —
+ * reads as "growing out of the thumbnail." Fire-and-forget: cleans up its
+ * own inline styles once the transition ends, nothing to await.
+ */
+export function zoomIn({ origin, target, aspectRatio }: ZoomTransitionTarget): void {
+  if (prefersReducedMotion()) return;
+  const transform = computeTransform(origin, target, aspectRatio);
+  if (!transform) return;
+
+  target.style.transition = 'none';
+  // computeTransform's translateX/Y is center-to-center math — must pair with
+  // a center transform-origin (the CSS default), not 'top left', or the
+  // scaled box ends up offset from origin by however far origin's center
+  // sits from its own top-left corner.
+  target.style.transformOrigin = 'center';
+  target.style.transform = transform;
+  void target.offsetHeight; // force the instant jump to commit before transitioning away from it
+  target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+  target.style.transform = 'none';
+
+  waitForTransitionEnd(target, () => clearInlineTransform(target, 'none'));
+}
+
+/**
+ * Reverse of `zoomIn`: `target` transitions from its natural position down
+ * to `origin`'s rect — "shrinking back into the thumbnail." `onComplete`
+ * always fires exactly once, synchronously if there's nothing to animate
+ * (reduced motion, or no valid rect), otherwise once the transition ends —
+ * callers use this to know when it's safe to actually hide/finalize.
+ */
+export function zoomOut(
+  { origin, target, aspectRatio }: ZoomTransitionTarget,
+  onComplete: () => void,
+): void {
+  if (prefersReducedMotion()) {
+    onComplete();
+    return;
+  }
+  const transform = computeTransform(origin, target, aspectRatio);
+  if (!transform) {
+    onComplete();
+    return;
+  }
+
+  // computeTransform's translateX/Y is center-to-center math — must pair with
+  // a center transform-origin (the CSS default), not 'top left', or the
+  // scaled box ends up offset from origin by however far origin's center
+  // sits from its own top-left corner.
+  target.style.transformOrigin = 'center';
+  target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+  void target.offsetHeight;
+  target.style.transform = transform;
+
+  waitForTransitionEnd(target, () => {
+    clearInlineTransform(target, transform);
+    onComplete();
+  });
+}

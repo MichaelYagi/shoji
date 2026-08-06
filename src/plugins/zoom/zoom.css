@@ -1,0 +1,19 @@
+/* DESIGN.md §4-zoom — cursor affordances only; the transform itself is set
+   inline (per-slide, computed from gesture/button state, not a static
+   rule). Scoped to .shoji-zoom-enabled (added by the plugin itself, per
+   slide) rather than the bare .shoji-slide-img class — that class exists on
+   every slide image regardless of whether this plugin is even enabled for
+   a given gallery, and this CSS ships in the single-file bundle alongside
+   every other official plugin's, so an unscoped rule would leak a zoom-in
+   cursor onto galleries that never opted into this plugin at all. */
+.shoji-zoom-enabled {
+  cursor: zoom-in;
+}
+
+.shoji-zoom-enabled.shoji-zoomed {
+  cursor: grab;
+}
+
+.shoji-zoom-enabled.shoji-zoomed:active {
+  cursor: grabbing;
+}

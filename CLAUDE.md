@@ -27,7 +27,6 @@ Read `DESIGN.md` before writing any code. It is the source of truth for architec
   /transitions     # Built-in animations (CSS3, hardware-accelerated)
   /a11y            # Focus trap, ARIA, announcements
   /plugins
-    /thumbnails
     /pagers
     /zoom
     /video         # HTML5 + YouTube/Vimeo/Wistia providers

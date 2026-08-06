@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Examples</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="../guides/getting-started.html">Getting started</a>
+      <a href="../guides/plugins.html">Plugins</a>
+      <a href="../guides/layout.html">Layout plugin</a>
+      <a href="../guides/theming.html">Theming</a>
+      <a href="./index.html" aria-current="page">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Examples</h1>
+    <p>
+      Real, runnable HTML files — not just snippets. Each one is fully self-contained (inline
+      placeholder images, no dependency on any external asset) and loads Shoji the same way a plain
+      <code>&lt;script&gt;</code>-tag integration would: from <code>dist/</code>, no bundler.
+    </p>
+    <blockquote>
+      Run <code>npm run build</code> first — these load <code>../../dist/shoji.min.js</code> +
+      <code>../../dist/shoji.min.css</code> directly, same as the demo's own
+      <code>demo/standalone.html</code>. Then open any example file directly in a browser (<code
+        >file://</code
+      >
+      works fine — the UMD build is a classic script, not a module).
+    </blockquote>
+
+    <ul class="guide-list">
+      <li>
+        <a href="./quickstart.html">Quickstart</a>
+        <p>The absolute minimum: default selector mode, no options object at all.</p>
+      </li>
+      <li>
+        <a href="./thumbnails-and-originals.html">Thumbnails + originals</a>
+        <p>
+          Two image sizes per photo — a small one for the grid, the original for the lightbox — with
+          the Layout plugin. The two-tier <code>thumb</code>/<code>src</code> pattern.
+        </p>
+      </li>
+      <li>
+        <a href="./custom-plugin.html">Custom plugin + custom data</a>
+        <p>
+          A ~15-line plugin reading <code>item.data</code> (populated from a
+          <code>data-shoji-*</code> attribute Shoji doesn't already know about) and adding its own
+          toolbar button.
+        </p>
+      </li>
+      <li>
+        <a href="./video-and-events.html">Dynamic mode, video, and events</a>
+        <p>
+          Hand-built items array including a video item, with every core lifecycle event logged live
+          on the page as it fires.
+        </p>
+      </li>
+    </ul>
+
+    <p>
+      Every officially-demonstrated feature also has a working page under
+      <code>demo/pages/</code> in the repo (Vite dev server, <code>npm run dev</code>) — these docs
+      examples are the same patterns, just as standalone files you can copy wholesale into your own
+      project.
+    </p>
+  </body>
+</html>

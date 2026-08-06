@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Dynamic mode, video, and events</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Dynamic mode, video, and events</h1>
+    <p>
+      A hand-built <code>items</code> array (no DOM scanning at all — dynamic mode), including one
+      video item, with click-to-open wired by hand (dynamic mode has no scanned elements to attach
+      listeners to automatically). Every core lifecycle event is logged live below as it fires.
+    </p>
+
+    <div id="gallery" class="thumb-grid"></div>
+    <button type="button" id="add-photo">Add a photo (updateSlides)</button>
+    <p class="status-line" id="status">Shoji not yet initialized.</p>
+    <h2>Event log</h2>
+    <div class="event-log" id="log"></div>
+
+    <script src="../../dist/shoji.min.js"></script>
+    <script>
+      function svgDataUri(label, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${color}"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const items = [
+        { id: 'p1', src: svgDataUri('Photo 1', '#c0392b'), caption: 'Sunset over the bay' },
+        { id: 'p2', src: svgDataUri('Photo 2', '#2980b9'), caption: 'Mountain trail' },
+        { id: 'p3', src: svgDataUri('Photo 3', '#27ae60'), caption: 'City lights' },
+        {
+          // Item shape for a video — provider: 'html5' plus one entry in
+          // `sources` per <source src type>. `clip.mp4` here is a
+          // placeholder path (there's no real video file to embed inline in
+          // a documentation example) — point this at your own file; the
+          // poster below is real, so the tile/slide still shows something.
+          id: 'v1',
+          src: 'clip.mp4',
+          video: { provider: 'html5' },
+          sources: [{ src: 'clip.mp4', type: 'video/mp4' }],
+          poster: svgDataUri('Video (replace src)', '#8e44ad'),
+          caption: 'Sample video — replace clip.mp4 with a real file',
+        },
+      ];
+
+      const gallery = new Shoji('#gallery', { items });
+
+      // Dynamic mode has no scanned DOM to wire clicks from automatically —
+      // the host owns this markup, so the host wires it. Click order
+      // matches the items array order 1:1.
+      const grid = document.querySelector('#gallery');
+      function renderThumbs() {
+        grid.innerHTML = gallery.items
+          .map(
+            (item, i) => `
+              <a href="#" data-index="${i}">
+                <img src="${item.video ? item.poster : item.src}" alt="${item.caption ?? ''}">
+              </a>`,
+          )
+          .join('');
+        grid.querySelectorAll('a[data-index]').forEach((a) => {
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            gallery.open(Number(a.dataset.index));
+          });
+        });
+      }
+      renderThumbs();
+
+      const status = document.querySelector('#status');
+      status.textContent = `Loaded ${gallery.items.length} item(s).`;
+
+      const log = document.querySelector('#log');
+      function logEvent(name, detail) {
+        const line = document.createElement('div');
+        line.textContent = `${name} ${detail ? JSON.stringify(detail) : ''}`;
+        log.prepend(line);
+      }
+      [
+        'beforeOpen',
+        'open',
+        'afterOpen',
+        'beforeSlide',
+        'afterSlide',
+        'slideItemLoad',
+        'itemsUpdated',
+        'beforeClose',
+        'close',
+        'afterClose',
+        'destroy',
+      ].forEach((name) => gallery.on(name, (detail) => logEvent(name, detail)));
+      gallery.on('itemsUpdated', () => {
+        status.textContent = `Loaded ${gallery.items.length} item(s).`;
+      });
+
+      // updateSlides() diffs by id (falling back to src) and re-renders —
+      // itemsUpdated fires above whenever this runs.
+      let nextId = items.length + 1;
+      document.querySelector('#add-photo').addEventListener('click', () => {
+        const color = ['#d35400', '#16a085', '#c0392b', '#2980b9'][nextId % 4];
+        gallery.updateSlides([
+          ...gallery.items,
+          {
+            id: `p${nextId}`,
+            src: svgDataUri(`Photo ${nextId}`, color),
+            caption: `Photo ${nextId}`,
+          },
+        ]);
+        nextId++;
+        renderThumbs();
+      });
+    </script>
+
+    <h2>Code</h2>
+    <p>The items array — three plain image items, then one video item:</p>
+    <pre><code>const gallery = new Shoji('#gallery', {
+  items: [
+    { id: 'p1', src: 'photo-1.jpg', caption: 'Sunset over the bay' },
+    { id: 'p2', src: 'photo-2.jpg', caption: 'Mountain trail' },
+    { id: 'p3', src: 'photo-3.jpg', caption: 'City lights' },
+    {
+      id: 'v1',
+      src: 'clip.mp4',
+      video: { provider: 'html5' },
+      sources: [{ src: 'clip.mp4', type: 'video/mp4' }],
+      poster: 'clip-poster.jpg',
+      caption: 'Sample video',
+    },
+  ],
+});
+
+// Dynamic mode has no scanned DOM to wire clicks from — the host owns
+// the thumbnail markup, so the host wires the click too:
+document.querySelectorAll('#gallery > a').forEach((el, i) => {
+  el.addEventListener('click', () => gallery.open(i));
+});</code></pre>
+    <p>Every core lifecycle event, logged as it fires:</p>
+    <pre><code>[
+  'beforeOpen', 'open', 'afterOpen',
+  'beforeSlide', 'afterSlide', 'slideItemLoad',
+  'itemsUpdated',
+  'beforeClose', 'close', 'afterClose',
+  'destroy',
+].forEach((name) => gallery.on(name, (detail) => console.log(name, detail)));</code></pre>
+    <p>
+      <code>updateSlides()</code> — diffs by <code>id</code> (falling back to <code>src</code>) and
+      re-renders, firing <code>itemsUpdated</code> above:
+    </p>
+    <pre><code>gallery.updateSlides([
+  ...gallery.items,
+  { id: 'p4', src: 'photo-4.jpg', caption: 'Photo 4' },
+]);</code></pre>
+  </body>
+</html>

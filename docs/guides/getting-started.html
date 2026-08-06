@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Getting started</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html" aria-current="page">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Getting started</h1>
+
+    <h2>Install</h2>
+    <p>Two ways to bring Shoji in, both produced by the same <code>npm run build</code>:</p>
+
+    <h3>Single file (no build step)</h3>
+    <p>
+      Core plus every official plugin, in one JS file and one CSS file. Nothing activates until you
+      opt a gallery into it via <code>plugins: [...]</code>, so unused plugins cost nothing at
+      runtime beyond their (small) parse/download size.
+    </p>
+    <pre><code>&lt;link rel="stylesheet" href="shoji.min.css" /&gt;
+&lt;script src="shoji.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  new Shoji('#gallery');
+&lt;/script&gt;</code></pre>
+    <p>
+      The UMD build exposes exactly one global: <code>Shoji</code>. It's the constructor itself (not
+      a namespace object), and official plugins hang off it as static properties —
+      <code>Shoji.Zoom</code>, <code>Shoji.Layout</code>, etc.
+    </p>
+
+    <h3>npm / ESM</h3>
+    <pre><code>npm install shoji</code></pre>
+    <pre><code>import Shoji from 'shoji';
+import 'shoji/style.css';
+
+new Shoji('#gallery', { plugins: [Shoji.Zoom] });</code></pre>
+    <p>
+      Bundler users who want to tree-shake away plugins they don't use can import the class and
+      plugins separately instead of pulling in the default export's static properties:
+    </p>
+    <pre><code>import { Gallery } from 'shoji/core';
+import { Zoom } from 'shoji/plugins/zoom';
+
+new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
+
+    <h2>Zero-config quickstart</h2>
+    <p>
+      Every option in Shoji has a default chosen so this is a complete integration — no items array,
+      no options object, no plugins:
+    </p>
+    <pre><code>&lt;div id="gallery"&gt;
+  &lt;a href="photo-1-full.jpg"&gt;&lt;img src="photo-1-thumb.jpg" alt="Sunset over the bay"&gt;&lt;/a&gt;
+  &lt;a href="photo-2-full.jpg"&gt;&lt;img src="photo-2-thumb.jpg" alt="Mountain trail"&gt;&lt;/a&gt;
+&lt;/div&gt;</code></pre>
+    <pre><code>new Shoji('#gallery');</code></pre>
+    <p>This works because of a default DOM→item mapping in <strong>selector mode</strong>:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>DOM</th>
+          <th>Item field</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>&lt;a href&gt;</code> (or <code>data-shoji-src</code>)</td>
+          <td><code>src</code></td>
+        </tr>
+        <tr>
+          <td>nested <code>&lt;img src&gt;</code> (or <code>data-shoji-thumb</code>)</td>
+          <td><code>thumb</code></td>
+        </tr>
+        <tr>
+          <td>that <code>&lt;img&gt;</code>'s <code>alt</code> (or <code>data-shoji-alt</code>)</td>
+          <td><code>alt</code></td>
+        </tr>
+        <tr>
+          <td><code>data-shoji-caption</code></td>
+          <td><code>caption</code></td>
+        </tr>
+        <tr>
+          <td><code>data-shoji-width</code> / <code>data-shoji-height</code></td>
+          <td><code>width</code> / <code>height</code></td>
+        </tr>
+        <tr>
+          <td><code>data-shoji-id</code></td>
+          <td><code>id</code> (falls back to <code>src</code>)</td>
+        </tr>
+        <tr>
+          <td>any other <code>data-shoji-*</code> attribute</td>
+          <td>
+            <code>data['&lt;name&gt;']</code> — e.g. <code>data-shoji-metadata-id="123"</code> →
+            <code>item.data['metadata-id']</code>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Any <code>data-shoji-*</code> attribute that isn't one of the named mappings above lands in
+      <code>item.data</code> instead, keyed by the attribute name with the
+      <code>data-shoji-</code> prefix stripped verbatim (not camelCased) — the same free-form bucket
+      dynamic-mode items already use for host payloads, just populated from the DOM here:
+    </p>
+    <pre><code>&lt;a href="photo-1-full.jpg" data-shoji-metadata-id="123"&gt;
+  &lt;img src="photo-1-thumb.jpg"&gt;
+&lt;/a&gt;</code></pre>
+    <pre><code>const MyPlugin = {
+  name: 'myPlugin',
+  init(ctx) {
+    ctx.on('afterOpen', ({ index }) =&gt; {
+      console.log(ctx.gallery.items[index].data); // { 'metadata-id': '123' }
+    });
+  },
+};</code></pre>
+    <p>
+      <code>item.data</code> stays <code>undefined</code> when an item has no custom
+      <code>data-shoji-*</code> attributes — this never adds an empty object. In dynamic mode
+      there's no DOM to scan, so <code>item.data</code> is only ever whatever you put there yourself
+      when constructing the item.
+    </p>
+    <p>
+      Each matched element also gets a click listener that opens the gallery at its index and calls
+      <code>preventDefault()</code>, so a real <code>&lt;a href&gt;</code> never navigates away —
+      the one piece of actual behavior (not just a default) the quickstart needs to work at all.
+    </p>
+    <p>
+      A nested <code>&lt;video&gt;</code> is auto-detected too — plain HTML5 video markup just
+      works, no extra config:
+    </p>
+    <pre><code>&lt;a href="clip.mp4"&gt;
+  &lt;video poster="clip-poster.jpg"&gt;
+    &lt;source src="clip.mp4" type="video/mp4"&gt;
+  &lt;/video&gt;
+&lt;/a&gt;</code></pre>
+
+    <h2>GalleryItem fields</h2>
+    <p>
+      Whichever mode builds them (selector-mode scanning, above, or your own objects in dynamic
+      mode, below), every item is the same shape. <code>src</code> is the only required field —
+      everything else is optional, read where it's relevant, and simply skipped if absent:
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Required?</th>
+          <th>Used for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>src</code></td>
+          <td>yes</td>
+          <td>
+            The lightbox slide's image (or video file, for a plain HTML5 video with no
+            <code>sources</code>).
+          </td>
+        </tr>
+        <tr>
+          <td><code>thumb</code></td>
+          <td>—</td>
+          <td>
+            The grid/tile image — Layout plugin tiles prefer this over <code>src</code> (see the
+            <a href="./layout.html">Layout guide</a>). Not used by the lightbox itself.
+          </td>
+        </tr>
+        <tr>
+          <td><code>id</code></td>
+          <td>—</td>
+          <td>
+            <code>updateSlides</code> diffing, and finding the origin thumbnail for the open/close
+            zoom transition and <code>ActiveThumbnail</code> (via a matching
+            <code>data-shoji-id</code>). Falls back to <code>src</code> if omitted.
+          </td>
+        </tr>
+        <tr>
+          <td><code>width</code> / <code>height</code></td>
+          <td>—</td>
+          <td>
+            Aspect-ratio placeholder before the image loads, accurate zoom-transition sizing, and
+            measure-free Layout plugin positioning. Should be the <em>original</em>'s dimensions,
+            not the thumbnail's.
+          </td>
+        </tr>
+        <tr>
+          <td><code>alt</code></td>
+          <td>—</td>
+          <td>
+            The rendered image's <code>alt</code> text and the screen-reader slide announcement.
+          </td>
+        </tr>
+        <tr>
+          <td><code>caption</code></td>
+          <td>—</td>
+          <td>
+            Rendered below the active slide.
+            <code>string | HTMLElement | { dangerouslySetInnerHTML }</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>srcset</code> / <code>sizes</code></td>
+          <td>—</td>
+          <td>
+            Passed straight through to the slide's <code>&lt;img&gt;</code> for responsive/DPR-aware
+            source selection.
+          </td>
+        </tr>
+        <tr>
+          <td><code>video</code> / <code>sources</code></td>
+          <td>—</td>
+          <td>
+            Makes it a video slide instead of an image; <code>sources</code> is one entry per
+            <code>&lt;source src type&gt;</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>poster</code></td>
+          <td>—</td>
+          <td>
+            Video poster frame; also what Layout tiles fall back to (after <code>thumb</code>) for a
+            video item.
+          </td>
+        </tr>
+        <tr>
+          <td><code>data</code></td>
+          <td>—</td>
+          <td>
+            Free-form payload for your own plugins/handlers to read — never touched by core
+            rendering. In selector mode, also auto-populated from any unrecognized
+            <code>data-shoji-*</code> attribute.
+          </td>
+        </tr>
+        <tr>
+          <td><code>download</code></td>
+          <td>—</td>
+          <td>Declared on the type; not yet wired to any UI by core or a shipped plugin.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Dynamic mode</h2>
+    <p>
+      No DOM markup at all — pass an <code>items</code> array and call <code>open(index)</code>
+      yourself (there's no default click target for the gallery to attach a listener to):
+    </p>
+    <pre><code>const gallery = new Shoji('#gallery', {
+  items: [
+    { id: 'p1', src: 'photo-1-full.jpg', thumb: 'photo-1-thumb.jpg', alt: 'Sunset over the bay' },
+    { id: 'p2', src: 'photo-2-full.jpg', thumb: 'photo-2-thumb.jpg', alt: 'Mountain trail' },
+  ],
+});
+
+document.querySelector('#my-thumb-1').addEventListener('click', () =&gt; gallery.open(0));</code></pre>
+    <p>
+      Update the item list at any time with
+      <code>gallery.updateSlides(items, currentIndex?)</code> — items are diffed by
+      <code>id</code> (falling back to <code>src</code>), preserving the active slide when possible.
+      <code>addSlides(items, atIndex?)</code> and <code>removeSlides(match)</code> are sugar over
+      the same call for the two most common cases.
+    </p>
+
+    <h2>Core options</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Option</th>
+          <th>Default</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>selector</code></td>
+          <td>
+            <code
+              >':scope &gt; a, :scope &gt; [data-shoji-src], :scope &gt; [data-shoji-video]'</code
+            >
+          </td>
+          <td>Which direct children to scan in selector mode.</td>
+        </tr>
+        <tr>
+          <td><code>items</code></td>
+          <td>—</td>
+          <td>Opts into dynamic mode instead of scanning the DOM.</td>
+        </tr>
+        <tr>
+          <td><code>loop</code></td>
+          <td><code>true</code></td>
+          <td>
+            <code>next()</code>/<code>prev()</code> wrap past the ends; <code>false</code> clamps
+            instead.
+          </td>
+        </tr>
+        <tr>
+          <td><code>openOnInit</code></td>
+          <td><code>false</code></td>
+          <td>
+            Opens immediately at construction (to <code>index</code>, default 0) — for
+            hash/deep-link-style integrations.
+          </td>
+        </tr>
+        <tr>
+          <td><code>plugins</code></td>
+          <td><code>[]</code></td>
+          <td>
+            Official or custom plugins to load, in order. See the
+            <a href="./plugins.html">Plugins guide</a>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>locale</code></td>
+          <td>English strings</td>
+          <td>
+            Flat key map — every user-visible string goes through it, no hardcoded English in the
+            UI.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Events</h2>
+    <p>
+      Every feature is observable: <code>gallery.on(event, fn)</code> returns an unsubscribe
+      function. Cancelable events (the <code>before*</code> ones) support
+      <code>event.preventDefault()</code>.
+    </p>
+    <pre><code>gallery.on('afterSlide', ({ index }) =&gt; console.log('now showing', index));</code></pre>
+    <p>
+      Core lifecycle: <code>beforeOpen → open → afterOpen</code>,
+      <code>beforeSlide(from,to) → slideItemLoad → afterSlide</code>,
+      <code>beforeClose → close → afterClose</code>, plus <code>itemsUpdated</code>,
+      <code>dragStart</code>/<code>drag</code>/<code>dragEnd</code>, and per-plugin events
+      documented on the <a href="./plugins.html">Plugins guide</a> and in the
+      <a href="../api/index.html">API reference</a>.
+    </p>
+
+    <footer>Next: <a href="./plugins.html">the plugin system</a>.</footer>
+  </body>
+</html>

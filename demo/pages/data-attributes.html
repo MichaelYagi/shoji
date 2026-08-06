@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — data-shoji-* attributes</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html" aria-current="page">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+    </nav>
+    <p>
+      Non-anchor markup — <code>&lt;figure data-shoji-src&gt;</code> instead of
+      <code>&lt;a href&gt;</code> — still picked up by the default selector's second branch.
+      Width/height are supplied so the aspect ratio is known before the image loads.
+      <code>data-shoji-metadata-id</code> and <code>data-shoji-album</code> aren't recognized
+      attributes — they land in <code>item.data</code> instead (open a photo to see it printed below
+      the status line).
+    </p>
+    <div id="gallery" class="thumb-grid"></div>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./data-attributes.ts"></script>
+  </body>
+</html>

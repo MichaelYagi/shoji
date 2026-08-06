@@ -1,0 +1,11 @@
+dist/
+docs/api/
+coverage/
+playwright-report/
+test-results/
+node_modules/
+.claude/
+DESIGN.md
+README.md
+# Preserves the user's own hand-written formatting verbatim, not repo style.
+demo/standalone-dynamic.html

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--
+      Only the built dist/ output is loaded here — no Vite, no bundler.
+      Open this file directly (file:// works fine, UMD is a classic script,
+      not a module) once `npm run build` has produced dist/shoji.css + dist/shoji.js.
+    -->
+    <link rel="stylesheet" href="file:///C:/Users/Michael/Documents/development/shoji/dist/shoji.css">
+    <title>Shoji — standalone dynamic-mode smoke test</title>
+    <style>
+        #gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem; /* or 0 for no gap at all */
+        }
+        #gallery img {
+            display: block; /* kills the leftover baseline gap under each image */
+            height: 255px;
+            object-fit: cover;
+        }
+        #gallery a {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<!--
+1. Zero-config (selector mode, no options)
+<div id="gallery">
+  <a href="full-1.jpg"><img src="thumb-1.jpg" alt="Photo 1"></a>
+  <a href="full-2.jpg"><img src="thumb-2.jpg" alt="Photo 2"></a>
+</div>
+<script src="dist/shoji.js"></script>
+<script>new Shoji('#gallery');</script>
+
+2. Custom selector + data-shoji-* markup
+<ul id="gallery">
+  <li class="photo" data-shoji-src="full-1.jpg" data-shoji-caption="Sunset">
+    <img src="thumb-1.jpg" alt="Sunset">
+  </li>
+</ul>
+<script>new Shoji('#gallery', { selector: '.photo' });</script>
+
+3. Dynamic mode, including a hand-built video item — video now plays back
+   natively (real <video controls>, click-to-play, not muted/autoplayed) and
+   the zoom-open/close transition runs automatically for any item whose id
+   matches a data-shoji-id marker somewhere on the page (see the #gallery
+   thumbnails below — each <a> carries data-shoji-id="<item id>" for exactly
+   this reason). No markup at all needed in selector mode; this file uses it
+   here purely because dynamic mode has no scanned element to fall back to.
+const gallery = new Shoji(mountEl, {
+  items: [
+    { id: 'a', src: 'full-1.jpg', caption: 'Sunset' },
+    { id: 'vid', src: 'clip.mp4', video: { provider: 'html5' }, poster: 'poster.jpg' },
+  ],
+});
+gallery.open(0);
+-->
+
+    <div id="gallery">
+        <a data-shoji-id="1"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/1.jpg" alt="Photo 1"></a>
+        <a data-shoji-id="2"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/2.jpg" alt="Photo 2"></a>
+        <a data-shoji-id="3"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/4.jpg" alt="Photo 4"></a>
+        <a data-shoji-id="4"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/5.jpg" alt="Photo 5"></a>
+        <a data-shoji-id="5"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/6.jpg" alt="Photo 6"></a>
+        <a data-shoji-id="6"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/7.jpg" alt="Photo 7"></a>
+        <a data-shoji-id="7"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/8.jpg" alt="Photo 8"></a>
+        <a data-shoji-id="8"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/9.jpg" alt="Photo 9"></a>
+        <a data-shoji-id="9"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/10.jpg" alt="Photo 10"></a>
+        <a data-shoji-id="10"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/11.jpg" alt="Photo 11"></a>
+        <a data-shoji-id="11"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/12.jpg" alt="Photo 12"></a>
+        <a data-shoji-id="12"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/13.jpg" alt="Photo 13"></a>
+        <a data-shoji-id="13"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/14.jpg" alt="Photo 14"></a>
+        <a data-shoji-id="14"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/15.jpg" alt="Photo 15"></a>
+        <a data-shoji-id="15"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/16.jpg" alt="Photo 16"></a>
+        <a data-shoji-id="16"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/17.jpg" alt="Photo 17"></a>
+        <a data-shoji-id="17"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/18.jpg" alt="Photo 18"></a>
+        <a data-shoji-id="18"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/19.jpg" alt="Photo 19"></a>
+        <a data-shoji-id="19"><img src="file:///C:/Users/Michael/Documents/development/shoji/demo/assets/19.jpg" alt="Video"></a>
+    </div>
+    <script src="file:///C:/Users/Michael/Documents/development/shoji/dist/shoji.js"></script>
+    <script>
+        const gallery = new Shoji('#gallery', {
+            items: [
+                { id: '1', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/1.jpg', caption: 'Sunset 1' },
+                { id: '2', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/2.jpg', caption: 'Sunset 2' },
+                { id: '3', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/4.jpg', caption: 'Sunset 4' },
+                { id: '4', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/5.jpg', caption: 'Sunset 5' },
+                { id: '5', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/6.jpg', caption: 'Sunset 6' },
+                { id: '6', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/7.jpg', caption: 'Sunset 7' },
+                { id: '7', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/8.jpg', caption: 'Sunset 8' },
+                { id: '8', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/9.jpg', caption: 'Sunset 9' },
+                { id: '9', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/10.jpg', caption: 'Sunset 10' },
+                { id: '10', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/11.jpg', caption: 'Sunset 11' },
+                { id: '11', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/12.jpg', caption: 'Sunset 12' },
+                { id: '12', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/13.jpg', caption: 'Sunset 13' },
+                { id: '13', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/14.jpg', caption: 'Sunset 14' },
+                { id: '14', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/15.jpg', caption: 'Sunset 15' },
+                { id: '15', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/16.jpg', caption: 'Sunset 16' },
+                { id: '16', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/17.jpg', caption: 'Sunset 17' },
+                { id: '17', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/18.jpg', caption: 'Sunset 18' },
+                { id: '18', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/19.jpg', caption: { dangerouslySetInnerHTML: 'Sunset 19<br><br>asdfasdfasd asdfas' } },
+                // Real, click-to-play video — native <video controls>, not muted/autoplayed.
+                { id: '19', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/20.mp4', video: { provider: 'html5' }, poster: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/19.jpg' },
+            ],
+            // Requires dist/shoji.js built from a source tree that has the
+            // autoplay plugin — Shoji.Autoplay is undefined (and this whole
+            // array entry becomes `[undefined]`) against a stale/older build.
+            plugins: [Shoji.Autoplay],
+        });
+        // Dynamic mode has no scanned DOM to wire clicks from automatically
+        // (§3/§2.1 — the host owns this markup, not Shoji), so the host wires
+        // it here: click order matches the items array order 1:1.
+        document.querySelectorAll('#gallery > a').forEach((el, i) => {
+            el.addEventListener('click', () => gallery.open(i));
+        });
+
+        // Stays closed until a thumbnail is clicked — the library's default
+        // (GalleryOptions.openOnInit, default false; DESIGN.md §2.1). Swap
+        // to `plugins: [Shoji.Autoplay]` construction above with
+        // `openOnInit: true` if you want it to land straight in the
+        // lightbox instead.
+
+        gallery.on('afterOpen', ({ index }) => {
+            console.log('afterOpen', index);
+        });
+        gallery.on('beforeSlide', ({ from, to }) => {
+            console.log('beforeSlide', from, to);
+        });   // not cancelable yet, see below
+        gallery.on('afterSlide', ({ from, to }) => {
+            console.log('afterSlide', from, to);
+        });
+        gallery.on('slideItemLoad', ({ index }) => {
+            console.log('slideItemLoad', index);
+        });     // fires once that slide's image has decoded
+        gallery.on('itemsUpdated', ({ items }) => {
+            console.log('itemsUpdated', items);
+        });
+        gallery.on('afterClose', () => {
+            console.log('afterClose');
+        });
+        gallery.on('destroy', () => {
+            console.log('destroy');
+        });
+
+        // next()/prev()/goTo() are no-ops while the lightbox is closed
+        // (Gallery.goTo() early-returns on !isOpen) — click a thumbnail
+        // first, or call gallery.open(0) here, before trying these:
+        // gallery.next();       // moves to the next photo
+        // gallery.prev();       // back one
+        // gallery.goTo(0);      // jump to the first
+        // gallery.refresh();    // dynamic mode: no-op (dev warning) — refresh() only rescans in selector mode; use updateSlides() to change dynamic-mode items
+        // gallery.destroy();       // do this last — kills the gallery, clicking stops
+    </script>
+</body>
+</html>

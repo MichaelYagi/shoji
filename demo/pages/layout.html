@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Layout plugin (masonry)</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html" aria-current="page">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+    </nav>
+    <p>
+      <code>plugins: [Shoji.Layout]</code> — the plugin renders the thumbnail tiles itself (no
+      manual thumbnail markup at all, unlike the other dynamic-mode demos) from each photo's real
+      aspect ratio, no image measuring involved. Resize the window to see any of the three types
+      reflow.
+    </p>
+    <div class="demo-nav" style="margin-bottom: 1rem">
+      <button id="type-grid" type="button">Grid</button>
+      <button id="type-masonry" type="button">Masonry</button>
+      <button id="type-masonry-horizontal" type="button">Masonry (horizontal)</button>
+      <button id="type-justified" type="button">Justified</button>
+    </div>
+    <p>
+      <label>
+        <input id="toggle-group-by" type="checkbox" />
+        Group by date (Google Photos-style headings via <code>groupBy</code>) — not supported with
+        Masonry (horizontal), see console for a warning if toggled there
+      </label>
+    </p>
+    <div id="gallery"></div>
+    <button id="load-more" type="button">Load more (simulated infinite scroll)</button>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./layout.ts"></script>
+  </body>
+</html>

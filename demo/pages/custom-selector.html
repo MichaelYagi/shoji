@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Custom selector</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html" aria-current="page">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+    </nav>
+    <p>
+      Pre-existing host markup that doesn't follow Shoji's default convention: items are nested
+      inside a <code>&lt;ul&gt;</code> as <code>&lt;li class="photo-item"&gt;</code>, not direct
+      children with <code>href</code>/<code>data-shoji-src</code> at the top level. A custom
+      <code>selector</code> option finds them; the attribute mapping itself is unchanged.
+    </p>
+    <ul id="gallery" class="thumb-grid" style="list-style: none; padding: 0"></ul>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./custom-selector.ts"></script>
+  </body>
+</html>

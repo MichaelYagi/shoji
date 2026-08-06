@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Layout plugin</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html" aria-current="page">Layout plugin</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Layout plugin</h1>
+    <p>
+      Turns the inline gallery container into a fully managed, config-driven grid — no extra markup,
+      no external masonry library. The plugin renders its own tiles from each item's aspect ratio
+      and clears whatever was in the container beforehand. Three types:
+    </p>
+    <pre><code>new Shoji('#gallery', {
+  plugins: [Shoji.Layout],
+  layout: { type: 'justified' }, // default type if `layout` is omitted entirely too
+});</code></pre>
+    <p>
+      Every tile's <code>&lt;img&gt;</code> renders from <code>item.thumb</code>, not
+      <code>item.src</code> — falling back to <code>item.poster</code> (video items), then
+      <code>item.src</code> only as a last resort. If you serve separate thumbnail and
+      full-resolution files (see the <a href="./getting-started.html">Getting started</a> guide's
+      field reference), the grid only ever downloads the thumbnails — the full-resolution
+      <code>src</code> is fetched later, just for whichever slide the lightbox actually opens.
+    </p>
+
+    <h2>Grid</h2>
+    <p>
+      Plain CSS grid — every cell shares one uniform <code>aspect-ratio</code>, cropped via
+      <code>object-fit: cover</code>. Cheapest option, no JS positioning math, no
+      <code>ResizeObserver</code>. Deliberately <em>not</em> each photo's own aspect ratio: native
+      CSS grid sizes a row's height to its tallest cell, so per-item ratios would leave a blank gap
+      under shorter tiles sharing a row with a taller one.
+    </p>
+    <pre><code>layout: { type: 'grid', columnWidth: 220, aspectRatio: 1 }</code></pre>
+
+    <h2>Masonry</h2>
+    <p>
+      Preserves each photo's true aspect ratio via JS packing. Two orientations, both grow the page
+      only vertically — neither ever needs horizontal scroll.
+    </p>
+
+    <h3><code>orientation: 'vertical'</code> (default)</h3>
+    <p>
+      Fixed-width columns, tiles stack top-to-bottom, ragged <strong>bottom</strong> edge — the
+      classic Pinterest layout. The only layout mode with true incremental append: appending items
+      continues packing from each column's saved height instead of relaying out everything.
+    </p>
+    <pre><code>layout: {
+  type: 'masonry',
+  columns: 'auto',       // or a fixed number
+  columnWidth: 240,      // target width used when columns: 'auto'
+  minColumnWidth: 160,   // clamps how far 'auto' can drift at odd container widths
+  maxColumnWidth: 480,
+  fill: 'shortest',      // or 'ordered' — round-robin, preserves reading order at slight tightness cost
+}</code></pre>
+
+    <h3><code>orientation: 'horizontal'</code></h3>
+    <p>
+      The masonry-family transpose: fixed-height rows, tiles pack left-to-right at their own true
+      aspect ratio. The moment the next tile would push a row past the container's width, that tile
+      starts a new row instead of the finished row being stretched to close the gap — ragged
+      <strong>right</strong> edge. Grows the page downward exactly like vertical masonry grows it
+      taller; it measures the container's width and computes its height, same shape as every other
+      layout type, and never scrolls sideways.
+    </p>
+    <pre><code>layout: {
+  type: 'masonry',
+  orientation: 'horizontal',
+  rowHeight: 220, // exact, fixed row height — never scaled or clamped
+}</code></pre>
+    <blockquote>
+      <code>fill</code>, <code>minColumnWidth</code>/<code>maxColumnWidth</code>, and incremental
+      append don't apply to horizontal masonry — placement is sequential, not bucket-assignment, and
+      a row isn't "committed" until a tile overflows it (an appended tile can extend what was the
+      previous render's trailing row), so it always does a full relayout on any items change, same
+      as justified below.
+    </blockquote>
+
+    <h2>Justified</h2>
+    <p>
+      The Google Photos / Flickr row-packed layout — the default if <code>type</code> is omitted.
+      Greedy row filler: tiles accumulate until the next one would exceed the container width at
+      <code>~rowHeight</code>, then the <em>whole row is rescaled</em> so its total width lands
+      exactly on the container width. Row height is the free, solved-for variable (hovers near but
+      rarely exactly at <code>rowHeight</code>); width is the forced constraint — every row's right
+      edge flush with the container, the opposite tradeoff from horizontal masonry above.
+    </p>
+    <pre><code>layout: {
+  type: 'justified',
+  rowHeight: 220,       // target — the actual solved height lands close to, not exactly at, this
+  minRowHeight: 120,    // clamps how far a row's solved height can drift
+  maxRowHeight: 360,
+  lastRow: 'justify',   // 'justify' (stretch like any row) | 'left' (natural size, no stretch) | 'hide'
+}</code></pre>
+
+    <h2>Shared options</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Option</th>
+          <th>Default</th>
+          <th>Applies to</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gutter</code></td>
+          <td><code>8</code> (or <code>{ x, y }</code>)</td>
+          <td>all types</td>
+        </tr>
+        <tr>
+          <td><code>animate</code></td>
+          <td><code>true</code></td>
+          <td>all types — FLIP-animated relayout, off under <code>prefers-reduced-motion</code></td>
+        </tr>
+        <tr>
+          <td><code>autoMeasure</code></td>
+          <td><code>true</code></td>
+          <td>
+            masonry, justified — self-corrects a missing <code>item.width</code>/<code>height</code>
+            once the tile's own <code>&lt;img&gt;</code> loads, using a 4:3 placeholder in the
+            meantime so the first pass is never blocked on an image load
+          </td>
+        </tr>
+        <tr>
+          <td><code>breakpoints</code></td>
+          <td>—</td>
+          <td>
+            <code>Record&lt;maxWidth, Partial&lt;LayoutOptions&gt;&gt;</code> — the narrowest key
+            still ≥ the container's current width wins, re-evaluated on every relayout. Cannot
+            override <code>type</code> or <code>orientation</code> (a bigger structural change than
+            a sizing tweak — use a media query + two <code>Shoji</code> instances for that).
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Sections (<code>groupBy</code>)</h2>
+    <p>
+      Derives a section key per item (e.g. a formatted date) — a heading is inserted whenever the
+      key changes between consecutive items, real "Today / Yesterday / March 2024" sectioning.
+    </p>
+    <pre><code>layout: {
+  type: 'justified',
+  groupBy: (item) =&gt; item.data.section,
+  renderHeading: (key) =&gt; ({ title: key, subtitle: 'Vancouver, BC' }),
+  headingOverflow: 'fit', // drops the subtitle, then breaks onto a fresh row, if a label doesn't fit
+}</code></pre>
+    <p>
+      <code>grid</code> and <code>masonry</code> treat a heading as a full-width blocking element —
+      each section gets its own fresh packing pass, no two sections share visual space.
+      <code>justified</code> is the deliberate exception, matching real Google Photos behavior:
+      sections <strong>never force a row break</strong> — a section too small to reach a full row's
+      width shares that row with whatever comes next, instead of being stretched into its own
+      near-empty row. Not supported with masonry's <code>orientation: 'horizontal'</code> (warns,
+      ignored).
+    </p>
+
+    <h2>Examples</h2>
+    <pre><code>// Tight masonry — flush tiles, no ragged gaps
+layout: { type: 'masonry', gutter: 0 }
+
+// Grid with ~180px square crops (native CSS grid auto-fill — no fixed column count option)
+layout: { type: 'grid', columnWidth: 180, aspectRatio: 1 }
+
+// Justified with a trailing partial row left un-stretched
+layout: { type: 'justified', lastRow: 'left' }</code></pre>
+
+    <footer>
+      See the <a href="../api/index.html">API reference</a> for the full
+      <code>LayoutOptions</code> type.
+    </footer>
+  </body>
+</html>

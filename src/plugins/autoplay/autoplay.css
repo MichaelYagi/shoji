@@ -1,0 +1,22 @@
+/* DESIGN.md §4-autoplay — thin progress bar along the bottom edge, tracking
+   time-to-next-advance for timed (image) slides. Hidden during video slides,
+   where the video's own runtime — not a fixed interval — drives advancement. */
+.shoji-autoplay-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: var(--shoji-z-toolbar);
+}
+
+.shoji-autoplay-progress[hidden] {
+  display: none;
+}
+
+.shoji-autoplay-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--shoji-progress);
+}

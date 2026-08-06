@@ -1,0 +1,142 @@
+/* DESIGN.md §5 — layout takes over the container entirely once enabled
+   (any host markup that was there at scan time is replaced by its own
+   generated tiles), so all of its structural styling lives here rather than
+   depending on host CSS. */
+
+.shoji-layout {
+  position: relative;
+}
+
+.shoji-layout-tile {
+  display: block;
+  cursor: pointer;
+}
+
+.shoji-layout-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* masonry & justified: both JS-positioned, absolutely placed, GPU-composited
+   moves only (transform), per CLAUDE.md — no top/left animation.
+   visibility: hidden until the JS layout pass actually sets a real
+   width/height/transform — masonry/justified skip that pass entirely
+   (index.ts's containerWidth <= 0 guard) if the container isn't sized yet
+   at construction, correcting only once the ResizeObserver's own
+   (asynchronous) initial notification fires. In that gap, an unstyled
+   tile falls back to CSS auto-sizing from its <img> child, which can be a
+   genuinely 0×0 or wildly wrong-shaped rect depending on image load
+   timing — clickable, but a click landing on it computes the zoom
+   transition's origin from that same bad rect, silently skipping the
+   animation (a 0×0 origin) or animating from the wrong place (a
+   wrong-shaped one). visibility: hidden (not display: none — keeps the
+   space-not-taking difference irrelevant here, but note it also removes
+   the tile from hit-testing, unlike opacity: 0) makes an unpositioned
+   tile un-clickable for that entire window instead — the JS layout
+   functions clear it back to visible the moment they actually set real
+   geometry. See DESIGN.md §2.3b. */
+.shoji-layout--masonry .shoji-layout-tile,
+.shoji-layout--justified .shoji-layout-tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+}
+
+.shoji-layout--masonry.shoji-layout--animate .shoji-layout-tile,
+.shoji-layout--justified.shoji-layout--animate .shoji-layout-tile {
+  transition: transform var(--shoji-duration) var(--shoji-easing);
+}
+
+/* grid: native CSS grid does the positioning, no JS math or transforms. */
+.shoji-layout--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--shoji-layout-column-width, 240px), 1fr));
+  gap: var(--shoji-layout-gutter, 8px);
+}
+
+.shoji-layout--grid .shoji-layout-tile {
+  aspect-ratio: var(--shoji-layout-tile-aspect, 1);
+}
+
+/* headings (groupBy) — grid: a real grid row of its own, native flow, no JS
+   positioning needed (a full-span item naturally starts a new row after
+   it). masonry/justified: JS-positioned same as tiles, since those modes
+   don't have a document-flow "row" to insert into. */
+.shoji-layout-heading {
+  margin: 0;
+}
+
+.shoji-layout--grid .shoji-layout-heading {
+  grid-column: 1 / -1;
+}
+
+.shoji-layout--masonry .shoji-layout-heading,
+.shoji-layout--justified .shoji-layout-heading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+/* justified headings are compact, inline labels, not full-width blocking
+   elements (see the groupBy option's doc comment in index.ts) — sized to
+   their own content by default, and to their own JS-computed max-width
+   only when the content-fitting pass decides a label needs to wrap. This
+   overrides the shared width: 100% rule above by source order (equal
+   specificity), not by a stronger selector. */
+.shoji-layout--justified .shoji-layout-heading {
+  width: auto;
+  white-space: nowrap;
+}
+
+.shoji-layout--masonry.shoji-layout--animate .shoji-layout-heading,
+.shoji-layout--justified.shoji-layout--animate .shoji-layout-heading {
+  transition: transform var(--shoji-duration) var(--shoji-easing);
+}
+
+/* Font customization points, per CLAUDE.md ("all styling through --shoji-*
+   custom properties with sane defaults") — every fallback below matches
+   what rendered before these properties existed, so setting none of them
+   changes nothing. .shoji-layout-heading itself (the plain-string/default
+   heading, and the shared parent of title+subtitle) deliberately keeps its
+   browser-default <h2> font-size untouched rather than gaining its own
+   --shoji-layout-heading-font-size — overriding that here to "inherit"
+   would shrink it from the UA stylesheet's own (larger) h2 default, a
+   visible regression for anyone not using the structured form. Host CSS
+   targeting .shoji-layout-heading directly already fully controls it. */
+.shoji-layout-heading {
+  font-family: var(--shoji-layout-heading-font-family, inherit);
+}
+
+.shoji-layout-heading-title {
+  font-size: var(
+    --shoji-layout-heading-title-font-size,
+    1em
+  ); /* 1em = its parent <h2>'s own (browser-default) size, unchanged from before this property existed */
+  font-weight: var(--shoji-layout-heading-title-font-weight, 600);
+  /* headingOverflow: 'fit''s ellipsis fallback (the one unavoidable case —
+     a single label wider than the container even alone) still needs
+     overflow-wrap: break-word so a single long unbroken token (a URL, a
+     hashtag) doesn't itself force the ellipsis box wider than intended. */
+  overflow-wrap: break-word;
+}
+
+.shoji-layout-heading-subtitle {
+  margin-left: 0.6em;
+  font-size: var(--shoji-layout-heading-subtitle-font-size, 0.85em);
+  font-weight: var(--shoji-layout-heading-subtitle-font-weight, 400);
+  color: var(--shoji-layout-heading-subtitle-color, #767676);
+  overflow-wrap: break-word;
+}
+
+/* stickyHeadings — grid mode only; masonry/justified headings are already
+   absolutely positioned by JS, which sticky can't meaningfully layer onto
+   (see the option's own doc comment in index.ts). */
+.shoji-layout--grid .shoji-layout-heading--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}

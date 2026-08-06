@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji — standalone infinite scroll (dist build, no dev server)</title>
+    <!--
+      Same idea as demo/standalone.html: only dist/shoji.js + dist/shoji.css,
+      no Vite, no TypeScript, no import.meta.glob — so unlike the Vite-based
+      demo/pages/infinite-scroll.ts, the photo list below is hardcoded rather
+      than discovered at build time. Open this file directly (file:// works,
+      UMD is a classic script) once `npm run build` has produced dist/.
+    -->
+    <link rel="stylesheet" href="../dist/shoji.css" />
+    <style>
+      body {
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family: system-ui, sans-serif;
+      }
+      #gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      #gallery img,
+      #gallery video {
+        display: block;
+        width: 140px;
+        height: 105px;
+        object-fit: cover;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #sentinel,
+      #status {
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji — standalone infinite scroll</h1>
+    <p>
+      Same pattern as <code>demo/pages/infinite-scroll.ts</code> (mocked pagination,
+      <code>IntersectionObserver</code> sentinel, <code>updateSlides()</code>, id-based
+      click-to-open) — just plain JS against the built <code>dist/</code> files instead of going
+      through Vite.
+    </p>
+    <div id="gallery"></div>
+    <p id="sentinel">Loading…</p>
+    <p id="status">Shoji not yet initialized.</p>
+
+    <script src="../dist/shoji.js"></script>
+    <script>
+      // Hardcoded because this page has no bundler to discover files at
+      // build time — swap these for whatever's actually in demo/assets/.
+      const IMAGES = Array.from({ length: 19 }, (_, i) => `assets/${i + 1}.jpg`).filter(
+        (src) => src !== 'assets/3.jpg',
+      ); // 3.HEIC, skipped — not a .jpg
+      const VIDEO = 'assets/20.mp4';
+
+      const PAGE_SIZE = 4;
+      const SIMULATED_LATENCY = 500;
+
+      // Stands in for a real paginated backend — same role as shashin's
+      // `GET /accessed/mediatype/:type/page/:n`.
+      function fetchPage(page) {
+        const start = (page - 1) * PAGE_SIZE;
+        const slice = IMAGES.slice(start, start + PAGE_SIZE);
+        const items = slice.map((src, i) => ({
+          id: `page-${page}-${i}`,
+          src,
+          thumb: src,
+          caption: `Page ${page}, item ${i + 1}`,
+        }));
+
+        if (page === 2) {
+          items.push({
+            id: 'sample-video',
+            src: VIDEO,
+            thumb: IMAGES[0], // grid thumbnail — renderThumb() below reads item.thumb
+            poster: IMAGES[0], // lightbox slide — SlideManager reads item.poster, a separate field
+            video: { provider: 'html5' },
+            sources: [{ src: VIDEO, type: 'video/mp4' }],
+            caption: 'A video, mixed into the infinite-scroll stream',
+          });
+        }
+
+        return new Promise((resolve) => setTimeout(() => resolve(items), SIMULATED_LATENCY));
+      }
+
+      // Ported from a real shashin class (Accessed) that drove lightGallery's
+      // dynamic mode from an infinitely-scrolling, paginated grid:
+      //  - .refresh(list) -> gallery.updateSlides(this.items)
+      //  - the hand-maintained running index (lastLgIndex) is gone entirely —
+      //    updateSlides() diffs by id, no manual bookkeeping needed
+      //  - shashin.lg / getLightGallery() (hand-rolled instance registry) is
+      //    gone — `this.gallery` is just a plain field
+      //  - the reinit()-at-EOL call is dropped; nothing suggested Shoji needs
+      //    an equivalent
+      //  - lgMetadataDetail/lgVideoThumbnail (shashin's own plugins, never
+      //    part of Shoji) become plain gallery.on(...) listeners below
+      //  - date-grouped <section> headers are NOT ported: that's the
+      //    (unbuilt) Layout plugin's job, and was never Shoji's job even in
+      //    the original — the grid markup stays 100% host-rendered
+      class InfiniteScrollGallery {
+        constructor(grid, sentinel, status) {
+          this.grid = grid;
+          this.sentinel = sentinel;
+          this.status = status;
+          this.items = [];
+          this.page = 1;
+          this.rendering = false; // in-flight de-dupe
+          this.eol = false;
+
+          // Dynamic mode: no DOM scanning, this class renders the grid itself.
+          this.gallery = new Shoji(grid, { items: this.items, counter: false });
+
+          this.gallery.on('afterOpen', ({ index }) => {
+            console.log('[metadata modal would open here]', this.items[index]?.id);
+          });
+
+          // No separate "seed page 1" call on purpose: observe() itself
+          // delivers an initial notification reflecting the sentinel's
+          // current visibility, and the sentinel is visible from the very
+          // first frame — that's what loads page 1. A second, explicit seed
+          // call here would race it: whichever wins sets `rendering` first,
+          // silently swallowing the other, and since IntersectionObserver
+          // only fires on state *changes* (not "still visible"), a sentinel
+          // that never leaves the viewport — true on a short first page —
+          // would then never fire again.
+          this.observer = new IntersectionObserver((entries) => {
+            if (entries[0] && entries[0].isIntersecting) this.loadNextPage();
+          });
+          this.observer.observe(sentinel);
+        }
+
+        renderThumb(item) {
+          const a = document.createElement('a');
+          a.href = '#';
+          a.innerHTML = item.video
+            ? `<video muted playsinline poster="${item.thumb || ''}"><source src="${item.src}" type="video/mp4" /></video>`
+            : `<img src="${item.thumb || item.src}" alt="" loading="lazy" />`;
+
+          a.addEventListener('click', (event) => {
+            event.preventDefault();
+            // id-based lookup, not a captured index — stays correct even
+            // after updateSlides() has grown the list since this thumbnail
+            // was rendered.
+            const index = this.items.findIndex((i) => i.id === item.id);
+            if (index === -1) return;
+            // Both calls, always: open() does the work if closed and no-ops
+            // if already open; goTo() does the work if already open
+            // (elsewhere) and no-ops if open() just landed on this exact
+            // index. Covers both cases without tracking open/closed state.
+            this.gallery.open(index);
+            this.gallery.goTo(index);
+          });
+
+          return a;
+        }
+
+        async loadNextPage() {
+          if (this.rendering || this.eol) return;
+          this.rendering = true;
+          this.sentinel.textContent = 'Loading…';
+
+          const newItems = await fetchPage(this.page);
+
+          if (newItems.length === 0) {
+            this.eol = true;
+            this.sentinel.textContent = 'No more photos.';
+          } else {
+            this.page++;
+            this.items = this.items.concat(newItems);
+            this.gallery.updateSlides(this.items);
+            for (const item of newItems) this.grid.appendChild(this.renderThumb(item));
+            this.sentinel.textContent = 'Scroll for more…';
+          }
+
+          this.status.textContent = `Loaded ${this.items.length} item(s).`;
+          this.rendering = false;
+
+          // Force a fresh visibility check regardless of whether
+          // intersection *state* changed — see the constructor comment.
+          if (!this.eol) {
+            this.observer.unobserve(this.sentinel);
+            this.observer.observe(this.sentinel);
+          }
+        }
+      }
+
+      new InfiniteScrollGallery(
+        document.querySelector('#gallery'),
+        document.querySelector('#sentinel'),
+        document.querySelector('#status'),
+      );
+    </script>
+  </body>
+</html>

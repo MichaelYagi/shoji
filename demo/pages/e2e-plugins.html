@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — e2e plugin fixture</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./e2e-plugins.html" aria-current="page">e2e plugin fixture</a>
+    </nav>
+    <p>
+      Not a feature demo — a deterministic fixture for <code>tests/e2e</code>. Items are inline SVG
+      data URIs (no dependency on <code>demo/assets/</code>, which is gitignored personal media), so
+      this page behaves identically in this environment and in CI. All five non-layout plugins are
+      loaded with a short autoplay interval for fast tests.
+    </p>
+    <div id="thumbs" class="thumb-grid"></div>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./e2e-plugins.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+docs/api/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.local
+.DS_Store
+*.log
+.idea/
+
+# Personal sample media dropped in for local demo use — never committed.
+demo/assets/*
+!demo/assets/.gitkeep

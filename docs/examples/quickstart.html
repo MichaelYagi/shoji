@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Quickstart</title>
+    <!--
+      Only the built dist/ output is loaded here — no Vite, no bundler. Open
+      this file directly (file:// works fine, UMD is a classic script, not a
+      module) once `npm run build` has produced dist/shoji.min.js +
+      dist/shoji.min.css. See docs/examples/index.html.
+    -->
+    <link rel="stylesheet" href="../../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Quickstart</h1>
+    <p>
+      The whole integration is the markup below plus <code>new Shoji('#gallery')</code> — no items
+      array, no options object, no plugins. This is <code>selector</code> mode: Shoji scans
+      <code>#gallery</code>'s direct children for <code>&lt;a href&gt;</code> elements, reads the
+      nested <code>&lt;img&gt;</code> for the thumbnail, and wires click-to-open automatically.
+    </p>
+
+    <div id="gallery" class="thumb-grid">
+      <a
+        href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nI2MwMzkyYicvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4xPC90ZXh0Pjwvc3ZnPg=="
+      >
+        <img
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nI2MwMzkyYicvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4xPC90ZXh0Pjwvc3ZnPg=="
+          alt="Photo 1"
+        />
+      </a>
+      <a
+        href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI5ODBiOScvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4yPC90ZXh0Pjwvc3ZnPg=="
+      >
+        <img
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI5ODBiOScvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4yPC90ZXh0Pjwvc3ZnPg=="
+          alt="Photo 2"
+        />
+      </a>
+      <a
+        href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI3YWU2MCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4zPC90ZXh0Pjwvc3ZnPg=="
+      >
+        <img
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI3YWU2MCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4zPC90ZXh0Pjwvc3ZnPg=="
+          alt="Photo 3"
+        />
+      </a>
+      <a
+        href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzhlNDRhZCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz40PC90ZXh0Pjwvc3ZnPg=="
+      >
+        <img
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzhlNDRhZCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz40PC90ZXh0Pjwvc3ZnPg=="
+          alt="Photo 4"
+        />
+      </a>
+    </div>
+
+    <script src="../../dist/shoji.min.js"></script>
+    <script>
+      // UMD global — no import, no bundler. This one line is the entire integration.
+      new Shoji('#gallery');
+    </script>
+
+    <h2>Code</h2>
+    <p>
+      The live demo above uses inline SVG placeholder images so this file has no dependency on any
+      external asset — copy the version below into your own project with real image paths instead:
+    </p>
+    <pre><code>&lt;div id="gallery"&gt;
+  &lt;a href="photo-1-full.jpg"&gt;&lt;img src="photo-1-thumb.jpg" alt="Photo 1"&gt;&lt;/a&gt;
+  &lt;a href="photo-2-full.jpg"&gt;&lt;img src="photo-2-thumb.jpg" alt="Photo 2"&gt;&lt;/a&gt;
+  &lt;a href="photo-3-full.jpg"&gt;&lt;img src="photo-3-thumb.jpg" alt="Photo 3"&gt;&lt;/a&gt;
+  &lt;a href="photo-4-full.jpg"&gt;&lt;img src="photo-4-thumb.jpg" alt="Photo 4"&gt;&lt;/a&gt;
+&lt;/div&gt;
+
+&lt;link rel="stylesheet" href="shoji.min.css" /&gt;
+&lt;script src="shoji.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  new Shoji('#gallery');
+&lt;/script&gt;</code></pre>
+  </body>
+</html>

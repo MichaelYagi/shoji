@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji — standalone (dist build, no dev server)</title>
+    <!--
+      Only the built dist/ output is loaded here — no Vite, no bundler,
+      no import.meta.glob. This is what CLAUDE.md means by "drop two
+      script/link tags in and everything works": open this file directly
+      (file:// works fine, UMD is a classic script, not a module) once
+      `npm run build` has produced dist/shoji.js + dist/shoji.css.
+    -->
+    <link rel="stylesheet" href="../dist/shoji.css" />
+    <style>
+      body {
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family: system-ui, sans-serif;
+      }
+      .thumb-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.5rem;
+      }
+      .thumb-grid img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: 6px;
+        cursor: pointer;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji — standalone dist build</h1>
+    <p>No Vite, no dev server — just <code>dist/shoji.js</code> + <code>dist/shoji.css</code>.</p>
+    <div id="gallery" class="thumb-grid">
+      <a href="assets/1.jpg"><img src="assets/1.jpg" alt="Photo 1" /></a>
+      <a href="assets/2.jpg"><img src="assets/2.jpg" alt="Photo 2" /></a>
+      <a href="assets/4.jpg"><img src="assets/4.jpg" alt="Photo 4" /></a>
+      <a href="assets/5.jpg"><img src="assets/5.jpg" alt="Photo 5" /></a>
+      <a href="assets/6.jpg"><img src="assets/6.jpg" alt="Photo 6" /></a>
+      <a href="assets/7.jpg"><img src="assets/7.jpg" alt="Photo 7" /></a>
+      <a data-shoji-id="sample-video">
+        <video muted playsinline>
+          <source src="assets/20.mp4" type="video/mp4" />
+        </video>
+      </a>
+    </div>
+    <script src="../dist/shoji.js"></script>
+    <script>
+      // UMD global — no import, no bundler.
+      new Shoji('#gallery');
+    </script>
+  </body>
+</html>

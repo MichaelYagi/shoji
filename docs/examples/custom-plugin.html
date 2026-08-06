@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Custom plugin + custom data</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Custom plugin + custom data</h1>
+    <p>
+      Each photo below carries a <code>data-shoji-metadata-id</code> attribute — not one of Shoji's
+      own named fields, so it's captured into <code>item.data['metadata-id']</code> (see the
+      <a href="../guides/getting-started.html">Getting started</a> guide). The plugin below reads it
+      on every <code>afterOpen</code>, and adds its own toolbar button — the whole plugin is about
+      15 lines.
+    </p>
+
+    <div id="gallery" class="thumb-grid"></div>
+    <p class="status-line" id="status">Shoji not yet initialized.</p>
+
+    <script src="../../dist/shoji.min.js"></script>
+    <script>
+      function svgDataUri(label, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${color}"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      // Real markup, built here only because this file has no server to
+      // author it ahead of time — in your own app this is just the HTML you
+      // already render, with data-shoji-metadata-id (or whatever custom
+      // attribute you need) added directly to each <a>.
+      const PHOTOS = [
+        { color: '#c0392b', metadataId: 'catalog-101' },
+        { color: '#2980b9', metadataId: 'catalog-102' },
+        { color: '#27ae60', metadataId: 'catalog-103' },
+      ];
+      document.querySelector('#gallery').innerHTML = PHOTOS.map(
+        (p, i) => `
+          <a href="${svgDataUri(`Photo ${i + 1}`, p.color)}" data-shoji-metadata-id="${p.metadataId}">
+            <img src="${svgDataUri(`Photo ${i + 1}`, p.color)}" alt="Photo ${i + 1}">
+          </a>`,
+      ).join('');
+
+      const status = document.querySelector('#status');
+
+      // The whole plugin: a plain object with a name and an init(ctx) function.
+      const MetadataPlugin = {
+        name: 'metadataPlugin',
+        init(ctx) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'shoji-toolbar-button'; // 44px circle, hover/focus states — all free
+          button.textContent = 'ID';
+          button.setAttribute('aria-label', 'Show metadata id');
+          button.addEventListener('click', () => {
+            const item = ctx.gallery.items[ctx.gallery.currentIndex];
+            alert(`metadata-id: ${item.data?.['metadata-id']}`);
+          });
+          ctx.ui.toolbar('right', button);
+
+          ctx.on('afterOpen', ({ index }) => {
+            const item = ctx.gallery.items[index];
+            status.textContent = `afterOpen(${index}) — item.data: ${JSON.stringify(item.data)}`;
+          });
+        },
+      };
+
+      const gallery = new Shoji('#gallery', { plugins: [MetadataPlugin] });
+      status.textContent = `Loaded ${gallery.items.length} item(s). Open one to see item.data logged here.`;
+    </script>
+
+    <h2>Code</h2>
+    <p>The markup — any <code>data-shoji-*</code> attribute Shoji doesn't already know about:</p>
+    <pre><code>&lt;a href="photo-1-full.jpg" data-shoji-metadata-id="catalog-101"&gt;
+  &lt;img src="photo-1-thumb.jpg" alt="Photo 1"&gt;
+&lt;/a&gt;
+&lt;a href="photo-2-full.jpg" data-shoji-metadata-id="catalog-102"&gt;
+  &lt;img src="photo-2-thumb.jpg" alt="Photo 2"&gt;
+&lt;/a&gt;
+&lt;a href="photo-3-full.jpg" data-shoji-metadata-id="catalog-103"&gt;
+  &lt;img src="photo-3-thumb.jpg" alt="Photo 3"&gt;
+&lt;/a&gt;</code></pre>
+    <p>The plugin — exactly what's running above, no options object needed:</p>
+    <pre><code>const MetadataPlugin = {
+  name: 'metadataPlugin',
+  init(ctx) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'shoji-toolbar-button'; // 44px circle, hover/focus states — all free
+    button.textContent = 'ID';
+    button.setAttribute('aria-label', 'Show metadata id');
+    button.addEventListener('click', () => {
+      const item = ctx.gallery.items[ctx.gallery.currentIndex];
+      alert(`metadata-id: ${item.data?.['metadata-id']}`);
+    });
+    ctx.ui.toolbar('right', button);
+
+    ctx.on('afterOpen', ({ index }) => {
+      console.log(ctx.gallery.items[index].data); // { 'metadata-id': 'catalog-101' }
+    });
+  },
+};
+
+new Shoji('#gallery', { plugins: [MetadataPlugin] });</code></pre>
+  </body>
+</html>

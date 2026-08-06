@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark light;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+body {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  background: #8882;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.demo-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.demo-nav a {
+  text-decoration: none;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #8886;
+  border-radius: 6px;
+  color: inherit;
+}
+
+.demo-nav a[aria-current='page'],
+.demo-nav button[aria-current='true'] {
+  background: #4da3ff22;
+  border-color: #4da3ff;
+}
+
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.thumb-grid a {
+  display: block;
+}
+
+.thumb-grid img,
+.thumb-grid video {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  cursor: pointer;
+  display: block;
+  background: #8882;
+}
+
+/* DESIGN.md §4.2 — the activeThumbnail plugin only toggles the class; this
+   page defines what "active" looks like. */
+.shoji-thumb-active img,
+.shoji-thumb-active video {
+  outline: 3px solid #4da3ff;
+  outline-offset: 2px;
+}
+
+#status {
+  background: #8882;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #8886;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}

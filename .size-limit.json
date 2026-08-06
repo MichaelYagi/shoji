@@ -1,0 +1,56 @@
+[
+  {
+    "name": "Single-file bundle (JS): core + all plugins",
+    "path": "dist/shoji.min.js",
+    "limit": "90 KB",
+    "gzip": true
+  },
+  {
+    "name": "Single-file bundle (CSS): core + all plugins",
+    "path": "dist/shoji.min.css",
+    "limit": "20 KB",
+    "gzip": true
+  },
+  {
+    "name": "Core (ESM entry)",
+    "path": "dist/esm/core/index.js",
+    "limit": "18 KB",
+    "gzip": true
+  },
+  {
+    "name": "Autoplay plugin (ESM entry)",
+    "path": "dist/esm/plugins/autoplay/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  },
+  {
+    "name": "Layout plugin (ESM entry)",
+    "path": "dist/esm/plugins/layout/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  },
+  {
+    "name": "ActiveThumbnail plugin (ESM entry)",
+    "path": "dist/esm/plugins/activeThumbnail/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  },
+  {
+    "name": "Fullscreen plugin (ESM entry)",
+    "path": "dist/esm/plugins/fullscreen/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  },
+  {
+    "name": "RotateFlip plugin (ESM entry)",
+    "path": "dist/esm/plugins/rotateFlip/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  },
+  {
+    "name": "Zoom plugin (ESM entry)",
+    "path": "dist/esm/plugins/zoom/index.js",
+    "limit": "8 KB",
+    "gzip": true
+  }
+]

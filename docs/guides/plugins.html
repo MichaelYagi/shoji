@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Plugins</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html" aria-current="page">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Plugins</h1>
+    <p>
+      Everything beyond the minimal lightbox is a plugin, including features you might expect to be
+      built in (zoom, fullscreen, rotate/flip). Core stays small; plugins are opt-in, one at a time,
+      via the <code>plugins</code> array.
+    </p>
+
+    <h2>Loading a plugin</h2>
+    <pre><code>new Shoji('#gallery', {
+  plugins: [Shoji.Zoom, Shoji.Fullscreen],
+});</code></pre>
+    <p>
+      Every official plugin's defaults are chosen so that just appearing in <code>plugins</code>
+      is a complete, working config — no per-plugin options object required. Add one only to
+      override something:
+    </p>
+    <pre><code>new Shoji('#gallery', {
+  plugins: [Shoji.Zoom],
+  zoom: { maxScale: 8 },
+});</code></pre>
+
+    <h2>The <code>options[plugin.name]</code> convention</h2>
+    <p>
+      Each plugin's options nest under a top-level key matching its <code>name</code> —
+      <code>zoom: {...}</code> for the plugin named <code>'zoom'</code>,
+      <code>layout: {...}</code> for <code>'layout'</code>, and so on. This applies the same way to
+      custom plugins you write yourself.
+    </p>
+
+    <h2>Official plugins</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Plugin</th>
+          <th>Static / option key</th>
+          <th>What it does</th>
+          <th>Key options (defaults)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Zoom</td>
+          <td><code>Shoji.Zoom</code> / <code>zoom</code></td>
+          <td>
+            Pinch, double-tap/double-click, ctrl+wheel, and three toolbar buttons (zoom in/out,
+            actual size) — pan by dragging once zoomed.
+          </td>
+          <td>
+            <code>maxScale</code> (4), <code>doubleTapScale</code> (2), <code>buttonStep</code>
+            (1.5)
+          </td>
+        </tr>
+        <tr>
+          <td>Fullscreen</td>
+          <td><code>Shoji.Fullscreen</code> / <code>fullscreen</code></td>
+          <td>
+            Toolbar toggle that puts the whole lightbox (not just the media) into the browser's
+            native fullscreen mode. No button rendered at all on browsers without Fullscreen API
+            support.
+          </td>
+          <td>none — no options object</td>
+        </tr>
+        <tr>
+          <td>RotateFlip</td>
+          <td><code>Shoji.RotateFlip</code> / <code>rotateFlip</code></td>
+          <td>
+            Four toolbar buttons (rotate left/right, flip horizontal/vertical). Non-destructive CSS
+            transform, resets every slide change. For persistent, pixel-level edits you'd need a
+            different plugin — Shoji doesn't ship one.
+          </td>
+          <td>none — no options object</td>
+        </tr>
+        <tr>
+          <td>Autoplay</td>
+          <td><code>Shoji.Autoplay</code> / <code>autoplay</code></td>
+          <td>
+            Toolbar play/pause + <kbd>Space</kbd>. Video slides play through to their own
+            <code>ended</code> event instead of using the fixed interval; a manual pause on a video
+            pauses the whole slideshow.
+          </td>
+          <td><code>interval</code> (5000ms)</td>
+        </tr>
+        <tr>
+          <td>ActiveThumbnail</td>
+          <td><code>Shoji.ActiveThumbnail</code> / <code>activeThumbnail</code></td>
+          <td>
+            Keeps a host's own thumbnail grid in sync with whichever slide is open — toggles a
+            class, scrolls it into view. No default styling shipped for the class itself.
+          </td>
+          <td>
+            <code>activeClass</code> (<code>'shoji-thumb-active'</code>),
+            <code>scrollIntoView</code> (true)
+          </td>
+        </tr>
+        <tr>
+          <td>Layout</td>
+          <td><code>Shoji.Layout</code> / <code>layout</code></td>
+          <td>Turns the inline gallery container into a managed grid/masonry/justified layout.</td>
+          <td>See the <a href="./layout.html">dedicated guide</a>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Writing a custom plugin</h2>
+    <p>A plugin is a plain object — no base class:</p>
+    <pre><code>const MyPlugin = {
+  name: 'myPlugin',
+  defaults: { message: 'Hello from a plugin' },
+
+  init(ctx) {
+    const message = String(ctx.options.message);
+    const unsubscribe = ctx.ui.toolbar('right', {
+      label: message,
+      onClick: () =&gt; alert(message),
+    });
+
+    return () =&gt; unsubscribe(); // cleanup, run on destroy()/reinit()
+  },
+};
+
+new Shoji('#gallery', { plugins: [MyPlugin], myPlugin: { message: 'Hi!' } });</code></pre>
+    <p>What <code>ctx</code> gives you:</p>
+    <ul>
+      <li>
+        <code>ctx.gallery</code> — the full public <code>Gallery</code> API (navigation, events,
+        <code>updateSlides</code>, etc.).
+      </li>
+      <li>
+        <code>ctx.options</code> — this plugin's own merged options (<code>defaults</code> +
+        whatever the host passed under <code>options[name]</code>).
+      </li>
+      <li>
+        <code>ctx.on(event, fn)</code> / <code>ctx.emit(event, detail)</code> — the same typed event
+        bus <code>gallery.on()</code> reads from.
+      </li>
+      <li>
+        <code>ctx.ui.toolbar(slot, el)</code> — add a button/element to the <code>'left'</code>,
+        <code>'center'</code>, or <code>'right'</code> toolbar slot. <code>'right'</code> is where
+        every official plugin puts its controls (inserted immediately before the close button).
+      </li>
+      <li>
+        <code>ctx.ui.overlay(el, layer?)</code> — mount an element into the dialog, absolutely
+        positioned by you.
+      </li>
+      <li>
+        <code>ctx.ui.outer()</code> — the whole lightbox element (backdrop + dialog + controls), for
+        something like Fullscreen that needs to act on the entire lightbox.
+      </li>
+      <li>
+        <code>ctx.ui.registerShortcut(key, fn)</code> — a keyboard shortcut, scoped to while the
+        lightbox is open.
+      </li>
+      <li>
+        <code>ctx.storage</code> — per-gallery scratch storage, cleared on <code>destroy()</code>.
+      </li>
+    </ul>
+    <p>
+      Rules worth knowing: plugins talk to each other only through events, never direct imports —
+      <code>requires: ['otherPlugin']</code> declares a hard dependency (checked against load order
+      in the <code>plugins</code> array; a missing dependency logs an error and skips that plugin,
+      without taking down the rest). Everything registered through <code>ctx</code> is disposed
+      automatically on <code>destroy()</code>/<code>reinit()</code> — the function your
+      <code>init()</code> returns is for anything else you set up by hand.
+    </p>
+    <p>
+      Plugins init eagerly, at construction time — not lazily on first <code>open()</code> — so
+      <code>ctx.ui.*</code> always has real DOM to act on synchronously inside <code>init()</code>.
+    </p>
+
+    <footer>Next: <a href="./layout.html">the Layout plugin</a>, in depth.</footer>
+  </body>
+</html>

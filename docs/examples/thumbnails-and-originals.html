@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Thumbnails + originals</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Thumbnails + originals</h1>
+    <p>
+      Two files per photo — a small one for the grid, the original for the lightbox — using the
+      <code>thumb</code>/<code>src</code> fields and the Layout plugin. The grid below only ever
+      loads the small images (labeled <strong>thumb</strong>); click one and the lightbox loads the
+      — clearly bigger, clearly labeled — <strong>original</strong> instead. In a real integration
+      these would be genuinely different file sizes (e.g. a 255px-tall fast-disk thumbnail vs. the
+      full-resolution source); here they're inline SVGs sized to make the two tiers visually obvious
+      instead.
+    </p>
+
+    <div id="gallery"></div>
+    <p class="status-line" id="status">Shoji not yet initialized.</p>
+
+    <script src="../../dist/shoji.min.js"></script>
+    <script>
+      // Deliberately different visible size/label per tier, so it's obvious
+      // at a glance which image is loaded where — a real integration would
+      // just point these at two differently-sized files on disk/CDN.
+      function svgDataUri(label, w, h, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${w / 8}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const COLORS = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
+
+      const items = COLORS.map((color, i) => ({
+        id: `photo-${i}`,
+        // The original's true dimensions — drives the zoom-transition's
+        // aspect ratio and the Layout plugin's measure-free positioning.
+        // Not the thumbnail's dimensions, even though thumb is what's
+        // actually rendered in the grid.
+        width: 1600,
+        height: 1200,
+        thumb: svgDataUri(`thumb ${i + 1}`, 320, 240, color),
+        src: svgDataUri(`ORIGINAL ${i + 1}`, 1600, 1200, color),
+        caption: `Photo ${i + 1}`,
+      }));
+
+      const status = document.querySelector('#status');
+      const gallery = new Shoji('#gallery', {
+        items,
+        plugins: [Shoji.Layout],
+        layout: { type: 'justified', rowHeight: 180 },
+      });
+
+      status.textContent = `Loaded ${gallery.items.length} item(s). Layout tiles below are all "thumb" — open one to load its "ORIGINAL".`;
+      gallery.on('afterOpen', ({ index }) => {
+        status.textContent = `Lightbox opened at index ${index} — now showing item.src ("${gallery.items[index].src.includes('ORIGINAL') ? 'the original' : 'src'}"), not item.thumb.`;
+      });
+    </script>
+
+    <h2>Code</h2>
+    <p>
+      The live demo above generates its images inline (SVGs, so this file has no external asset
+      dependency) — the shape of the important part, the item objects themselves, is exactly this:
+    </p>
+    <pre><code>const gallery = new Shoji('#gallery', {
+  items: [
+    {
+      id: 'p1',
+      thumb: 'photo-1-thumb.jpg',      // small — this is what the grid tile loads
+      src: 'photo-1-original.jpg',     // large — this is what the lightbox loads
+      width: 1600,                     // the ORIGINAL's dimensions, not the thumbnail's
+      height: 1200,
+      caption: 'Photo 1',
+    },
+    { id: 'p2', thumb: 'photo-2-thumb.jpg', src: 'photo-2-original.jpg', width: 1600, height: 1200, caption: 'Photo 2' },
+    { id: 'p3', thumb: 'photo-3-thumb.jpg', src: 'photo-3-original.jpg', width: 1600, height: 1200, caption: 'Photo 3' },
+    { id: 'p4', thumb: 'photo-4-thumb.jpg', src: 'photo-4-original.jpg', width: 1600, height: 1200, caption: 'Photo 4' },
+    { id: 'p5', thumb: 'photo-5-thumb.jpg', src: 'photo-5-original.jpg', width: 1600, height: 1200, caption: 'Photo 5' },
+    { id: 'p6', thumb: 'photo-6-thumb.jpg', src: 'photo-6-original.jpg', width: 1600, height: 1200, caption: 'Photo 6' },
+  ],
+  plugins: [Shoji.Layout],
+  layout: { type: 'justified', rowHeight: 180 },
+});</code></pre>
+  </body>
+</html>

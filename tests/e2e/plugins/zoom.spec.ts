@@ -1,0 +1,110 @@
+import { test, expect, type Page, type ElementHandle } from '@playwright/test';
+
+/**
+ * Real-browser coverage for the Zoom plugin's gesture/DOM behavior — the
+ * parts jsdom unit tests (tests/unit/plugins/zoom.test.ts) can't exercise:
+ * real dblclick recognition, real pointer drag panning, and real CSS
+ * transform composition on the actual rendered `<img>`.
+ *
+ * Locates the active image via the fixture page's `__shojiGallery` hook
+ * (demo/pages/e2e-plugins.ts), not a `.shoji-slide-media img` CSS locator —
+ * the slide pool keeps multiple `.shoji-slide-media` elements in the DOM at
+ * once (preload), so "the first match" isn't reliably the active one, and
+ * each slide gets a freshly-created `<img>` on every render, so the handle
+ * is re-fetched after any navigation rather than cached.
+ */
+
+type GalleryHandle = { getActiveMedia(): HTMLElement | null };
+
+async function activeImgHandle(page: Page): Promise<ElementHandle<HTMLImageElement>> {
+  const handle = await page.evaluateHandle(() => {
+    const media = (
+      window as unknown as { __shojiGallery: GalleryHandle }
+    ).__shojiGallery.getActiveMedia();
+    return media?.firstElementChild as HTMLImageElement | undefined;
+  });
+  const el = handle.asElement() as ElementHandle<HTMLImageElement> | null;
+  if (!el) throw new Error('no active image found');
+  return el;
+}
+
+async function openLightbox(page: Page): Promise<void> {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+}
+
+async function activeImgTransform(page: Page): Promise<string> {
+  const img = await activeImgHandle(page);
+  return img.evaluate((el) => el.style.transform);
+}
+
+async function activeImgHasZoomedClass(page: Page): Promise<boolean> {
+  const img = await activeImgHandle(page);
+  return img.evaluate((el) => el.classList.contains('shoji-zoomed'));
+}
+
+test('double-click zooms in, second double-click resets', async ({ page }) => {
+  await openLightbox(page);
+
+  await (await activeImgHandle(page)).dblclick();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  await expect.poll(() => activeImgTransform(page)).toMatch(/scale\(2/);
+
+  await (await activeImgHandle(page)).dblclick();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+});
+
+test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page }) => {
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom out"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+});
+
+test('actual size toggles zoom (fixture image is scaled down to fit the dialog)', async ({
+  page,
+}) => {
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Actual size"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Actual size"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+});
+
+test('dragging while zoomed pans the image instead of navigating slides', async ({ page }) => {
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  const beforeTransform = await activeImgTransform(page);
+
+  const img = await activeImgHandle(page);
+  const box = (await img.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx - 60, cy - 40, { steps: 8 });
+  await page.mouse.up();
+
+  const afterTransform = await activeImgTransform(page);
+  expect(afterTransform).not.toBe(beforeTransform); // pan offset changed
+  await expect(page.locator('.shoji-counter')).toHaveText('1 / 4'); // still on the same slide — drag panned, didn't navigate
+});
+
+test('navigating to the next slide resets zoom on the new slide', async ({ page }) => {
+  await openLightbox(page);
+
+  await (await activeImgHandle(page)).dblclick();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+
+  await page.locator('.shoji-nav-next').click();
+  await expect(page.locator('.shoji-counter')).toHaveText('2 / 4');
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+});

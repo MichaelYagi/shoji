@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts",
+    "src/core/index.ts",
+    "src/plugins/activeThumbnail/index.ts",
+    "src/plugins/autoplay/index.ts",
+    "src/plugins/fullscreen/index.ts",
+    "src/plugins/layout/index.ts",
+    "src/plugins/rotateFlip/index.ts",
+    "src/plugins/zoom/index.ts"
+  ],
+  "out": "docs/api",
+  "name": "Shoji API Reference",
+  "readme": "none",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "hideGenerator": true,
+  "navigationLinks": {
+    "Guides": "../index.html"
+  },
+  "sort": ["source-order"]
+}

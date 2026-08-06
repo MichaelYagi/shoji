@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs</title>
+    <link rel="stylesheet" href="./docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <p>
+      A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two
+      <code>&lt;script&gt;</code>/<code>&lt;link&gt;</code> tags, or install from npm — everything
+      else, including every official plugin, is opt-in.
+    </p>
+
+    <h2>Guides</h2>
+    <ul class="guide-list">
+      <li>
+        <a href="./guides/getting-started.html">Getting started</a>
+        <p>Installation (script tags vs. npm/ESM), the zero-config quickstart, dynamic mode.</p>
+      </li>
+      <li>
+        <a href="./guides/plugins.html">Plugins</a>
+        <p>
+          The plugin contract, the <code>options[plugin.name]</code> convention, and every official
+          plugin at a glance.
+        </p>
+      </li>
+      <li>
+        <a href="./guides/layout.html">Layout plugin</a>
+        <p>Grid, masonry (vertical &amp; horizontal), and justified — options and examples.</p>
+      </li>
+      <li>
+        <a href="./guides/theming.html">Theming</a>
+        <p>Every <code>--shoji-*</code> custom property, dark/light, and z-index layering.</p>
+      </li>
+    </ul>
+
+    <h2>Examples</h2>
+    <p>Real, runnable, self-contained HTML files — copy one wholesale into your own project.</p>
+    <p><a href="./examples/index.html">Browse the examples →</a></p>
+
+    <h2>API reference</h2>
+    <p>
+      Generated from source via <a href="https://typedoc.org">TypeDoc</a> — always in sync with the
+      actual public types (<code>src/index.ts</code>, <code>src/core/index.ts</code>, and each
+      official plugin's <code>index.ts</code>).
+    </p>
+    <p><a href="./api/index.html">Browse the API reference →</a></p>
+
+    <footer>
+      Run <code>npm run docs</code> to regenerate the API reference after a code change.
+    </footer>
+  </body>
+</html>

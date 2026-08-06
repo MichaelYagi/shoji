@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Transitions</title>
+    <link rel="stylesheet" href="../demo.css" />
+    <style>
+      .transitions-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 1rem 0;
+      }
+
+      /*
+        DESIGN.md §2.5 — a custom `mode` (any string that isn't a built-in
+        preset name) is a plain CSS class pair Shoji toggles for you; no JS
+        needed on this end. `shoji-transition-my-shutter-leave`/`-enter` are
+        named after the `mode: 'my-shutter'` option set in transitions.ts.
+      */
+      .shoji-transition-my-shutter-leave {
+        animation: my-shutter-leave var(--shoji-duration) var(--shoji-easing);
+      }
+      .shoji-transition-my-shutter-enter {
+        animation: my-shutter-enter var(--shoji-duration) var(--shoji-easing);
+      }
+      @keyframes my-shutter-leave {
+        from {
+          transform: none;
+          opacity: 1;
+        }
+        to {
+          transform: scaleY(0.05) rotate(8deg);
+          opacity: 0;
+        }
+      }
+      @keyframes my-shutter-enter {
+        from {
+          transform: scaleY(0.05) rotate(-8deg);
+          opacity: 0;
+        }
+        to {
+          transform: none;
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html" aria-current="page">Transitions</a>
+    </nav>
+    <p>
+      DESIGN.md §2.5 — <code>mode</code> picks the slide-to-slide transition for programmatic
+      navigation (buttons, keyboard, autoplay, <code>goTo()</code>); it never affects a
+      gesture-driven swipe, which always plays its own live-drag/settle animation. Pick a mode
+      below, then open the lightbox and use its own prev/next arrows (or the arrow keys) to see it
+      play. The last entry, <code>my-shutter</code>, isn't a built-in preset — it's a custom CSS
+      class pair defined in this page's own stylesheet (no JS involved), proving the "not a
+      recognized preset name? treated as a host-supplied class pair" fallback.
+    </p>
+    <div class="transitions-controls">
+      <label for="mode-select">mode</label>
+      <select id="mode-select"></select>
+    </div>
+    <div id="gallery" class="thumb-grid"></div>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./transitions.ts"></script>
+  </body>
+</html>

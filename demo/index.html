@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Zero-config</title>
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="./index.html" aria-current="page">Zero-config</a>
+      <a href="./pages/data-attributes.html">data-shoji-* attributes</a>
+      <a href="./pages/custom-selector.html">Custom selector</a>
+      <a href="./pages/dynamic-mode.html">Dynamic mode</a>
+      <a href="./pages/infinite-scroll.html">Infinite scroll</a>
+      <a href="./pages/layout.html">Layout (masonry)</a>
+      <a href="./pages/transitions.html">Transitions</a>
+    </nav>
+    <p>
+      Default <code>selector</code> scanning plain <code>&lt;a href&gt;&lt;img&gt;</code> markup —
+      no options object at all. The last tile is a video, auto-detected from a nested
+      <code>&lt;video&gt;</code> element. The Autoplay plugin is enabled (<code
+        >plugins: [Shoji.Autoplay]</code
+      >) — open the lightbox and use the play button (or <kbd>Space</kbd>) in the toolbar; it plays
+      through the video slide instead of timing out on it. ActiveThumbnail is enabled too —
+      whichever tile below is currently open gets a blue outline, following along as you use the
+      arrow keys or let the slideshow advance on its own. Fullscreen is enabled too — its toolbar
+      button puts the whole lightbox into the browser's native fullscreen mode. RotateFlip is
+      enabled too: the four rotate/flip buttons apply a non-destructive CSS transform to the current
+      photo — navigate away and back (or just hit next/prev) and it resets, per DESIGN.md §4's
+      "resets per slide". Zoom is enabled too: pinch, double-tap/double-click, ctrl+wheel, or the
+      three toolbar buttons (zoom in/out/actual size) zoom into the current photo; drag to pan while
+      zoomed. Resets every time you navigate, same as RotateFlip.
+    </p>
+    <div id="gallery" class="thumb-grid"></div>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
