@@ -54,7 +54,8 @@ No items array, no options object, no plugins — every default is chosen so thi
 
 ## Docs
 
-- [`docs/index.html`](docs/index.html) — guides, examples, and the API reference, all local static HTML (open directly, or run `npm run docs` first to regenerate the API reference from source).
+- **[michaelyagi.github.io/shoji](https://michaelyagi.github.io/shoji)** — the published docs site, auto-deployed from `main` (see `.github/workflows/ci.yml`'s `publish-docs` job).
+- [`docs/index.html`](docs/index.html) — the same guides/examples/API reference, as local static HTML (open directly, or run `npm run docs` first to regenerate the API reference from source).
 - [`docs/examples/`](docs/examples/) — real, runnable, self-contained example pages (copy one wholesale into your own project).
 - [`DESIGN.md`](DESIGN.md) — the living architecture/spec document this project is built from.
 
