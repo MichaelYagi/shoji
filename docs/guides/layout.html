@@ -170,6 +170,52 @@
       ignored).
     </p>
 
+    <h3>
+      <code>headingOverflow</code> (<code>justified</code> + the <code>{title, subtitle}</code> form
+      only)
+    </h3>
+    <p>
+      Controls what happens when a compact label doesn't fit its available width — the gap until the
+      next section's label sharing its row, or the container edge.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Value</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>'show'</code> (default)</td>
+          <td>
+            Always renders the full title + subtitle, one line, however wide — a label can visually
+            run past the next label or the container edge. Simple and predictable; nothing is ever
+            dropped or reflowed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>'fit'</code></td>
+          <td>
+            Never wraps a label's text. Drops the subtitle first if title+subtitle together don't
+            fit; if the title alone still doesn't fit, that section is pushed to start a fresh row
+            instead — row <em>composition</em> responds to label width, not just content. A single
+            label wider than the entire container is ellipsis-truncated as a last resort.
+          </td>
+        </tr>
+        <tr>
+          <td><code>'wrap'</code></td>
+          <td>
+            The in-between, matching real Google Photos date headers: same continuous row-packing as
+            <code>'show'</code> (no section is ever pushed to a fresh row), but a label that doesn't
+            fit wraps its own text onto extra lines instead. Capped at
+            <code>maxRowHeight</code> (default 360) — a label tall enough to hit that cap
+            ellipsis-truncates its last visible line rather than growing the row further.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
     <h2>Examples</h2>
     <pre><code>// Tight masonry — flush tiles, no ragged gaps
 layout: { type: 'masonry', gutter: 0 }

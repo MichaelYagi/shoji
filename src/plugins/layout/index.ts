@@ -141,8 +141,18 @@ export interface LayoutOptions {
    *   row — there, nothing left to break onto, so the label is
    *   ellipsis-truncated (still one line, never wrapped, never
    *   overflowing).
+   * - `'wrap'` — the in-between: same continuous row-packing as `'show'`
+   *   (row *composition* never reacts to label width, unlike `'fit'` — no
+   *   section is ever pushed to a fresh row), but a label that doesn't fit
+   *   its available width (same gap `'fit'` measures) wraps its own text
+   *   onto additional lines instead of running past it. Height is capped
+   *   at `maxRowHeight` (or its default, 360) — a label tall enough to hit
+   *   that cap ellipsis-truncates its last visible line rather than
+   *   growing the row further. Real Google Photos behavior for its date
+   *   headers; pick this over `'fit'` when you'd rather a label take an
+   *   extra line than shove a whole section onto its own row.
    */
-  headingOverflow?: 'show' | 'fit';
+  headingOverflow?: 'show' | 'fit' | 'wrap';
   /**
    * Pins the active section's heading via `position: sticky`. Only
    * implemented for `type: 'grid'`, where headings sit in normal document
@@ -273,7 +283,8 @@ export const Layout: ShojiPlugin = {
           items: GalleryItem[],
         ) => string | HTMLElement | { title: string; subtitle?: string })
       | undefined;
-    const headingOverflow = (ctx.options.headingOverflow as 'show' | 'fit' | undefined) ?? 'show';
+    const headingOverflow =
+      (ctx.options.headingOverflow as 'show' | 'fit' | 'wrap' | undefined) ?? 'show';
     const stickyHeadingsRaw = ctx.options.stickyHeadings === true;
     const stickyHeadings = stickyHeadingsRaw && type === 'grid';
     if (stickyHeadingsRaw && type !== 'grid') {
@@ -568,9 +579,14 @@ export const Layout: ShojiPlugin = {
      * break by default; a heading is a compact inline label, not a
      * full-width blocking element).
      *
-     * `headingOverflow: 'show'` (default): one continuous `layoutJustified`
-     * pass packs every tile regardless of section — the simple case, a
-     * single "segment" covering everything.
+     * `headingOverflow: 'show'` (default) and `'wrap'`: one continuous
+     * `layoutJustified` pass packs every tile regardless of section — the
+     * simple case, a single "segment" covering everything (computeSegments()
+     * below only ever splits into multiple segments for `'fit'`). `'wrap'`
+     * additionally constrains each label's own box afterward (see
+     * applyWrapDecisions) — that's a content-level decision within a fixed
+     * layout, not a row-composition one, so it doesn't need its own segment
+     * handling here.
      *
      * `headingOverflow: 'fit'`: still prefers continuous packing, but a
      * section whose label (title+subtitle, or title alone once the
@@ -750,12 +766,56 @@ export const Layout: ShojiPlugin = {
         }
       }
 
+      /**
+       * `headingOverflow: 'wrap'`'s content decision — unlike
+       * applyContentDecisions above, this never drops the subtitle or
+       * ellipsis-truncates a single line; it lets the label wrap onto
+       * additional lines within its available width, then caps *how many*
+       * lines via `-webkit-line-clamp` sized from `maxRowHeight` — a label
+       * short enough to fit within that many lines is unaffected (nothing
+       * for the clamp to do), a longer one ellipsis-truncates its last
+       * visible line rather than growing the row past the configured cap.
+       * `-webkit-line-clamp` is broadly supported cross-browser despite the
+       * prefix (Chrome/Safari/Firefox all implement it) — there's no
+       * unprefixed equivalent with comparable support yet.
+       */
+      function applyWrapDecisions(segment: Segment): void {
+        for (let k = segment.startSection; k < segment.endSection; k++) {
+          const heading = headings[k]!;
+          if (!heading.structured) continue;
+          const pos = segment.result.positions[heading.tileStart - segment.tileStart];
+          if (!pos) continue;
+          const next = k + 1 < segment.endSection ? headings[k + 1] : undefined;
+          const nextPos = next
+            ? segment.result.positions[next.tileStart - segment.tileStart]
+            : null;
+          const sameRow = !!nextPos && Math.abs(nextPos.y - pos.y) < 0.5;
+          const available = (sameRow ? nextPos!.x : containerWidth) - pos.x - config.gutter.x;
+
+          heading.root.style.whiteSpace = 'normal';
+          heading.root.style.maxWidth = `${Math.max(0, available)}px`;
+
+          const style = getComputedStyle(heading.root);
+          const parsedLineHeight = parseFloat(style.lineHeight);
+          const lineHeight = Number.isFinite(parsedLineHeight)
+            ? parsedLineHeight
+            : parseFloat(style.fontSize) * 1.2;
+          const maxLines = Math.max(1, Math.floor(config.maxRowHeight / lineHeight));
+
+          heading.root.style.display = '-webkit-box';
+          heading.root.style.overflow = 'hidden';
+          heading.root.style.setProperty('-webkit-box-orient', 'vertical');
+          heading.root.style.setProperty('-webkit-line-clamp', `${maxLines}`);
+        }
+      }
+
       const segments = computeSegments();
       let cumulativeExtra = 0;
       let headingPtr = 0;
 
       for (const segment of segments) {
         if (headingOverflow === 'fit') applyContentDecisions(segment);
+        else if (headingOverflow === 'wrap') applyWrapDecisions(segment);
 
         // Batch-read this segment's heading heights up front, after content
         // decisions are final — see applyMasonry's identical pattern/comment

@@ -79,10 +79,12 @@ function layoutOptionsFor(type: DemoType, grouped: boolean): Record<string, unkn
     // { title, subtitle } is the built-in structured heading form.
     // headingOverflow: 'fit' (default 'show', which always renders both
     // parts in full) opts justified into dropping the subtitle — then
-    // pushing the section onto a fresh row (never wrapping the label
-    // text) — when a compact label doesn't fit the gap before the next
-    // section's label sharing its row; see both options' doc comments in
-    // src/plugins/layout/index.ts.
+    // pushing the section onto a fresh row — when a compact label doesn't
+    // fit the gap before the next section's label sharing its row. 'wrap'
+    // is the third option: same row-packing as 'show', but the label
+    // itself wraps onto extra lines (capped by maxRowHeight) instead of
+    // either running past its gap or claiming a whole new row. See all
+    // three options' doc comments in src/plugins/layout/index.ts.
     renderHeading: (key: string) => ({ title: key, subtitle: 'Vancouver, BC' }),
     headingOverflow: 'fit',
   };

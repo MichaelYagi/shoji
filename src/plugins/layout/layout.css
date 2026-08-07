@@ -98,25 +98,31 @@
 }
 
 /* Font customization points, per CLAUDE.md ("all styling through --shoji-*
-   custom properties with sane defaults") — every fallback below matches
-   what rendered before these properties existed, so setting none of them
-   changes nothing. .shoji-layout-heading itself (the plain-string/default
-   heading, and the shared parent of title+subtitle) deliberately keeps its
-   browser-default <h2> font-size untouched rather than gaining its own
-   --shoji-layout-heading-font-size — overriding that here to "inherit"
-   would shrink it from the UA stylesheet's own (larger) h2 default, a
-   visible regression for anyone not using the structured form. Host CSS
-   targeting .shoji-layout-heading directly already fully controls it. */
+   custom properties with sane defaults"). .shoji-layout-heading itself (the
+   plain-string/default heading, and the shared parent of title+subtitle)
+   deliberately keeps its browser-default <h2> font-size untouched rather
+   than gaining its own --shoji-layout-heading-font-size — overriding that
+   here to "inherit" would shrink it from the UA stylesheet's own (larger)
+   h2 default, a visible regression for anyone not using the structured
+   form. Host CSS targeting .shoji-layout-heading directly already fully
+   controls it.
+
+   The title/subtitle spans below intentionally do NOT size off that same
+   (oversized, unreset) h2 default — title and subtitle both get an
+   explicit shared default size instead (matching .shoji-counter's own
+   0.875rem elsewhere in core, for visual consistency), decoupled from
+   whatever the plain-string heading's own size happens to be. The label
+   (title) reads as muted/normal-weight, the value (subtitle) as bold/
+   full-color — e.g. "Taken" vs a bolded date — the inverse of an earlier
+   version of this default that bolded the label instead. */
 .shoji-layout-heading {
   font-family: var(--shoji-layout-heading-font-family, inherit);
 }
 
 .shoji-layout-heading-title {
-  font-size: var(
-    --shoji-layout-heading-title-font-size,
-    1em
-  ); /* 1em = its parent <h2>'s own (browser-default) size, unchanged from before this property existed */
-  font-weight: var(--shoji-layout-heading-title-font-weight, 600);
+  font-size: var(--shoji-layout-heading-title-font-size, 0.875rem);
+  font-weight: var(--shoji-layout-heading-title-font-weight, 400);
+  color: var(--shoji-layout-heading-title-color, #767676);
   /* headingOverflow: 'fit''s ellipsis fallback (the one unavoidable case —
      a single label wider than the container even alone) still needs
      overflow-wrap: break-word so a single long unbroken token (a URL, a
@@ -126,9 +132,9 @@
 
 .shoji-layout-heading-subtitle {
   margin-left: 0.6em;
-  font-size: var(--shoji-layout-heading-subtitle-font-size, 0.85em);
-  font-weight: var(--shoji-layout-heading-subtitle-font-weight, 400);
-  color: var(--shoji-layout-heading-subtitle-color, #767676);
+  font-size: var(--shoji-layout-heading-subtitle-font-size, 0.875rem);
+  font-weight: var(--shoji-layout-heading-subtitle-font-weight, 700);
+  color: var(--shoji-layout-heading-subtitle-color, inherit);
   overflow-wrap: break-word;
 }
 

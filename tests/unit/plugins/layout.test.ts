@@ -1150,6 +1150,45 @@ describe('Layout — groupBy/headings', () => {
     gallery.destroy();
   });
 
+  it("headingOverflow: 'wrap' lets the label wrap instead of dropping the subtitle or pushing a new row, capped by maxRowHeight via line-clamp", () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    mockContainerWidth(el, 1000);
+    const gallery = new Gallery(el, {
+      items: makeGroupedItems(),
+      plugins: [Layout],
+      layout: {
+        type: 'justified',
+        groupBy: sectionOf,
+        renderHeading: (key: string) => ({ title: key, subtitle: 'a location' }),
+        headingOverflow: 'wrap',
+        maxRowHeight: 200,
+      },
+    });
+
+    const heading = el.querySelector<HTMLElement>('.shoji-layout-heading')!;
+    const subtitle = heading.querySelector<HTMLElement>('.shoji-layout-heading-subtitle')!;
+    // Unlike 'fit', 'wrap' never drops the subtitle or ellipsis-truncates a
+    // single line — it wraps the label's own text instead, capped by a
+    // line-clamp derived from maxRowHeight. jsdom can't resolve real font
+    // metrics (verified separately in a real browser), so this only checks
+    // the wrap code path actually ran and set a sane-shaped clamp, not the
+    // exact line count.
+    expect(subtitle.hidden).toBe(false);
+    expect(heading.style.whiteSpace).toBe('normal');
+    expect(heading.style.maxWidth).not.toBe('');
+    expect(heading.style.display).toBe('-webkit-box');
+    expect(heading.style.overflow).toBe('hidden');
+    // -webkit-box-orient isn't in jsdom's CSSOM property table, so
+    // setProperty silently no-ops on it there (confirmed against jsdom
+    // directly) — real browsers apply it fine; not assertable here.
+    const clamp = Number(heading.style.getPropertyValue('-webkit-line-clamp'));
+    expect(Number.isInteger(clamp)).toBe(true);
+    expect(clamp).toBeGreaterThanOrEqual(1);
+
+    gallery.destroy();
+  });
+
   it('stickyHeadings adds the sticky class only for type: grid', () => {
     const el = document.createElement('div');
     document.body.appendChild(el);
