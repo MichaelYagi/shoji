@@ -448,15 +448,24 @@ export class Gallery {
     });
   }
 
-  /** DESIGN.md §2.8 — opacity-only, never while focused/hovered. Matches by class so plugin toolbar buttons participate. */
+  /**
+   * DESIGN.md §2.8 — opacity-only, paused only while a control is actually
+   * *hovered* (a real, continuously-tracked state via paired pointerenter/
+   * pointerleave). A real bug: this used to also treat a *focused* control
+   * as active indefinitely, checking `document.activeElement` directly —
+   * but a click leaves a `<button>` focused as an ordinary side effect
+   * (not just deliberate keyboard navigation), and nothing ever un-focuses
+   * it if the viewer simply stops interacting afterward (moves the mouse
+   * away, switches windows, whatever) without clicking anything else in
+   * the dialog first. That permanently blocked `hideControls()` — not "a
+   * long delay," an actual forever, since a no-op'd timer never
+   * reschedules itself. Focus still fully counts as *activity* — `focusin`
+   * already routes through `onActivity()`, resetting the idle clock and
+   * re-showing controls, same as a mouse move — it just no longer *blocks*
+   * the eventual hide the way a genuinely still-hovered button does.
+   */
   private isControlActive(): boolean {
-    if (!this.dom) return false;
-    if (this.hoveredControlCount > 0) return true;
-    const active = document.activeElement;
-    return (
-      active instanceof HTMLElement &&
-      active.matches('.shoji-close, .shoji-nav, .shoji-toolbar-button')
-    );
+    return this.hoveredControlCount > 0;
   }
 
   /**

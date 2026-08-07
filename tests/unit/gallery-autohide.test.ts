@@ -100,14 +100,30 @@ describe('Gallery — auto-hide controls', () => {
     gallery.destroy();
   });
 
-  it('never hides while a control has focus', () => {
+  it('focusing a control resets the idle clock, but does not block the eventual hide (real bug: a stale focused button — left over from an ordinary click, not active keyboard use — used to block auto-hide forever)', () => {
     const gallery = makeGallery();
     gallery.open(0);
+
+    vi.advanceTimersByTime(4000);
+    (document.querySelector('.shoji-close') as HTMLElement).focus(); // counts as activity — resets the clock
+
+    vi.advanceTimersByTime(4999);
+    expect(isHidden()).toBe(false); // only 4999ms since the focus-reset
+    vi.advanceTimersByTime(1);
+    expect(isHidden()).toBe(true); // now 5000ms since the reset — hides even though focus never moved away
+
+    gallery.destroy();
+  });
+
+  it('focusing a control re-shows it if already hidden, same as any other activity', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    vi.advanceTimersByTime(5000);
+    expect(isHidden()).toBe(true);
+
     (document.querySelector('.shoji-close') as HTMLElement).focus();
-
-    vi.advanceTimersByTime(10000);
-
     expect(isHidden()).toBe(false);
+
     gallery.destroy();
   });
 
