@@ -111,6 +111,72 @@ describe('SlideManager', () => {
     expect(onLoad).toHaveBeenCalledWith(1);
   });
 
+  it('regression: navigating to a slide before its preload decode resolves reuses that same in-flight decode instead of abandoning it and starting a duplicate one', async () => {
+    // A real bug: the pool used to key an in-flight decode to whichever
+    // *slot* started it. Navigating before it resolved reassigned that
+    // slot to a different target, discarding the still-loading decode —
+    // and the newly-active slot (a different physical slot) started a
+    // brand new fetch for the very same image from zero. A slow-loading
+    // preload could never actually finish preloading; every navigation
+    // before it resolved just restarted it. Fixed by tracking in-flight
+    // decodes by item index, not by slot.
+    const decodeCallsFor = (needle: string) =>
+      decodeCalls.filter((src) => src.includes(needle)).length;
+    const decodeCalls: string[] = [];
+    const resolvers: Array<{ src: string; resolve: () => void }> = [];
+    HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+      decodeCalls.push(this.src);
+      return new Promise<void>((resolve) => resolvers.push({ src: this.src, resolve }));
+    });
+
+    const manager = new SlideManager({ preload: 1 });
+    const onLoad = vi.fn();
+    manager.render(items, 0, onLoad); // starts decoding 'a' (active) and 'b' (+1 preload neighbor)
+    expect(decodeCallsFor('b.jpg')).toBe(1);
+
+    manager.render(items, 1, onLoad); // navigate to 'b' before its decode resolves (also starts 'c' as the new +1 neighbor — expected, unrelated to the bug)
+
+    // The fix, directly: still just the one decode() call for 'b' — no
+    // duplicate fetch was started for it just because it became active.
+    expect(decodeCallsFor('b.jpg')).toBe(1);
+    const activeMedia = manager.getActiveMedia();
+    expect(activeMedia?.querySelector('.shoji-slide-spinner')).not.toBeNull(); // still waiting, correctly
+
+    const bResolver = resolvers.find((r) => r.src.includes('b.jpg'));
+    bResolver?.resolve(); // the original (only) decode for 'b' finally settles
+    await flush();
+
+    // The still-active slot picks it up — not lost, not stuck forever.
+    expect(activeMedia?.querySelector('.shoji-slide-spinner')).toBeNull();
+    expect(activeMedia?.querySelector('img')?.getAttribute('src')).toContain('b.jpg');
+    expect(onLoad).toHaveBeenCalledWith(1);
+  });
+
+  it('a decode that resolves after the viewer has navigated past it entirely is a harmless no-op (no error, nothing incorrectly swapped in)', async () => {
+    let resolveB!: () => void;
+    HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+      if (this.src.includes('b.jpg')) {
+        return new Promise<void>((resolve) => (resolveB = resolve));
+      }
+      return Promise.resolve();
+    });
+
+    const manager = new SlideManager({ preload: 0 }); // single slot — 'b' is never cached once passed
+    manager.render(items, 0, vi.fn());
+    await flush();
+
+    manager.render(items, 1, vi.fn()); // starts decoding 'b', never resolves yet
+    manager.render(items, 2, vi.fn()); // navigate away again before 'b' resolves — nobody wants 'b' anymore
+
+    expect(() => {
+      resolveB();
+    }).not.toThrow();
+    await flush();
+
+    // 'c' (the actual current slide) is unaffected by 'b' finally resolving.
+    expect(manager.getActiveMedia()?.querySelector('img')?.getAttribute('src')).toContain('c.jpg');
+  });
+
   it('a cached node is the exact same element when reused, not a re-decoded copy', async () => {
     const manager = new SlideManager({ preload: 1 });
     manager.render(items, 0, vi.fn());
