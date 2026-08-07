@@ -226,12 +226,14 @@ describe('Gallery — counter & caption', () => {
     gallery.destroy();
   });
 
-  it('shows the caption bar with the item text when present', () => {
+  it('shows the caption bar with the item text when present, once the slide is done loading', async () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [{ id: 'a', src: 'a.jpg', caption: 'A sunset' }],
     });
     gallery.open(0);
+    await Promise.resolve();
+    await Promise.resolve();
 
     const caption = document.querySelector('.shoji-caption') as HTMLElement;
     expect(caption.hidden).toBe(false);
@@ -240,12 +242,28 @@ describe('Gallery — counter & caption', () => {
     gallery.destroy();
   });
 
-  it('renders an HTMLElement caption as real DOM, not escaped text', () => {
+  it('hides the caption while the active slide is still loading, even though it has caption text', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'A sunset' }],
+    });
+    gallery.open(0); // decode() hasn't resolved yet — no await here, on purpose
+
+    const caption = document.querySelector('.shoji-caption') as HTMLElement;
+    expect(caption.hidden).toBe(true);
+    expect(caption.textContent).toBe('A sunset'); // content is already correct, just not shown yet
+
+    gallery.destroy();
+  });
+
+  it('renders an HTMLElement caption as real DOM, not escaped text', async () => {
     const el = document.createElement('div');
     const rich = document.createElement('span');
     rich.innerHTML = '<strong>Bold</strong> caption';
     const gallery = new Gallery(el, { items: [{ id: 'a', src: 'a.jpg', caption: rich }] });
     gallery.open(0);
+    await Promise.resolve();
+    await Promise.resolve();
 
     const caption = document.querySelector('.shoji-caption') as HTMLElement;
     expect(caption.hidden).toBe(false);
@@ -289,7 +307,7 @@ describe('Gallery — counter & caption', () => {
     gallery.destroy();
   });
 
-  it('renders dangerouslySetInnerHTML as raw, unescaped HTML', () => {
+  it('renders dangerouslySetInnerHTML as raw, unescaped HTML', async () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [
@@ -301,6 +319,8 @@ describe('Gallery — counter & caption', () => {
       ],
     });
     gallery.open(0);
+    await Promise.resolve();
+    await Promise.resolve();
 
     const caption = document.querySelector('.shoji-caption') as HTMLElement;
     expect(caption.hidden).toBe(false);

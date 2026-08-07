@@ -555,6 +555,22 @@ export class Gallery {
     }
   }
 
+  /**
+   * Caption content is always kept current (so it's already correct the
+   * instant loading finishes, no separate text flash) — only `hidden` is
+   * gated on `isActiveReady()` too, on top of the existing "does this item
+   * even have a caption" check. Otherwise a caption for the *new* slide
+   * would sit there, readable, while the image/video it describes is still
+   * a spinner — same reasoning as `setSlideLoading` dimming feature
+   * buttons during the same window, just for the caption instead.
+   */
+  private updateCaptionVisibility(): void {
+    if (!this.dom || !this.slides) return;
+    const item = this.itemList[this.activeIndex];
+    const noCaption = this.renderCaption(this.dom.caption, item?.caption);
+    this.dom.caption.hidden = noCaption || !this.slides.isActiveReady();
+  }
+
   private renderCurrentSlide(): void {
     if (!this.slides || !this.dom) return;
     const dom = this.dom;
@@ -562,6 +578,7 @@ export class Gallery {
       if (loadedIndex === this.activeIndex) {
         this.bus.emit('slideItemLoad', { index: loadedIndex });
         this.setSlideLoading(false);
+        this.updateCaptionVisibility();
       }
     });
     this.setSlideLoading(!this.slides.isActiveReady());
@@ -570,7 +587,7 @@ export class Gallery {
     const total = this.itemList.length;
     dom.counter.textContent = total > 0 ? `${this.activeIndex + 1} / ${total}` : '';
     dom.counter.hidden = !this.showCounter || total === 0;
-    dom.caption.hidden = this.renderCaption(dom.caption, item?.caption);
+    this.updateCaptionVisibility();
     const label = `Image ${this.activeIndex + 1} of ${total}${item?.alt ? `: ${item.alt}` : ''}`;
     this.liveRegion.announce(label);
 
