@@ -420,6 +420,12 @@ export const Layout: ShojiPlugin = {
       const root = document.createElement('a');
       root.className = 'shoji-layout-tile';
       if (item.id) root.dataset.shojiId = item.id;
+      // Always set, unlike shojiId above (item.id is optional) — the
+      // reliable element→item lookup for a `layoutRender` listener that
+      // only has the element itself later (e.g. a click handler on content
+      // it injected into the tile), not this render pass's own event
+      // payload. `gallery.items[Number(el.dataset.shojiIndex)]` always works.
+      root.dataset.shojiIndex = String(index);
 
       // item.src is the video *file* for a video item (unplayable as a tile
       // thumbnail) — item.poster is the actual image to show there, checked
@@ -923,6 +929,13 @@ export const Layout: ShojiPlugin = {
       }
     }
 
+    /** DESIGN.md §5 — fires once a render pass's tile DOM is built and appended, so a host can inject its own content into `element` (a badge, a selection checkbox, anything not itself part of layout) without re-deriving which tiles are newly built this pass. */
+    function emitLayoutRender(rendered: readonly Tile[]): void {
+      ctx.emit('layoutRender', {
+        tiles: rendered.map((tile) => ({ index: tile.index, element: tile.root })),
+      });
+    }
+
     function fullRender(items: readonly GalleryItem[]): void {
       container.replaceChildren();
       tiles = items.map((item, i) => createTile(item, i));
@@ -943,6 +956,7 @@ export const Layout: ShojiPlugin = {
       columnHeights = undefined;
       relayoutAll();
       autoMeasureTiles(tiles);
+      emitLayoutRender(tiles);
     }
 
     function appendRender(newItems: readonly GalleryItem[], startIndex: number): void {
@@ -956,6 +970,7 @@ export const Layout: ShojiPlugin = {
         applyJustified(); // full relayout — see applyJustified's doc comment
       else applyGrid(newTiles);
       autoMeasureTiles(newTiles);
+      emitLayoutRender(newTiles);
     }
 
     fullRender(gallery.items);

@@ -549,6 +549,100 @@ describe('Layout — justified mode', () => {
   });
 });
 
+describe('Layout — data-shoji-index and the layoutRender event', () => {
+  it('every tile carries data-shoji-index, matching its position in the items array — regardless of item.id', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    mockContainerWidth(el, 1000);
+    const items = [
+      { src: 'no-id.jpg', width: 800, height: 600 }, // no id at all
+      ...makeItems(2, 1),
+    ];
+    const gallery = new Gallery(el, { items, plugins: [Layout] });
+
+    const tiles = el.querySelectorAll<HTMLElement>('.shoji-layout-tile');
+    expect(tiles).toHaveLength(3);
+    tiles.forEach((tile, i) => expect(tile.dataset.shojiIndex).toBe(String(i)));
+    // The no-id item's tile still has no data-shoji-id (unrelated, optional attribute) — index is the always-available one.
+    expect(tiles[0]!.dataset.shojiId).toBeUndefined();
+
+    gallery.destroy();
+  });
+
+  it('emits layoutRender with every tile after a full render, in item order', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    mockContainerWidth(el, 1000);
+    const gallery = new Gallery(el, { items: makeItems(3), plugins: [Layout] });
+
+    const handler = vi.fn();
+    gallery.on('layoutRender', handler);
+    gallery.updateSlides(makeItems(3).reverse()); // same length, different order — not a pure append, triggers fullRender
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const { tiles } = handler.mock.calls[0]![0] as {
+      tiles: { index: number; element: HTMLElement }[];
+    };
+    expect(tiles).toHaveLength(3);
+    expect(tiles.map((t) => t.index)).toEqual([0, 1, 2]);
+    tiles.forEach((t) => expect(t.element.classList.contains('shoji-layout-tile')).toBe(true));
+
+    gallery.destroy();
+  });
+
+  it('emits layoutRender with only the newly-appended tiles — not the whole set — on a pure append', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    mockContainerWidth(el, 1000);
+    const gallery = new Gallery(el, { items: makeItems(3), plugins: [Layout] });
+
+    const handler = vi.fn();
+    gallery.on('layoutRender', handler);
+    gallery.updateSlides(makeItems(5)); // 0,1,2 unchanged, 3,4 appended
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const { tiles } = handler.mock.calls[0]![0] as {
+      tiles: { index: number; element: HTMLElement }[];
+    };
+    expect(tiles.map((t) => t.index)).toEqual([3, 4]);
+
+    gallery.destroy();
+  });
+
+  it("a host can inject custom content keyed to the event's index, then recover that same index later from data-shoji-index alone", () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    mockContainerWidth(el, 1000);
+    const items = makeItems(3);
+    const gallery = new Gallery(el, { items, plugins: [Layout] });
+
+    gallery.on('layoutRender', ({ tiles }) => {
+      for (const { index, element } of tiles) {
+        const badge = document.createElement('span');
+        badge.className = 'my-badge';
+        badge.textContent = `badge-for-${index}`;
+        element.appendChild(badge);
+      }
+    });
+    // Re-render (order change, not a pure append) so the listener above,
+    // attached after construction, actually runs.
+    gallery.updateSlides([...items].reverse());
+
+    const badges = Array.from(el.querySelectorAll<HTMLElement>('.my-badge'));
+    expect(badges).toHaveLength(3);
+    for (const badge of badges) {
+      const tile = badge.closest('.shoji-layout-tile') as HTMLElement;
+      const recoveredIndex = Number(tile.dataset.shojiIndex);
+      // The index recovered from the DOM alone (no reference to the
+      // original event payload) matches exactly the index that was used
+      // to create this same badge in the first place.
+      expect(badge.textContent).toBe(`badge-for-${recoveredIndex}`);
+    }
+
+    gallery.destroy();
+  });
+});
+
 describe('Layout — incremental updates (infinite-scroll compatibility)', () => {
   it('a pure append only creates DOM for the new items — existing tile elements are untouched (same references)', () => {
     const el = document.createElement('div');

@@ -61,6 +61,54 @@ describe('SlideManager', () => {
     expect(onLoad).toHaveBeenCalledWith(0);
   });
 
+  it('keeps the previous image on screen until the new one finishes decoding, then swaps atomically', async () => {
+    const manager = new SlideManager({ preload: 0 });
+    manager.render(items, 0, vi.fn()); // image 'a'
+    await flush();
+    const imgA = manager.element.querySelector('img') as HTMLImageElement;
+    expect(imgA.src).toContain('a.jpg');
+
+    // Control exactly when 'b' finishes decoding, instead of the global
+    // auto-resolving mock, to observe the mid-flight state.
+    let resolveDecode!: () => void;
+    HTMLImageElement.prototype.decode = vi.fn(
+      () => new Promise<void>((resolve) => (resolveDecode = resolve)),
+    );
+
+    manager.render(items, 1, vi.fn()); // navigate to image 'b'
+
+    // Still showing 'a' — the slot was never cleared while 'b' decodes.
+    expect(manager.element.querySelector('img')).toBe(imgA);
+    expect(manager.element.querySelector('img')?.getAttribute('src')).toContain('a.jpg');
+
+    resolveDecode();
+    await flush();
+
+    const imgB = manager.element.querySelector('img') as HTMLImageElement;
+    expect(imgB).not.toBe(imgA);
+    expect(imgB.src).toContain('b.jpg');
+  });
+
+  it('isActiveReady() is false while the active slide is still loading and true once it settles', async () => {
+    const manager = new SlideManager({ preload: 0 });
+    expect(manager.isActiveReady()).toBe(false); // nothing rendered yet
+
+    manager.render(items, 0, vi.fn());
+    expect(manager.isActiveReady()).toBe(false); // decode() is always async, never resolved synchronously
+    await flush();
+    expect(manager.isActiveReady()).toBe(true);
+  });
+
+  it('isActiveReady() stays true immediately when re-navigating to an already-rendered index (no new load triggered)', async () => {
+    const manager = new SlideManager({ preload: 0 });
+    manager.render(items, 0, vi.fn());
+    await flush();
+    expect(manager.isActiveReady()).toBe(true);
+
+    manager.render(items, 0, vi.fn()); // same index — render() skips it entirely
+    expect(manager.isActiveReady()).toBe(true);
+  });
+
   it('disables native image drag (real bug: browser-native "drag this image out" cancels the pointer sequence a real drag/pan gesture needs)', async () => {
     const manager = new SlideManager({ preload: 0 });
     manager.render(items, 0, vi.fn());
@@ -131,7 +179,10 @@ describe('SlideManager', () => {
     expect(onLoad).toHaveBeenCalledWith(4);
   });
 
-  it('pauses and releases a previous video when its slot is reused for different content', () => {
+  it('keeps the previous video visible/playing until the new content actually swaps in, then pauses and releases it', async () => {
+    // The old video stays up (not pause()'d, not removed) for the entire
+    // decode() wait — a real navigation gap used to clear it immediately,
+    // leaving the slot blank until the new image resolved. DESIGN.md §2.3.
     const manager = new SlideManager({ preload: 0 });
     manager.render(items, 3, vi.fn()); // video item
     const video = manager.element.querySelector('video') as HTMLVideoElement;
@@ -140,9 +191,16 @@ describe('SlideManager', () => {
 
     manager.render(items, 0, vi.fn()); // switch this slot to an image item
 
+    expect(pauseSpy).not.toHaveBeenCalled();
+    expect(loadSpy).not.toHaveBeenCalled();
+    expect(manager.element.querySelector('video')).toBe(video); // still the same old video, still up
+
+    await flush(); // the new image's decode() resolves
+
     expect(pauseSpy).toHaveBeenCalled();
     expect(loadSpy).toHaveBeenCalled();
     expect(manager.element.querySelector('video')).toBeNull();
+    expect(manager.element.querySelector('img')).not.toBeNull();
   });
 
   it('clears a slot when its offset falls outside the item range', async () => {

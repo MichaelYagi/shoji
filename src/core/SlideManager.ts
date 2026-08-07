@@ -6,6 +6,8 @@ interface Slot {
   offset: number;
   assignedIndex: number | null;
   requestId: number;
+  /** False from the moment a slot is (re)assigned a new index until that index's content has actually swapped in — see `isActiveReady()`. */
+  ready: boolean;
 }
 
 export interface SlideManagerOptions {
@@ -40,7 +42,7 @@ export class SlideManager {
       root.appendChild(media);
 
       this.element.appendChild(root);
-      return { root, media, offset, assignedIndex: null, requestId: 0 };
+      return { root, media, offset, assignedIndex: null, requestId: 0, ready: false };
     });
     this.applyTransforms(null);
   }
@@ -48,6 +50,11 @@ export class SlideManager {
   /** The active (offset 0) slot's `.shoji-slide-media` element — not `.shoji-slide`, whose transform is already owned by pool-offset positioning. */
   getActiveMedia(): HTMLElement | null {
     return this.slots.find((slot) => slot.offset === 0)?.media ?? null;
+  }
+
+  /** False while the active (offset 0) slot's content is still decoding/loading — Gallery.ts uses this right after `render()` to know whether to show the loading state immediately, without waiting for `onLoad`. */
+  isActiveReady(): boolean {
+    return this.slots.find((slot) => slot.offset === 0)?.ready ?? false;
   }
 
   /**
@@ -94,18 +101,30 @@ export class SlideManager {
 
       if (!item) {
         slot.assignedIndex = null;
+        slot.ready = false;
+        releaseVideo(slot.media);
         slot.media.replaceChildren();
         continue;
       }
       if (slot.assignedIndex === index) continue;
 
       slot.assignedIndex = index;
+      slot.ready = false;
       const requestId = ++this.nextRequestId;
       slot.requestId = requestId;
       this.renderItem(item, slot, index, requestId, onLoad);
     }
   }
 
+  /**
+   * Deliberately does *not* touch `slot.media` up front — whatever was
+   * showing before (the previous index's image/video) stays on screen
+   * until the new content is actually ready to replace it, in `swapIn()`
+   * below. Navigating used to clear the slot immediately, then leave it
+   * blank until `img.decode()` resolved — a real, always-there gap (not
+   * just a slow-network edge case), since `decode()` is never synchronous.
+   * DESIGN.md §2.3.
+   */
   private renderItem(
     item: GalleryItem,
     slot: Slot,
@@ -113,19 +132,23 @@ export class SlideManager {
     requestId: number,
     onLoad: (index: number) => void,
   ): void {
-    releaseVideo(slot.media); // stop/release before this slot's content is replaced
-    slot.media.replaceChildren();
-    if (item.width && item.height) {
-      slot.media.style.aspectRatio = `${item.width} / ${item.height}`;
-    } else {
-      slot.media.style.removeProperty('aspect-ratio');
-    }
-
     if (item.video) {
       this.renderVideo(item, slot, index, onLoad);
     } else {
       this.renderImage(item, slot, requestId, index, onLoad);
     }
+  }
+
+  /** Only called once new content is actually ready to display — releases whatever the slot showed before and swaps the new node in, atomically (old and new are never both visible, and there's never a gap with neither). */
+  private swapIn(slot: Slot, node: Node, item: GalleryItem): void {
+    releaseVideo(slot.media);
+    if (item.width && item.height) {
+      slot.media.style.aspectRatio = `${item.width} / ${item.height}`;
+    } else {
+      slot.media.style.removeProperty('aspect-ratio');
+    }
+    slot.media.replaceChildren(node);
+    slot.ready = true;
   }
 
   private renderImage(
@@ -158,7 +181,7 @@ export class SlideManager {
 
     const reveal = (): void => {
       if (slot.requestId !== requestId) return; // superseded by a newer render for this slot
-      slot.media.replaceChildren(img);
+      this.swapIn(slot, img, item);
       onLoad(index);
     };
 
@@ -188,7 +211,7 @@ export class SlideManager {
       const placeholder = document.createElement('div');
       placeholder.className = 'shoji-slide-placeholder';
       placeholder.textContent = 'Video';
-      slot.media.replaceChildren(placeholder);
+      this.swapIn(slot, placeholder, item);
       onLoad(index);
       return;
     }
@@ -210,10 +233,14 @@ export class SlideManager {
       video.src = item.src;
     }
 
+    // Inserted immediately (unlike the image path above) — the native
+    // `poster` attribute already shows something meaningful without
+    // waiting on `loadedmetadata`, so there's no decode-style gap to close
+    // here; deferring would only make video slides slower to show anything.
+    this.swapIn(slot, video, item);
     const reveal = (): void => onLoad(index);
     video.addEventListener('loadedmetadata', reveal, { once: true });
     video.addEventListener('error', reveal, { once: true });
-    slot.media.replaceChildren(video);
   }
 
   destroy(): void {
@@ -222,6 +249,7 @@ export class SlideManager {
       releaseVideo(slot.media);
       slot.media.replaceChildren();
       slot.assignedIndex = null;
+      slot.ready = false;
     }
     this.element.remove();
   }

@@ -186,4 +186,21 @@ export interface GalleryEvents extends Record<string, unknown> {
   rotateFlipChange: { index: number; flipH: boolean; flipV: boolean; rotation: number };
   /** DESIGN.md §4-zoom — emitted by the zoom plugin, not core, on every scale change (gesture or button-driven); resets per slide, not persisted by the plugin itself, same pattern as rotateFlipChange. */
   zoomChange: { index: number; scale: number };
+  /**
+   * DESIGN.md §5 — emitted by the layout plugin, not core, once a render
+   * pass has built and appended tile DOM: after `fullRender()` (every tile
+   * currently in the container — a full rebuild, e.g. from a non-append
+   * items change), or after `appendRender()` (just the newly-created tiles
+   * — existing ones are untouched, per the plugin's own incremental-append
+   * behavior). `tiles` is exactly the elements built *this pass*, in item
+   * order — a host injecting custom content into tiles (a badge, a
+   * selection checkbox, anything not itself part of the layout plugin)
+   * uses `element` directly and `index` to look the item back up via
+   * `gallery.items[index]`; `element.dataset.shojiIndex` (also set on
+   * every tile, matching `index` here) is the same lookup from the DOM
+   * side, for code that only has the element itself later (e.g. a click
+   * handler on injected content) and needs the index back without having
+   * kept this event's payload around.
+   */
+  layoutRender: { tiles: { index: number; element: HTMLElement }[] };
 }

@@ -488,3 +488,81 @@ describe('Gallery — closable: false', () => {
     gallery.destroy();
   });
 });
+
+describe('Gallery — loading state while the active slide loads', () => {
+  const plugin: ShojiPlugin = {
+    name: 'toolbar-button-plugin',
+    init(ctx) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'shoji-toolbar-button';
+      button.textContent = 'Feature';
+      ctx.ui.toolbar('right', button);
+    },
+  };
+
+  /** Replaces the auto-resolving global decode() stub with one under manual control, so tests can observe the mid-load state. */
+  function controlledDecode(): () => void {
+    let resolve!: () => void;
+    HTMLImageElement.prototype.decode = vi.fn(() => new Promise<void>((r) => (resolve = r)));
+    return () => resolve();
+  }
+
+  it('disables feature toolbar buttons (not close/nav) while the very first slide is loading, re-enables once it settles', async () => {
+    const resolveDecode = controlledDecode();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'a.jpg' }],
+      plugins: [plugin],
+    });
+    gallery.open(0);
+
+    const featureButton = document.querySelector('.shoji-toolbar-button')!;
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      true,
+    );
+    expect(featureButton.getAttribute('aria-disabled')).toBe('true');
+    expect((featureButton as HTMLElement).tabIndex).toBe(-1);
+    // Close/prev/next are never gated by loading — a slow image must not trap the viewer.
+    expect(document.querySelector('.shoji-close')!.getAttribute('aria-disabled')).toBeNull();
+
+    resolveDecode();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      false,
+    );
+    expect(featureButton.getAttribute('aria-disabled')).toBeNull();
+    expect((featureButton as HTMLElement).tabIndex).not.toBe(-1);
+    gallery.destroy();
+  });
+
+  it("re-triggers the loading state on every navigation, even to a structurally-preloaded neighbor — SlideManager pool slots are keyed by structural offset, not by item index, so the slot that becomes active after a navigation is a different physical slot than the one that had the neighbor preloaded, and it decodes fresh (a known gap, not this feature's scope to fix)", async () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'b', src: 'b.jpg' },
+      ],
+      plugins: [plugin],
+      preload: 1, // default, but explicit: 'b' is already decoded in the pool alongside 'a'
+    });
+    gallery.open(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      false,
+    );
+
+    gallery.next(); // to 'b' — already decoded in another slot, but that slot isn't the one becoming active
+
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      true,
+    );
+    expect(document.querySelector('.shoji-toolbar-button')!.getAttribute('aria-disabled')).toBe(
+      'true',
+    );
+    gallery.destroy();
+  });
+});

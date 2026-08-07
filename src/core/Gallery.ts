@@ -534,12 +534,37 @@ export class Gallery {
     return !caption;
   }
 
+  /**
+   * `.shoji-toolbar-button` only — never `.shoji-close`/`.shoji-nav`, which
+   * are different classes entirely, so this can't accidentally block
+   * closing or navigating away from a slow-loading slide. `tabIndex = -1`
+   * (not just the CSS below) so a keyboard user tabbing through the
+   * toolbar skips these entirely while disabled, not just visually dims
+   * them — `pointer-events: none` alone wouldn't stop Enter/Space
+   * activating an already-focused button.
+   */
+  private setSlideLoading(loading: boolean): void {
+    if (!this.dom) return;
+    this.dom.outer.classList.toggle('shoji-slide-loading', loading);
+    for (const button of this.dom.outer.querySelectorAll<HTMLButtonElement>(
+      '.shoji-toolbar-button',
+    )) {
+      button.ariaDisabled = loading ? 'true' : null;
+      if (loading) button.tabIndex = -1;
+      else button.removeAttribute('tabindex');
+    }
+  }
+
   private renderCurrentSlide(): void {
     if (!this.slides || !this.dom) return;
     const dom = this.dom;
     this.slides.render(this.itemList, this.activeIndex, (loadedIndex) => {
-      if (loadedIndex === this.activeIndex) this.bus.emit('slideItemLoad', { index: loadedIndex });
+      if (loadedIndex === this.activeIndex) {
+        this.bus.emit('slideItemLoad', { index: loadedIndex });
+        this.setSlideLoading(false);
+      }
     });
+    this.setSlideLoading(!this.slides.isActiveReady());
 
     const item = this.itemList[this.activeIndex];
     const total = this.itemList.length;

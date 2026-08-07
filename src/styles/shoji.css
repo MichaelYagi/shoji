@@ -192,6 +192,21 @@
   display: none;
 }
 
+/* DESIGN.md §2.3 — while the active slide's own content is still loading,
+   feature/plugin toolbar buttons (zoom, rotate, fullscreen, autoplay, any
+   custom plugin's own button) dim and stop responding, since they'd
+   otherwise act on content about to be replaced. Deliberately scoped to
+   `.shoji-toolbar-button` only — `.shoji-close`/`.shoji-nav` are different
+   classes, so closing and navigating are never blocked by a slow image.
+   `pointer-events: none` here is the mouse half; Gallery.ts's matching
+   `tabIndex = -1` is the keyboard half (this alone wouldn't stop
+   Enter/Space activating an already-focused button). */
+.shoji-outer.shoji-slide-loading .shoji-toolbar-button {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
 .shoji-slides {
   position: relative;
   flex: 1;
