@@ -63,10 +63,13 @@ jobs:
       - run: npm ci
 
       # docs/guides, docs/examples, docs/index.html, docs/docs.css are
-      # committed as hand-written static files; docs/api is typedoc
-      # output and gitignored (regenerated fresh here) — see docs script.
-      - name: Build docs
-        run: npm run docs
+      # committed as hand-written static files; docs/api (typedoc output)
+      # and docs/dist/shoji.min.{js,css} (the runtime bundle
+      # docs/examples/*.html load directly) are both gitignored, built
+      # fresh here — the latter via `npm run build` itself (see
+      # scripts/build.mjs's copyDocsRuntimeAssets), not a separate step.
+      - name: Build docs + runtime bundle
+        run: npm run build && npm run docs
 
       # PAGES_DEPLOY_TOKEN: a Personal Access Token (repo scope) with write
       # access to MichaelYagi/michaelyagi.github.io — the default

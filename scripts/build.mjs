@@ -8,7 +8,7 @@
 //      new plugins pick up build support automatically.
 import { build } from 'vite';
 import dts from 'vite-plugin-dts';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -93,9 +93,32 @@ async function buildEsm() {
   });
 }
 
+/**
+ * `docs/examples/*.html` load the built single-file bundle directly
+ * (`../dist/shoji.min.js`/`.css`, "same as a real <script> tag integration
+ * would") — mirrored here into docs/dist/ (gitignored, same as dist/
+ * itself, via the generic `dist/` pattern) rather than having the examples
+ * reach up to the repo-root dist/ two levels away. That reach-up path only
+ * ever worked for a *local* checkout; once docs/ gets published as a
+ * standalone site (CI's publish-docs job, .github/workflows/ci.yml), the
+ * examples move one level shallower relative to their own assets than they
+ * are relative to the repo root, and a fixed "../../" stops landing in the
+ * right place. Copying the bundle to live *inside* docs/ instead means the
+ * exact same relative path is correct in both places, since docs/ (dist/
+ * subfolder included) is published as a self-contained unit either way.
+ */
+function copyDocsRuntimeAssets() {
+  const docsDist = join(root, 'docs/dist');
+  mkdirSync(docsDist, { recursive: true });
+  for (const file of ['shoji.min.js', 'shoji.min.css']) {
+    copyFileSync(join(distDir, file), join(docsDist, file));
+  }
+}
+
 await buildSingleFile(false);
 await buildSingleFile(true);
 await buildEsm();
+copyDocsRuntimeAssets();
 
 console.log(
   [
@@ -103,5 +126,6 @@ console.log(
     '  dist/shoji.js, dist/shoji.min.js',
     '  dist/shoji.css, dist/shoji.min.css',
     '  dist/esm/** (+ .d.ts)',
+    '  docs/dist/shoji.min.js, docs/dist/shoji.min.css (for docs/examples/)',
   ].join('\n'),
 );
