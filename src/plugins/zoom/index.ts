@@ -1,4 +1,5 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
+import { waitForTransitionEnd } from '../../core/zoomTransition';
 import { ZOOM_ACTUAL_SIZE_ICON, ZOOM_IN_ICON, ZOOM_OUT_ICON } from './icons';
 import { clampPan, clampScale, zoomTowardPoint, type PanOffset, type ZoomBox } from './zoomMath';
 import './zoom.css';
@@ -89,6 +90,32 @@ export const Zoom: ShojiPlugin = {
       return true;
     }
 
+    /**
+     * A real bug: `ensureNatural`'s first measurement of a slide is only
+     * trustworthy once the lightbox's own open FLIP transition (`zoomIn`,
+     * `core/zoomTransition.ts`) has actually settled — that transition
+     * applies its own transform directly to `.shoji-slide-media`, the exact
+     * element `ensureNatural` measures as `container`. A zoom action firing
+     * before it settles (any interaction within `--shoji-duration` of
+     * opening — a fast click, or a test that only waits for the dialog to
+     * become visible) captured a wildly wrong, mid-animation rect,
+     * permanently poisoning that slide's zoom math (every later action
+     * reuses the same cached, wrong box). `zoomIn` is fire-and-forget by
+     * design (nothing to await when opening) and clears this exact inline
+     * style once its own transition ends — the one signal available for
+     * "is it still running." Runs `action` immediately once settled, which
+     * is right away in the overwhelming common case (any real interaction
+     * more than ~300ms after open).
+     */
+    function whenSettled(action: () => void): void {
+      const media = gallery.getActiveMedia();
+      if (!media || media.style.transition === '') {
+        action();
+        return;
+      }
+      waitForTransitionEnd(media, action);
+    }
+
     function apply(): void {
       const img = getImg();
       if (!img) return;
@@ -104,21 +131,23 @@ export const Zoom: ShojiPlugin = {
       ctx.emit('zoomChange', { index: gallery.currentIndex, scale });
     }
 
-    /** Shared by every zoom-in/out entry point (pinch, wheel, buttons, double-tap, actual-size) — anchors on (anchorX, anchorY), clamps scale to [1, ceiling] and pan to the container bounds. `ceiling` defaults to maxScale; actual-size passes its own (possibly larger) target so it isn't capped by the gesture-zoom limit. */
+    /** Shared by every zoom-in/out entry point (pinch, wheel, buttons, double-tap, actual-size) — anchors on (anchorX, anchorY), clamps scale to [1, ceiling] and pan to the container bounds. `ceiling` defaults to maxScale; actual-size passes its own (possibly larger) target so it isn't capped by the gesture-zoom limit. Deferred via `whenSettled` — see its doc comment — so a zoom action landing right as the lightbox opens doesn't measure mid-animation. */
     function zoomTo(
       targetScale: number,
       anchorX: number,
       anchorY: number,
       ceiling = maxScale,
     ): void {
-      const img = getImg();
-      if (!img || !ensureNatural(img)) return;
-      const clampedScale = clampScale(targetScale, 1, Math.max(ceiling, 1));
-      pan = zoomTowardPoint(natural!, pan, scale, clampedScale, anchorX, anchorY);
-      scale = clampedScale;
-      pan = clampPan(natural!, container!, scale, pan);
-      apply();
-      emitChange();
+      whenSettled(() => {
+        const img = getImg();
+        if (!img || !ensureNatural(img)) return;
+        const clampedScale = clampScale(targetScale, 1, Math.max(ceiling, 1));
+        pan = zoomTowardPoint(natural!, pan, scale, clampedScale, anchorX, anchorY);
+        scale = clampedScale;
+        pan = clampPan(natural!, container!, scale, pan);
+        apply();
+        emitChange();
+      });
     }
 
     function reset(): void {
@@ -227,16 +256,21 @@ export const Zoom: ShojiPlugin = {
       else zoomTo(scale / buttonStep, x, y);
     });
     actualSizeBtn.addEventListener('click', () => {
-      const img = getImg();
-      if (!img || !img.naturalWidth) return;
-      if (!ensureNatural(img)) return;
-      if (scale > ZOOM_EPSILON) {
-        reset();
-        return;
-      }
-      const targetScale = img.naturalWidth / natural!.width;
-      const { x, y } = centerAnchor();
-      zoomTo(targetScale, x, y, targetScale); // ceiling = targetScale — bypasses maxScale deliberately
+      // Reads natural.width directly (unlike every other entry point, which
+      // just hands zoomTo a target and lets it call ensureNatural itself) —
+      // needs its own whenSettled wrap for that reason, not just zoomTo's.
+      whenSettled(() => {
+        const img = getImg();
+        if (!img || !img.naturalWidth) return;
+        if (!ensureNatural(img)) return;
+        if (scale > ZOOM_EPSILON) {
+          reset();
+          return;
+        }
+        const targetScale = img.naturalWidth / natural!.width;
+        const { x, y } = centerAnchor();
+        zoomTo(targetScale, x, y, targetScale); // ceiling = targetScale — bypasses maxScale deliberately
+      });
     });
 
     // 'right' — registered in this order, so they cluster left-to-right as

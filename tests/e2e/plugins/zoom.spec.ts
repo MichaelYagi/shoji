@@ -68,6 +68,14 @@ test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page
 test('actual size toggles zoom (fixture image is scaled down to fit the dialog)', async ({
   page,
 }) => {
+  // The 800x600 fixture only actually gets scaled down on a narrow
+  // (mobile-sized) viewport — on a normal desktop one it already fits the
+  // dialog at its native size with room to spare, so "Actual size" would
+  // correctly be a no-op there instead of exercising what this test is
+  // for. Forcing a viewport smaller than the fixture guarantees the
+  // "scaled down to fit" premise the test name describes, regardless of
+  // which project (desktop or mobile) actually runs it.
+  await page.setViewportSize({ width: 400, height: 300 });
   await openLightbox(page);
 
   await page.locator('.shoji-toolbar-button[aria-label="Actual size"]').click();

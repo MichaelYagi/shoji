@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import path from 'node:path';
 
 /**
  * Real-browser coverage for `closable: false` (GalleryOptions) — specifically
@@ -15,12 +16,14 @@ test('closable: false hides the close button (real CSS, not just the attribute) 
 }) => {
   await page.goto('/pages/e2e-plugins.html');
 
-  await page.evaluate(async () => {
-    // A non-literal specifier — Vite's dev-server-only /@fs/ path isn't a
-    // real module tsc can resolve; building it from a variable (rather than
-    // a string literal) keeps the dynamic import() untyped (Promise<any>)
-    // instead of erroring at typecheck time.
-    const corePath = '/@fs' + '/mnt/c/Users/Michael/Documents/development/shoji/src/core/index.ts';
+  // Built from the actual repo root (wherever this test runs — a portable
+  // path, unlike a hardcoded machine-specific one, which would only ever
+  // resolve locally and fail Vite's /@fs/ lookup everywhere else, CI
+  // included) rather than a string literal, which also keeps the dynamic
+  // import() untyped (Promise<any>) instead of erroring at typecheck time.
+  const corePath = '/@fs' + path.join(process.cwd(), 'src/core/index.ts').replace(/\\/g, '/');
+
+  await page.evaluate(async (corePath: string) => {
     const { Gallery } = await import(/* @vite-ignore */ corePath);
     const el = document.createElement('div');
     document.body.appendChild(el);
@@ -33,7 +36,7 @@ test('closable: false hides the close button (real CSS, not just the attribute) 
     });
     gallery.open(0);
     (window as unknown as { __closableTestGallery: unknown }).__closableTestGallery = gallery;
-  });
+  }, corePath);
 
   await expect(page.locator('.shoji-outer.shoji-open')).toBeVisible();
   await expect(page.locator('.shoji-close').last()).toBeHidden(); // real computed style, not just the attribute
