@@ -86,6 +86,17 @@ export interface GalleryOptions {
    */
   loop?: boolean;
   /**
+   * Default `true`. `false` disables every viewer-facing way to close the
+   * lightbox: the close button (hidden entirely, not just inert), clicking
+   * the backdrop, `Escape`, and vertical swipe-to-close (no live drag
+   * feedback either, not just a release that fails to close). For
+   * non-closable embeds — a gallery meant to stay open permanently once
+   * shown. `gallery.close()` itself is unaffected — this only gates the
+   * four built-in viewer-triggered paths, host code can still close it
+   * programmatically at any time.
+   */
+  closable?: boolean;
+  /**
    * DESIGN.md §2.4 — overrides the gesture engine's `lockThreshold`/
    * `swipeThreshold`/`swipeVelocity` (defaults: 10px, 50px, 0.3px/ms).
    * Partial: any field left out keeps its default. Momentum easing is not

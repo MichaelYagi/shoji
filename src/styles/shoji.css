@@ -4,6 +4,14 @@
  * everything routes through these custom properties.
  */
 :root {
+  /* .shoji-outer's own page-level z-index — relative to the rest of the
+     host page, not to anything inside the lightbox. Real pages routinely
+     put sticky navbars/sidebars/toast containers at 1000-9999, so this
+     needs real headroom, not the small internal scale below (which only
+     orders backdrop/slides/overlay/toolbar/toast *against each other*,
+     inside the stacking context .shoji-outer's own z-index establishes). */
+  --shoji-z-base: 9000;
+
   --shoji-z-backdrop: 0;
   --shoji-z-slides: 10;
   --shoji-z-overlay: 20;
@@ -58,7 +66,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  z-index: var(--shoji-z-slides);
+  z-index: var(--shoji-z-base);
 }
 
 .shoji-outer.shoji-open {
@@ -179,6 +187,7 @@
   pointer-events: none;
 }
 
+.shoji-close[hidden],
 .shoji-nav[hidden] {
   display: none;
 }

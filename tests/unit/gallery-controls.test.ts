@@ -428,3 +428,63 @@ describe('Gallery — click-outside-to-close', () => {
     gallery.destroy();
   });
 });
+
+describe('Gallery — closable: false', () => {
+  function press(key: string): void {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  }
+
+  it('hides the close button entirely, not just disables it', () => {
+    const gallery = makeGallery(5, { closable: false });
+    gallery.open(0);
+
+    expect(document.querySelector('.shoji-close')!.hasAttribute('hidden')).toBe(true);
+    gallery.destroy();
+  });
+
+  it('clicking the backdrop does not close the gallery', () => {
+    const gallery = makeGallery(5, { closable: false });
+    gallery.open(0);
+
+    click(document.querySelector('.shoji-backdrop')!);
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+    gallery.destroy();
+  });
+
+  it('Escape does not close the gallery', () => {
+    const gallery = makeGallery(5, { closable: false });
+    gallery.open(0);
+
+    press('Escape');
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+    gallery.destroy();
+  });
+
+  it('gallery.close() still works — only the viewer-triggered paths are gated', () => {
+    const gallery = makeGallery(5, { closable: false });
+    gallery.open(0);
+
+    gallery.close();
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    gallery.destroy();
+  });
+
+  it('reinit() with closable: true re-shows the close button and re-enables backdrop-click', () => {
+    const el = document.createElement('div');
+    const items = Array.from({ length: 3 }, (_, i) => ({ id: `${i}`, src: `${i}.jpg` }));
+    const gallery = new Gallery(el, { items, closable: false });
+    gallery.open(0);
+    expect(document.querySelector('.shoji-close')!.hasAttribute('hidden')).toBe(true);
+
+    gallery.reinit({ items, closable: true });
+    gallery.open(0);
+    expect(document.querySelector('.shoji-close')!.hasAttribute('hidden')).toBe(false);
+
+    click(document.querySelector('.shoji-backdrop')!);
+    expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    gallery.destroy();
+  });
+});

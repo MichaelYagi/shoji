@@ -33,6 +33,8 @@ export interface GestureControllerHost {
   next(): void;
   prev(): void;
   close(): void;
+  /** `closable: false` (GalleryOptions) — false suspends vertical drag-to-close entirely: no live feedback, release never calls `close()`. */
+  canClose(): boolean;
   onActivity(): void;
   /** DESIGN.md §4-zoom — true while zoomed; suspends drag-to-navigate/close. */
   isZoomed(): boolean;
@@ -92,7 +94,7 @@ export class GestureController {
     if (this.host.isZoomed()) return; // the zoom plugin owns pan while zoomed
     if (direction === 'horizontal') {
       this.host.slides.setDragOffset(delta, null);
-    } else {
+    } else if (this.host.canClose()) {
       this.applyVerticalDragFeedback(delta);
     }
   };
@@ -164,13 +166,16 @@ export class GestureController {
   }
 
   private finishVerticalDrag(completed: boolean): void {
-    if (completed) {
+    if (completed && this.host.canClose()) {
       // No settle animation of its own — clear the feedback instantly and
       // let close()'s own zoom-out transition (zoomTransition.ts) take over
       // as the single visible closing animation, rather than stacking two.
       this.clearVerticalDragFeedback(false);
       this.host.close();
     } else {
+      // Not completed, or closable: false suspended the drag entirely (no
+      // feedback was ever applied by onDragMove) — either way, a clean
+      // reset (harmless no-op in the suspended case, nothing to clear).
       this.clearVerticalDragFeedback(true);
     }
   }

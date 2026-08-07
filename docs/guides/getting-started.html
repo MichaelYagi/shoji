@@ -304,6 +304,17 @@ document.querySelector('#my-thumb-1').addEventListener('click', () =&gt; gallery
           </td>
         </tr>
         <tr>
+          <td><code>closable</code></td>
+          <td><code>true</code></td>
+          <td>
+            <code>false</code> disables every viewer-facing way to close the lightbox — the close
+            button (hidden entirely), backdrop click, <kbd>Escape</kbd>, and vertical swipe-to-close
+            — for a gallery meant to stay open permanently once shown.
+            <code>gallery.close()</code> itself still works; this only gates the four built-in
+            viewer-triggered paths.
+          </td>
+        </tr>
+        <tr>
           <td><code>openOnInit</code></td>
           <td><code>false</code></td>
           <td>

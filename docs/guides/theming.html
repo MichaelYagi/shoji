@@ -160,6 +160,16 @@
       </thead>
       <tbody>
         <tr>
+          <td><code>--shoji-z-base</code></td>
+          <td><code>9000</code></td>
+          <td>
+            <code>.shoji-outer</code>'s own page-level z-index — against the rest of the host page,
+            not the layers below (which only order themselves against each other, inside the
+            stacking context this establishes). Override this if your page's own stack goes higher
+            (a sticky navbar/toast container above 9000, say).
+          </td>
+        </tr>
+        <tr>
           <td><code>--shoji-z-backdrop</code></td>
           <td><code>0</code></td>
           <td>The dimming backdrop behind the dialog.</td>

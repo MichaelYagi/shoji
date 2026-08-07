@@ -161,6 +161,28 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     gallery.destroy();
   });
 
+  it('closable: false suspends vertical drag-to-close entirely — no live feedback, no close on release', () => {
+    const gallery = new Gallery(document.body, {
+      items: items(2),
+      preload: 0,
+      closable: false,
+    });
+    gallery.open(0);
+    const onClose = vi.fn();
+    gallery.on('close', onClose);
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    firePointer(d, 'pointermove', { clientY: 120, timeStamp: 20 }); // well past swipeThreshold
+    expect(d.style.transform).toBe(''); // no live feedback at all while suspended
+    firePointer(d, 'pointerup', { clientY: 120, timeStamp: 30 });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog().closest('.shoji-outer')?.classList.contains('shoji-open')).toBe(true);
+    gallery.destroy();
+  });
+
   it('an incomplete vertical drag resets feedback without closing', () => {
     const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
     gallery.open(0);

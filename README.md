@@ -14,7 +14,7 @@ A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<scrip
 - **Accessibility is not a plugin** — keyboard nav, focus trapping, ARIA roles, and screen-reader announcements live in core.
 - **Themeable via CSS custom properties** — no hardcoded colors/sizes in JS.
 - **Single-file distribution** — `dist/shoji.js` + `dist/shoji.css` (core + every official plugin, self-registering) for zero-setup `<script>` tag use, plus tree-shakable per-plugin ESM entries for bundler users.
-- Size-budgeted and CI-enforced: core ≤ 18 kB, each plugin ≤ 8 kB, full bundle ≤ 90 kB (all min+gzip).
+- Size-budgeted and CI-enforced: core ≤ 20 kB, each plugin ≤ 8 kB, full bundle ≤ 90 kB (all min+gzip).
 
 ## Install
 

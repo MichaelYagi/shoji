@@ -103,6 +103,7 @@ export class Gallery {
   private locale: typeof DEFAULT_LOCALE = DEFAULT_LOCALE;
   private showCounter = true;
   private loop = true;
+  private closable = true;
   private autoHideDelay = 5000;
   private readonly focusTrap = new FocusTrap();
   private readonly liveRegion = new LiveRegion();
@@ -140,7 +141,7 @@ export class Gallery {
   };
 
   private readonly onOuterClick = (event: MouseEvent): void => {
-    if (isBackdropClick(event)) this.close();
+    if (this.closable && isBackdropClick(event)) this.close();
   };
 
   /** DESIGN.md §2.8 — any interaction re-shows controls, restarts the idle clock. `autoHideDelay: 0` = "never show controls" — a no-op here. */
@@ -160,7 +161,7 @@ export class Gallery {
     this.onActivity();
     switch (event.key) {
       case 'Escape':
-        this.close();
+        if (this.closable) this.close();
         break;
       case 'ArrowLeft':
         this.prev();
@@ -201,6 +202,7 @@ export class Gallery {
     this.locale = { ...DEFAULT_LOCALE, ...options.locale };
     this.showCounter = options.counter ?? true;
     this.loop = options.loop ?? true;
+    this.closable = options.closable ?? true;
     this.autoHideDelay = options.autoHideDelay ?? 5000;
     // Reset explicitly — a reinit() call must not inherit these from before.
     this.activeIndex = 0;
@@ -224,6 +226,10 @@ export class Gallery {
     // lightbox DOM this early costs one inert subtree per instance, which is
     // negligible next to the thumbnail images already loading regardless.
     this.ensureLightbox();
+    // Set after ensureLightbox() (not inside it) so a reinit() with a
+    // different `closable` value updates the already-built button too —
+    // ensureLightbox() only builds the DOM once (`if (this.dom) return;`).
+    this.dom!.closeButton.hidden = !this.closable;
 
     // Default is closed — the host clicks a thumbnail or calls open()
     // itself. openOnInit is the explicit, opt-in exception (deep-link-style
@@ -309,6 +315,7 @@ export class Gallery {
         next: () => this.navigate(this.nextIndex(), 1, false),
         prev: () => this.navigate(this.prevIndex(), -1, false),
         close: () => this.close(),
+        canClose: () => this.closable,
         onActivity: () => this.onActivity(),
         isZoomed: () => this.zoomGate?.() ?? false,
       },
