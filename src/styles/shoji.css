@@ -262,6 +262,32 @@
   color: var(--shoji-color-disabled);
 }
 
+/* DESIGN.md §2.3 — shown in place of a slide's content while it's still
+   decoding/loading (outside the `preload` window, where nothing was ready
+   ahead of time). CSS-only rotation (no JS-driven layout, per CLAUDE.md);
+   disabled under prefers-reduced-motion the same as every other animation
+   here, rather than left spinning regardless. */
+.shoji-slide-spinner {
+  width: var(--shoji-spinner-size, 40px);
+  height: var(--shoji-spinner-size, 40px);
+  border-radius: 50%;
+  border: var(--shoji-spinner-thickness, 3px) solid var(--shoji-color-disabled);
+  border-top-color: var(--shoji-color-accent);
+  animation: shoji-spin 0.8s linear infinite;
+}
+
+@keyframes shoji-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shoji-slide-spinner {
+    animation: none;
+  }
+}
+
 /* A normal flex item within .shoji-toolbar-left (not independently
    positioned) — .shoji-slides still gets the full dialog height either way,
    no reserved gutter at top or bottom, since the toolbar itself overlays the

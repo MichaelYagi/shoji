@@ -10,6 +10,12 @@ interface Slot {
   ready: boolean;
 }
 
+/** A fully-built, ready-to-display node for a given item index — survives slot reassignment (see `cache` below), unlike `Slot.ready`, which resets the moment its slot moves on to a different index. */
+interface CacheEntry {
+  node: HTMLElement;
+  item: GalleryItem;
+}
+
 export interface SlideManagerOptions {
   preload: number;
 }
@@ -24,12 +30,31 @@ export interface SlideManagerOptions {
 export class SlideManager {
   readonly element: HTMLElement;
   private readonly slots: Slot[];
+  private readonly preload: number;
   private nextRequestId = 0;
   private dragOffsetPx = 0;
+
+  /**
+   * Ready-to-display nodes keyed by item index, not slot offset — the piece
+   * that makes `preload` actually prevent a spinner on a "preloaded"
+   * neighbor, not just keep something mounted for the drag illusion. A
+   * `Slot` only remembers *its own* previous index (`assignedIndex`); it has
+   * no way to know that some *other* slot already finished decoding the
+   * exact index it's now being asked to show (a routine case — navigating
+   * forward one step needs today's +1 slot content moved into the 0 slot).
+   * Without this cache, that already-decoded content gets thrown away and
+   * redecoded from scratch on every single step, spinner included, even
+   * though nothing about the image itself changed. Trimmed to
+   * `centerIndex ± preload` on every `render()` call, same window the
+   * slots themselves cover, so it never grows past what's actually still
+   * relevant.
+   */
+  private readonly cache = new Map<number, CacheEntry>();
 
   constructor(options: SlideManagerOptions) {
     this.element = document.createElement('div');
     this.element.className = 'shoji-slides';
+    this.preload = options.preload;
 
     const count = options.preload * 2 + 1;
     this.slots = Array.from({ length: count }, (_, i) => {
@@ -95,36 +120,75 @@ export class SlideManager {
     centerIndex: number,
     onLoad: (index: number) => void,
   ): void {
-    for (const slot of this.slots) {
+    // Trim the cache to the same centerIndex ± preload window the slots
+    // themselves cover — an index that's fallen out of range for every
+    // slot is never coming back without a fresh decode anyway (the pool
+    // can only ever hold this many neighbors at once). Releases a video
+    // being dropped here (its node isn't attached to any slot that's about
+    // to reclaim it — see moveIn's doc comment) rather than just letting
+    // the reference disappear, which would leave it paused-in-place but
+    // never actually released.
+    for (const [index, entry] of this.cache) {
+      if (index < centerIndex - this.preload || index > centerIndex + this.preload) {
+        releaseVideoNode(entry.node);
+        this.cache.delete(index);
+      }
+    }
+
+    const targets = this.slots.map((slot) => {
       const index = centerIndex + slot.offset;
       const item = index >= 0 && index < items.length ? items[index] : undefined;
+      return { slot, index, item };
+    });
 
+    // Phase 1 — claim every cache hit first, moving already-decoded content
+    // into its new slot before anything gets destructively released. Order
+    // matters: navigating can require slot A's *current* content to become
+    // slot B's *new* content within this same call (stepping backward
+    // shifts every slot's content down by one, all at once) — releasing a
+    // slot's outgoing content (pausing/clearing a <video>) before some
+    // other slot has had a chance to reclaim it via the cache would
+    // destroy content that's still needed a few lines later.
+    for (const { slot, index, item } of targets) {
+      if (!item || slot.assignedIndex === index) continue;
+      const cached = this.cache.get(index);
+      if (!cached) continue;
+      slot.assignedIndex = index;
+      // Invalidates any in-flight decode this slot itself was mid-request
+      // for (e.g. a rapid back-and-forth landing back on an index whose
+      // decode from a moment ago hadn't resolved yet) so that stale reveal
+      // can't land after this one.
+      slot.requestId = ++this.nextRequestId;
+      this.moveIn(slot, cached, index);
+      onLoad(index);
+    }
+
+    // Phase 2 — whatever's left: out-of-range slots get cleared, and
+    // anything not already resolved above starts a fresh decode behind a
+    // spinner. Anything still sitting in one of these slots at this point
+    // is confirmed stale — phase 1 already reclaimed everything reusable,
+    // via simple reparenting, without releasing it.
+    for (const { slot, index, item } of targets) {
       if (!item) {
         slot.assignedIndex = null;
         slot.ready = false;
+        slot.requestId = ++this.nextRequestId; // invalidate any in-flight decode still targeting this slot
         releaseVideo(slot.media);
         slot.media.replaceChildren();
         continue;
       }
-      if (slot.assignedIndex === index) continue;
+      if (slot.assignedIndex === index) continue; // unchanged, or already resolved by phase 1
 
       slot.assignedIndex = index;
       slot.ready = false;
+      releaseVideo(slot.media);
+      slot.media.replaceChildren(createSpinner());
       const requestId = ++this.nextRequestId;
       slot.requestId = requestId;
       this.renderItem(item, slot, index, requestId, onLoad);
     }
   }
 
-  /**
-   * Deliberately does *not* touch `slot.media` up front — whatever was
-   * showing before (the previous index's image/video) stays on screen
-   * until the new content is actually ready to replace it, in `swapIn()`
-   * below. Navigating used to clear the slot immediately, then leave it
-   * blank until `img.decode()` resolved — a real, always-there gap (not
-   * just a slow-network edge case), since `decode()` is never synchronous.
-   * DESIGN.md §2.3.
-   */
   private renderItem(
     item: GalleryItem,
     slot: Slot,
@@ -139,16 +203,41 @@ export class SlideManager {
     }
   }
 
-  /** Only called once new content is actually ready to display — releases whatever the slot showed before and swaps the new node in, atomically (old and new are never both visible, and there's never a gap with neither). */
-  private swapIn(slot: Slot, node: Node, item: GalleryItem): void {
-    releaseVideo(slot.media);
+  private applyAspect(slot: Slot, item: GalleryItem): void {
     if (item.width && item.height) {
       slot.media.style.aspectRatio = `${item.width} / ${item.height}`;
     } else {
       slot.media.style.removeProperty('aspect-ratio');
     }
+  }
+
+  /** Only called once genuinely new content (a fresh decode, or the no-source video placeholder) is ready to display — releases whatever stale content the slot held (always just the loading spinner by the time this fires; `render()`'s fresh-decode branch already released and replaced the slot's real previous content up front) and swaps the new node in. Also populates `cache`, so a later navigation back to this exact index can reuse it via `moveIn` instead of redecoding. */
+  private swapIn(slot: Slot, node: HTMLElement, item: GalleryItem, index: number): void {
+    releaseVideo(slot.media);
+    this.applyAspect(slot, item);
     slot.media.replaceChildren(node);
     slot.ready = true;
+    this.cache.set(index, { node, item });
+  }
+
+  /**
+   * Moves an already-cached, ready node from wherever it currently sits
+   * (another slot, or this slot's own earlier content) into `slot` —
+   * deliberately does *not* call `releaseVideo` first, unlike `swapIn`:
+   * whatever `slot` currently holds might itself still be a live cache
+   * entry that some *other* slot in this same `render()` pass is about to
+   * reclaim (see the "Phase 1" comment there). Plain reparenting via
+   * `replaceChildren` is always safe regardless of what it displaces — it
+   * doesn't pause or reset a `<video>`, only an explicit `releaseVideo`
+   * call does that; only `render()`'s later fresh/clear pass, once every
+   * reusable node has already been claimed, is where genuinely stale
+   * leftover content gets released for good.
+   */
+  private moveIn(slot: Slot, entry: CacheEntry, index: number): void {
+    this.applyAspect(slot, entry.item);
+    slot.media.replaceChildren(entry.node);
+    slot.ready = true;
+    this.cache.set(index, entry);
   }
 
   private renderImage(
@@ -181,7 +270,7 @@ export class SlideManager {
 
     const reveal = (): void => {
       if (slot.requestId !== requestId) return; // superseded by a newer render for this slot
-      this.swapIn(slot, img, item);
+      this.swapIn(slot, img, item, index);
       onLoad(index);
     };
 
@@ -211,7 +300,7 @@ export class SlideManager {
       const placeholder = document.createElement('div');
       placeholder.className = 'shoji-slide-placeholder';
       placeholder.textContent = 'Video';
-      this.swapIn(slot, placeholder, item);
+      this.swapIn(slot, placeholder, item, index);
       onLoad(index);
       return;
     }
@@ -237,7 +326,7 @@ export class SlideManager {
     // `poster` attribute already shows something meaningful without
     // waiting on `loadedmetadata`, so there's no decode-style gap to close
     // here; deferring would only make video slides slower to show anything.
-    this.swapIn(slot, video, item);
+    this.swapIn(slot, video, item, index);
     const reveal = (): void => onLoad(index);
     video.addEventListener('loadedmetadata', reveal, { once: true });
     video.addEventListener('error', reveal, { once: true });
@@ -251,14 +340,29 @@ export class SlideManager {
       slot.assignedIndex = null;
       slot.ready = false;
     }
+    this.cache.clear();
     this.element.remove();
   }
 }
 
-/** Pause and release a slot's previous <video>, if any — removing it from the DOM alone doesn't stop playback or free network/decoder resources. */
+/** DESIGN.md §2.3 — shown in a slot while its content is still decoding/loading, replacing whatever a stale "keep the old image visible" approach would have left there (a previous version of this did that; it read as broken, not helpful, since the old image no longer matches the caption/counter/URL that already moved on). Purely CSS-animated (a rotating ring via `border`), no JS-driven layout. */
+function createSpinner(): HTMLElement {
+  const spinner = document.createElement('div');
+  spinner.className = 'shoji-slide-spinner';
+  spinner.setAttribute('aria-hidden', 'true');
+  return spinner;
+}
+
+/** Pause and release a slot's previous <video>, if any — removing it from the DOM alone doesn't stop playback or free network/decoder resources. Scoped to a *container* (a slot's `.shoji-slide-media`); see `releaseVideoNode` for the cache-eviction case, where the node in hand might be the `<video>` itself rather than a wrapper around one. */
 function releaseVideo(media: HTMLElement): void {
   const video = media.querySelector('video');
-  if (!video) return;
+  if (video) releaseVideoNode(video);
+}
+
+/** The cache-eviction counterpart to `releaseVideo` above — `entry.node` (a cache value) is directly whatever `renderVideo`/`renderImage` built, so it might *be* the `<video>` element rather than contain one; a plain `querySelector('video')` on it would never match itself. No-ops for an `<img>` or the no-source placeholder `<div>`. */
+function releaseVideoNode(node: HTMLElement): void {
+  if (node.tagName !== 'VIDEO') return;
+  const video = node as HTMLVideoElement;
   video.pause();
   video.removeAttribute('src');
   video.load();

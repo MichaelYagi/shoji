@@ -538,7 +538,7 @@ describe('Gallery — loading state while the active slide loads', () => {
     gallery.destroy();
   });
 
-  it("re-triggers the loading state on every navigation, even to a structurally-preloaded neighbor — SlideManager pool slots are keyed by structural offset, not by item index, so the slot that becomes active after a navigation is a different physical slot than the one that had the neighbor preloaded, and it decodes fresh (a known gap, not this feature's scope to fix)", async () => {
+  it('does not re-trigger the loading state navigating to an already-preloaded neighbor — SlideManager caches ready content by item index (not just structural slot offset), so the pool reshuffling itself never re-triggers a decode', async () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [
@@ -555,13 +555,47 @@ describe('Gallery — loading state while the active slide loads', () => {
       false,
     );
 
-    gallery.next(); // to 'b' — already decoded in another slot, but that slot isn't the one becoming active
+    gallery.next(); // to 'b' — already decoded and cached by index; no fresh decode needed
+
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      false,
+    );
+    expect(
+      document.querySelector('.shoji-toolbar-button')!.getAttribute('aria-disabled'),
+    ).toBeNull();
+    gallery.destroy();
+  });
+
+  it('does re-trigger the loading state navigating past the preloaded window (not cached)', async () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'b', src: 'b.jpg' },
+        { id: 'c', src: 'c.jpg' },
+      ],
+      plugins: [plugin],
+      preload: 1, // 'b' is preloaded alongside 'a'; 'c' is not
+    });
+    gallery.open(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const resolveDecode = controlledDecode();
+    gallery.goTo(2); // to 'c' — outside the preloaded window, needs a fresh decode
 
     expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
       true,
     );
     expect(document.querySelector('.shoji-toolbar-button')!.getAttribute('aria-disabled')).toBe(
       'true',
+    );
+
+    resolveDecode();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.querySelector('.shoji-outer')!.classList.contains('shoji-slide-loading')).toBe(
+      false,
     );
     gallery.destroy();
   });

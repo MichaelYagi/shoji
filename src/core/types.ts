@@ -73,7 +73,17 @@ export interface GalleryOptions {
    * mode, not "disabled": controls never show at all, regardless of activity.
    */
   autoHideDelay?: number;
-  /** DESIGN.md §2.3 — slides kept mounted on each side of the active one; default 1. */
+  /**
+   * DESIGN.md §2.3 — how many slides on each side of the active one are
+   * kept mounted *and* proactively decoded ahead of time; default 1.
+   * Navigating to any index within that window shows instantly, no loading
+   * spinner — its content was already decoded and cached (by item index,
+   * surviving the pool's internal slot reshuffling) before you got there.
+   * Navigating further than `preload` away (a fast flick through several
+   * slides, or a direct `goTo()`/deep link) still shows the spinner while
+   * that one decodes, same as ever — this only changes what counts as
+   * "already ready."
+   */
   preload?: number;
   /** Shows the "N / M" counter badge; default true. Purely visual — the live-region announcement (§2.6) always includes position regardless. */
   counter?: boolean;

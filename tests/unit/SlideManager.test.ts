@@ -61,8 +61,8 @@ describe('SlideManager', () => {
     expect(onLoad).toHaveBeenCalledWith(0);
   });
 
-  it('keeps the previous image on screen until the new one finishes decoding, then swaps atomically', async () => {
-    const manager = new SlideManager({ preload: 0 });
+  it('shows a spinner (not the previous image) while a genuinely new, uncached index decodes, then swaps it out atomically', async () => {
+    const manager = new SlideManager({ preload: 0 }); // preload:0 means nothing is ever preloaded/cached
     manager.render(items, 0, vi.fn()); // image 'a'
     await flush();
     const imgA = manager.element.querySelector('img') as HTMLImageElement;
@@ -77,16 +77,78 @@ describe('SlideManager', () => {
 
     manager.render(items, 1, vi.fn()); // navigate to image 'b'
 
-    // Still showing 'a' — the slot was never cleared while 'b' decodes.
-    expect(manager.element.querySelector('img')).toBe(imgA);
-    expect(manager.element.querySelector('img')?.getAttribute('src')).toContain('a.jpg');
+    // 'a' is gone immediately, replaced by a spinner — not left on screen.
+    expect(manager.element.querySelector('img')).toBeNull();
+    expect(manager.element.querySelector('.shoji-slide-spinner')).not.toBeNull();
 
     resolveDecode();
     await flush();
 
     const imgB = manager.element.querySelector('img') as HTMLImageElement;
-    expect(imgB).not.toBe(imgA);
     expect(imgB.src).toContain('b.jpg');
+    expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
+  });
+
+  it('preload keeps neighbors decoded ahead of time — navigating to one shows it instantly, no spinner, onLoad fires synchronously', async () => {
+    const manager = new SlideManager({ preload: 1 });
+    const onLoad = vi.fn();
+    manager.render(items, 0, onLoad); // preloads 'a' (active) and 'b' (+1 neighbor)
+    await flush();
+    onLoad.mockClear();
+
+    manager.render(items, 1, onLoad); // navigate to 'b' — already decoded
+
+    // No flush() here on purpose — a fresh decode would still be pending at
+    // this point (decode() is always async); an instant swap-in proves this
+    // came from the cache, not a new decode that happened to resolve fast.
+    // Scoped to the *active* slot specifically — the new +1 neighbor ('c',
+    // index 2) wasn't preloaded relative to the old center and legitimately
+    // still shows its own spinner; that's a separate, correct fresh decode.
+    const activeMedia = manager.getActiveMedia();
+    expect(activeMedia?.querySelector('.shoji-slide-spinner')).toBeNull();
+    const img = activeMedia?.querySelector('img') as HTMLImageElement;
+    expect(img.src).toContain('b.jpg');
+    expect(onLoad).toHaveBeenCalledWith(1);
+  });
+
+  it('a cached node is the exact same element when reused, not a re-decoded copy', async () => {
+    const manager = new SlideManager({ preload: 1 });
+    manager.render(items, 0, vi.fn());
+    await flush();
+    const preloadedImgB = manager.element.querySelectorAll('img')[1] as HTMLImageElement; // +1 slot
+
+    manager.render(items, 1, vi.fn()); // 'b' becomes active
+
+    const activeImg = manager.getActiveMedia()?.querySelector('img') as HTMLImageElement;
+    expect(activeImg).toBe(preloadedImgB);
+  });
+
+  it('a preloaded neighbor that falls outside the window gets evicted, so navigating back to it later shows the spinner again', async () => {
+    // All-image, 4-item array — deliberately not the shared `items` above,
+    // whose index 3 is a video; this test only cares about image eviction.
+    const imagesOnly: GalleryItem[] = [
+      { id: 'z0', src: 'z0.jpg' },
+      { id: 'z1', src: 'z1.jpg' },
+      { id: 'z2', src: 'z2.jpg' },
+      { id: 'z3', src: 'z3.jpg' },
+    ];
+    const manager = new SlideManager({ preload: 1 });
+    manager.render(imagesOnly, 1, vi.fn()); // preloads z0 (-1) and z2 (+1)
+    await flush();
+
+    manager.render(imagesOnly, 2, vi.fn()); // z0 (index 0) is now out of the ±1 window around 2
+    await flush();
+
+    let resolveDecode!: () => void;
+    HTMLImageElement.prototype.decode = vi.fn(
+      () => new Promise<void>((resolve) => (resolveDecode = resolve)),
+    );
+    manager.render(imagesOnly, 0, vi.fn()); // back to z0 — no longer cached, must redecode
+
+    expect(manager.element.querySelector('.shoji-slide-spinner')).not.toBeNull();
+    resolveDecode();
+    await flush();
+    expect(manager.element.querySelector('img')?.getAttribute('src')).toContain('z0.jpg');
   });
 
   it('isActiveReady() is false while the active slide is still loading and true once it settles', async () => {
@@ -179,10 +241,7 @@ describe('SlideManager', () => {
     expect(onLoad).toHaveBeenCalledWith(4);
   });
 
-  it('keeps the previous video visible/playing until the new content actually swaps in, then pauses and releases it', async () => {
-    // The old video stays up (not pause()'d, not removed) for the entire
-    // decode() wait — a real navigation gap used to clear it immediately,
-    // leaving the slot blank until the new image resolved. DESIGN.md §2.3.
+  it('a genuinely new (uncached) navigation onto a video-holding slot shows a spinner immediately, pausing/releasing the outgoing video up front rather than leaving it visible mid-decode', async () => {
     const manager = new SlideManager({ preload: 0 });
     manager.render(items, 3, vi.fn()); // video item
     const video = manager.element.querySelector('video') as HTMLVideoElement;
@@ -191,16 +250,75 @@ describe('SlideManager', () => {
 
     manager.render(items, 0, vi.fn()); // switch this slot to an image item
 
-    expect(pauseSpy).not.toHaveBeenCalled();
-    expect(loadSpy).not.toHaveBeenCalled();
-    expect(manager.element.querySelector('video')).toBe(video); // still the same old video, still up
-
-    await flush(); // the new image's decode() resolves
-
+    // Released immediately (not deferred until the new image finishes
+    // decoding) — the slot shows a spinner in the meantime, not the old video.
     expect(pauseSpy).toHaveBeenCalled();
     expect(loadSpy).toHaveBeenCalled();
     expect(manager.element.querySelector('video')).toBeNull();
+    expect(manager.element.querySelector('.shoji-slide-spinner')).not.toBeNull();
+
+    await flush();
+
     expect(manager.element.querySelector('img')).not.toBeNull();
+  });
+
+  it('regression: moving a still-needed <video> from one slot to another within a single render() call never pauses or resets it', async () => {
+    // preload:1 with a video in the middle of the pool — stepping backward
+    // by one requires this exact scenario in one render() call: the slot
+    // currently showing the video needs *different* new content (pulled
+    // from the slot on its other side), while the video itself needs to
+    // move into the slot that's opening up beside it. If the outgoing
+    // slot's content were released the moment it's told to show something
+    // else — before the video had a chance to be reclaimed by its new
+    // slot a few lines later — this would incorrectly pause/reset it.
+    const custom: GalleryItem[] = [
+      { id: 'x0', src: 'x0.jpg' },
+      { id: 'x1', src: 'x1.jpg' },
+      { id: 'x2', src: 'x2.mp4', video: { provider: 'html5' }, poster: 'x2.jpg' },
+      { id: 'x3', src: 'x3.jpg' },
+    ];
+    const manager = new SlideManager({ preload: 1 });
+    manager.render(custom, 2, vi.fn()); // slots: -1→x1, 0→x2 (video), +1→x3
+    await flush();
+
+    const video = manager.element.querySelector('video') as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    const pauseSpy = vi.spyOn(video, 'pause').mockImplementation(() => {});
+    const loadSpy = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    manager.render(custom, 1, vi.fn()); // step back: -1→x0 (fresh), 0→x1 (was -1), +1→x2 (the video, was 0)
+
+    expect(pauseSpy).not.toHaveBeenCalled();
+    expect(loadSpy).not.toHaveBeenCalled();
+    expect(manager.element.querySelector('video')).toBe(video); // same element, just relocated
+
+    // It's still fully controllable afterward — not left in some
+    // half-reset state by the move.
+    expect(video.hasAttribute('src') || video.querySelector('source')).toBeTruthy();
+  });
+
+  it('evicts a preloaded video that falls out of the window (without being reused elsewhere), pausing/releasing it even though the slot that held it is never itself touched again this call', async () => {
+    const custom: GalleryItem[] = [
+      { id: 'y0', src: 'y0.mp4', video: { provider: 'html5' }, poster: 'y0.jpg' },
+      { id: 'y1', src: 'y1.jpg' },
+      { id: 'y2', src: 'y2.jpg' },
+      { id: 'y3', src: 'y3.jpg' },
+      { id: 'y4', src: 'y4.jpg' },
+    ];
+    const manager = new SlideManager({ preload: 1 });
+    manager.render(custom, 1, vi.fn()); // slots: -1→y0 (video), 0→y1, +1→y2
+    await flush();
+
+    const video = manager.element.querySelector('video') as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    const pauseSpy = vi.spyOn(video, 'pause').mockImplementation(() => {});
+    const loadSpy = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    manager.render(custom, 3, vi.fn()); // jump ahead — y0 (index 0) is now well outside the ±1 window around 3
+    await flush();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(loadSpy).toHaveBeenCalled();
   });
 
   it('clears a slot when its offset falls outside the item range', async () => {
