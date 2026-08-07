@@ -60,6 +60,21 @@ describe('Gallery — auto-hide controls', () => {
     gallery.destroy();
   });
 
+  it('controlsHidden getter tracks the same state as the DOM class', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    expect(gallery.controlsHidden).toBe(false);
+
+    vi.advanceTimersByTime(5000);
+    expect(gallery.controlsHidden).toBe(true);
+    expect(isHidden()).toBe(true);
+
+    pointerMove();
+    expect(gallery.controlsHidden).toBe(false);
+
+    gallery.destroy();
+  });
+
   it('activity resets the idle timer', () => {
     const gallery = makeGallery();
     gallery.open(0);

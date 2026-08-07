@@ -13,6 +13,10 @@
       <a href="./getting-started.html">Getting started</a>
       <a href="./plugins.html" aria-current="page">Plugins</a>
       <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html">Settings</a>
       <a href="./theming.html">Theming</a>
       <a href="../examples/index.html">Examples</a>
       <a href="../api/index.html">API reference</a>
@@ -186,6 +190,19 @@ new Shoji('#gallery', { plugins: [MyPlugin], myPlugin: { message: 'Hi!' } });</c
       Plugins init eagerly, at construction time — not lazily on first <code>open()</code> — so
       <code>ctx.ui.*</code> always has real DOM to act on synchronously inside <code>init()</code>.
     </p>
+
+    <h2>Checking what's loaded</h2>
+    <p>
+      <code>gallery.getActivePlugins()</code> returns the names of plugins that actually initialized
+      on that instance — <code>string[]</code>, deduplicated, excluding an invalid
+      <code>plugins[]</code> entry (e.g. a stale dist build referencing a plugin static that doesn't
+      exist) or one skipped for an unmet <code>requires</code>. There's no separate "official vs.
+      custom" distinction anywhere in the API — an official plugin like <code>Shoji.Zoom</code> and
+      one you write yourself go through the exact same <code>plugins</code> array and the exact same
+      loading path, so this list can't and doesn't tell them apart either.
+    </p>
+    <pre><code>new Shoji('#gallery', { plugins: [Shoji.Zoom, Shoji.RotateFlip] });
+gallery.getActivePlugins(); // ['zoom', 'rotateFlip']</code></pre>
 
     <footer>Next: <a href="./layout.html">the Layout plugin</a>, in depth.</footer>
   </body>

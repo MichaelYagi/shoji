@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Transitions</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html" aria-current="page">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Transitions</h1>
+    <p>
+      <code>mode</code> (a <code>GalleryOptions</code> string, default <code>'slide'</code>)
+      controls the slide-to-slide animation for <em>programmatic</em> navigation — buttons,
+      keyboard, <code>goTo()</code>, autoplay. It never applies to a gesture-driven swipe, which
+      always plays its own live-drag/settle animation regardless of <code>mode</code> — a completed
+      swipe already looks and feels like a transition, so layering a second one on top would
+      double-animate.
+    </p>
+    <pre><code>new Shoji('#gallery', { mode: 'fade' });</code></pre>
+    <p>
+      This is a separate system from the open/close animation (the photo growing out of its
+      thumbnail, and shrinking back into it) — that one always plays the same FLIP-style zoom
+      regardless of <code>mode</code>, which only ever governs switching between slides
+      <em>while already open</em>.
+    </p>
+
+    <h2>Built-in presets</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Family</th>
+          <th>Names</th>
+          <th>Look</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Slide</td>
+          <td><code>slide</code> (default), <code>slideVertical</code>, <code>push</code></td>
+          <td>
+            Directional — mirrors for next vs. prev. <code>push</code> travels further with no
+            cross-fade, a harder "shove it off" feel.
+          </td>
+        </tr>
+        <tr>
+          <td>Fade</td>
+          <td>
+            <code>fade</code>, <code>fadeUp</code>, <code>fadeDown</code>, <code>fadeLeft</code>,
+            <code>fadeRight</code>
+          </td>
+          <td>
+            <code>fade</code> is a plain cross-fade. The directional ones are fixed — a fixed
+            <code>fadeUp</code> always rises, regardless of nav direction.
+          </td>
+        </tr>
+        <tr>
+          <td>Zoom</td>
+          <td>
+            <code>zoom</code>, <code>zoomOut</code>, <code>scaleUp</code>, <code>scaleDown</code>
+          </td>
+          <td>Incoming/outgoing scale in opposite directions, with a cross-fade.</td>
+        </tr>
+        <tr>
+          <td>Rotate</td>
+          <td><code>rotate</code>, <code>rotateLeft</code>, <code>rotateRight</code></td>
+          <td>
+            2D <code>rotateZ</code> spin. <code>rotate</code> is fixed-direction;
+            <code>rotateLeft</code>/<code>rotateRight</code> tie their spin to nav direction.
+          </td>
+        </tr>
+        <tr>
+          <td>3D</td>
+          <td><code>flipX</code>, <code>flipY</code>, <code>cube</code>, <code>coverflow</code></td>
+          <td>
+            Real depth via a CSS <code>perspective()</code>. <code>cube</code>/<code
+              >coverflow</code
+            >
+            are directional.
+          </td>
+        </tr>
+        <tr>
+          <td>Other</td>
+          <td><code>deck</code>, <code>drop</code></td>
+          <td>
+            <code>deck</code>: the incoming slide drops in from slightly above/small while the
+            outgoing one recedes and fades, like placing a card on a deck — not direction-dependent.
+            <code>drop</code>: a fixed vertical fade.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Custom transitions</h2>
+    <p>
+      Any <code>mode</code> string that isn't one of the built-in names above is treated as a CSS
+      class pair, not an error — no JS needed on your end:
+    </p>
+    <pre><code>new Shoji('#gallery', { mode: 'my-wipe' });</code></pre>
+    <pre><code>.shoji-transition-my-wipe-leave {
+  transition: transform var(--shoji-duration) var(--shoji-easing);
+  transform: translateX(-100%);
+}
+.shoji-transition-my-wipe-enter {
+  transition: transform var(--shoji-duration) var(--shoji-easing);
+  transform: translateX(0);
+}</code></pre>
+    <p>
+      <code>-leave</code> is added to a temporary clone of the outgoing slide (positioned over the
+      real one while the actual content swap happens invisibly underneath it), <code>-enter</code>
+      to the real incoming slide — both classes get a
+      <code>data-shoji-direction="next"</code>/<code>"prev"</code> attribute too, if your CSS needs
+      to tell the two apart (e.g. <code>[data-shoji-direction="prev"] { ... }</code>). Whichever of
+      <code>transitionend</code>/<code>animationend</code> fires first (plus a timeout fallback)
+      tells Shoji the animation is done and cleans up — a plain CSS transition or a
+      <code>@keyframes</code> animation both work.
+    </p>
+
+    <h2>Per-device override</h2>
+    <p>
+      <code>mobileSettings.mode</code> overrides <code>mode</code> on a coarse-pointer device
+      (touch-primary, checked via <code>(pointer: coarse)</code> — not a viewport-width breakpoint,
+      so a narrow desktop window doesn't count):
+    </p>
+    <pre><code>new Shoji('#gallery', {
+  mode: 'cube',
+  mobileSettings: { mode: 'fade' }, // simpler animation on touch devices
+});</code></pre>
+
+    <h2>Timing, easing, and reduced motion</h2>
+    <p>
+      Duration and easing are CSS custom properties, not JS options —
+      <code>--shoji-duration</code>/<code>--shoji-easing</code>, documented on the
+      <a href="./theming.html">Theming guide</a>. Every built-in preset, and the
+      <code>transitionend</code>-based cleanup for custom ones, respects
+      <code>prefers-reduced-motion: reduce</code> automatically — content just swaps instantly, no
+      animation attempted.
+    </p>
+
+    <footer>Next: <a href="./methods.html">Methods</a>.</footer>
+  </body>
+</html>

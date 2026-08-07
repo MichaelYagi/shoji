@@ -49,6 +49,30 @@ describe('Gallery lifecycle', () => {
     gallery.open();
     expect(opened).not.toHaveBeenCalled();
   });
+
+  it('isOpen reflects open()/close() state', () => {
+    const gallery = new Gallery(document.createElement('div'));
+    expect(gallery.isOpen).toBe(false);
+
+    gallery.open();
+    expect(gallery.isOpen).toBe(true);
+
+    gallery.close();
+    expect(gallery.isOpen).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('isDestroyed is false until destroy() runs, then stays true', () => {
+    const gallery = new Gallery(document.createElement('div'));
+    expect(gallery.isDestroyed).toBe(false);
+
+    gallery.open();
+    expect(gallery.isDestroyed).toBe(false);
+
+    gallery.destroy();
+    expect(gallery.isDestroyed).toBe(true);
+  });
 });
 
 describe('Gallery — body scroll lock', () => {

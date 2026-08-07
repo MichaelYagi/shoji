@@ -13,6 +13,10 @@
       <a href="./getting-started.html" aria-current="page">Getting started</a>
       <a href="./plugins.html">Plugins</a>
       <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html">Settings</a>
       <a href="./theming.html">Theming</a>
       <a href="../examples/index.html">Examples</a>
       <a href="../api/index.html">API reference</a>
@@ -271,91 +275,23 @@ document.querySelector('#my-thumb-1').addEventListener('click', () =&gt; gallery
       the same call for the two most common cases.
     </p>
 
-    <h2>Core options</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Option</th>
-          <th>Default</th>
-          <th>What it does</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>selector</code></td>
-          <td>
-            <code
-              >':scope &gt; a, :scope &gt; [data-shoji-src], :scope &gt; [data-shoji-video]'</code
-            >
-          </td>
-          <td>Which direct children to scan in selector mode.</td>
-        </tr>
-        <tr>
-          <td><code>items</code></td>
-          <td>—</td>
-          <td>Opts into dynamic mode instead of scanning the DOM.</td>
-        </tr>
-        <tr>
-          <td><code>loop</code></td>
-          <td><code>true</code></td>
-          <td>
-            <code>next()</code>/<code>prev()</code> wrap past the ends; <code>false</code> clamps
-            instead.
-          </td>
-        </tr>
-        <tr>
-          <td><code>closable</code></td>
-          <td><code>true</code></td>
-          <td>
-            <code>false</code> disables every viewer-facing way to close the lightbox — the close
-            button (hidden entirely), backdrop click, <kbd>Escape</kbd>, and vertical swipe-to-close
-            — for a gallery meant to stay open permanently once shown.
-            <code>gallery.close()</code> itself still works; this only gates the four built-in
-            viewer-triggered paths.
-          </td>
-        </tr>
-        <tr>
-          <td><code>openOnInit</code></td>
-          <td><code>false</code></td>
-          <td>
-            Opens immediately at construction (to <code>index</code>, default 0) — for
-            hash/deep-link-style integrations.
-          </td>
-        </tr>
-        <tr>
-          <td><code>plugins</code></td>
-          <td><code>[]</code></td>
-          <td>
-            Official or custom plugins to load, in order. See the
-            <a href="./plugins.html">Plugins guide</a>.
-          </td>
-        </tr>
-        <tr>
-          <td><code>locale</code></td>
-          <td>English strings</td>
-          <td>
-            Flat key map — every user-visible string goes through it, no hardcoded English in the
-            UI.
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h2>Events</h2>
+    <h2>Next steps</h2>
     <p>
-      Every feature is observable: <code>gallery.on(event, fn)</code> returns an unsubscribe
-      function. Cancelable events (the <code>before*</code> ones) support
-      <code>event.preventDefault()</code>.
+      This page covers just enough to get a gallery on screen. The rest of the API has its own
+      dedicated guides, not duplicated here:
     </p>
-    <pre><code>gallery.on('afterSlide', ({ index }) =&gt; console.log('now showing', index));</code></pre>
-    <p>
-      Core lifecycle: <code>beforeOpen → open → afterOpen</code>,
-      <code>beforeSlide(from,to) → slideItemLoad → afterSlide</code>,
-      <code>beforeClose → close → afterClose</code>, plus <code>itemsUpdated</code>,
-      <code>dragStart</code>/<code>drag</code>/<code>dragEnd</code>, and per-plugin events
-      documented on the <a href="./plugins.html">Plugins guide</a> and in the
-      <a href="../api/index.html">API reference</a>.
-    </p>
+    <ul>
+      <li><a href="./settings.html">Settings</a> — every <code>GalleryOptions</code> field.</li>
+      <li>
+        <a href="./methods.html">Methods</a> — every <code>gallery</code> instance method and
+        property (<code>open</code>/<code>close</code>/<code>goTo</code>, <code>updateSlides</code>,
+        <code>isOpen</code>, <code>getActivePlugins()</code>, and more).
+      </li>
+      <li><a href="./events.html">Events</a> — the full event catalog and payload shapes.</li>
+      <li>
+        <a href="./plugins.html">Plugins</a> — the plugin system, official roster, writing your own.
+      </li>
+    </ul>
 
     <footer>Next: <a href="./plugins.html">the plugin system</a>.</footer>
   </body>

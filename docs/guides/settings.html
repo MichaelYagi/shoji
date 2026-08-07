@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Settings</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html" aria-current="page">Settings</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Settings</h1>
+    <p>
+      Every option lives in one flat <code>GalleryOptions</code> object, passed to
+      <code>new Shoji(el, options)</code> or <code>gallery.reinit(options)</code>. Everything below
+      is optional — a bare <code>new Shoji('#gallery')</code> is a complete, working integration.
+    </p>
+    <pre><code>new Shoji('#gallery', {
+  loop: false,
+  autoHideDelay: 3000,
+  plugins: [Shoji.Zoom],
+});</code></pre>
+
+    <h2>Core options</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Option</th>
+          <th>Default</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>selector</code></td>
+          <td>
+            <code
+              >':scope &gt; a, :scope &gt; [data-shoji-src], :scope &gt; [data-shoji-video]'</code
+            >
+          </td>
+          <td>Which direct children to scan in selector mode.</td>
+        </tr>
+        <tr>
+          <td><code>items</code></td>
+          <td>—</td>
+          <td>Opts into dynamic mode instead of scanning the DOM.</td>
+        </tr>
+        <tr>
+          <td><code>index</code></td>
+          <td><code>0</code></td>
+          <td>
+            <code>open()</code>'s default argument, and — with <code>openOnInit</code> — the index
+            opened automatically.
+          </td>
+        </tr>
+        <tr>
+          <td><code>openOnInit</code></td>
+          <td><code>false</code></td>
+          <td>
+            Opens immediately at construction instead of waiting for a click/<code>open()</code>
+            call — for hash/deep-link-style integrations. Everyone else should leave this off.
+          </td>
+        </tr>
+        <tr>
+          <td><code>locale</code></td>
+          <td>English strings</td>
+          <td>
+            Flat key map — every user-visible string goes through it, no hardcoded English in the
+            UI.
+          </td>
+        </tr>
+        <tr>
+          <td><code>plugins</code></td>
+          <td><code>[]</code></td>
+          <td>
+            Official or custom plugins to load, in order. See the
+            <a href="./plugins.html">Plugins guide</a>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>autoHideDelay</code></td>
+          <td><code>5000</code></td>
+          <td>
+            ms of inactivity before controls fade. <code>0</code> is distinct from "disabled" —
+            controls never show at all, regardless of activity.
+          </td>
+        </tr>
+        <tr>
+          <td><code>preload</code></td>
+          <td><code>1</code></td>
+          <td>
+            Slides kept mounted and proactively decoded on each side of the active one — navigating
+            within that window shows instantly, no spinner. Higher values trade more memory/decoding
+            for a bigger always-instant window.
+          </td>
+        </tr>
+        <tr>
+          <td><code>counter</code></td>
+          <td><code>true</code></td>
+          <td>
+            Shows the "N / M" badge. Purely visual — the live-region a11y announcement always
+            includes position regardless.
+          </td>
+        </tr>
+        <tr>
+          <td><code>loop</code></td>
+          <td><code>true</code></td>
+          <td>
+            <code>next()</code>/<code>prev()</code> wrap past the ends instead of stopping. Doesn't
+            affect <code>goTo()</code> with an explicit index (still clamps) or
+            <kbd>Home</kbd>/<kbd>End</kbd>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>closable</code></td>
+          <td><code>true</code></td>
+          <td>
+            <code>false</code> disables every viewer-facing way to close the lightbox — the close
+            button (hidden entirely), backdrop click, <kbd>Escape</kbd>, and vertical swipe-to-close
+            — for an embed meant to stay open permanently once shown.
+            <code>gallery.close()</code> itself still works.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gestures</code></td>
+          <td>
+            <code>{ lockThreshold: 10, swipeThreshold: 50, swipeVelocity: 0.3 }</code>
+          </td>
+          <td>
+            Overrides for the gesture engine's direction-lock/swipe-completion thresholds (px / px /
+            px-per-ms). Partial — any field left out keeps its default. Momentum easing isn't
+            configurable here; it's the CSS custom property
+            <code>--shoji-momentum-easing</code> (<a href="./theming.html">Theming guide</a>).
+          </td>
+        </tr>
+        <tr>
+          <td><code>mode</code></td>
+          <td><code>'slide'</code></td>
+          <td>
+            The slide-to-slide transition for programmatic navigation. Full preset list and
+            custom-CSS-transition support on the <a href="./transitions.html">Transitions guide</a>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>mobileSettings</code></td>
+          <td>—</td>
+          <td>
+            <code>{ mode?, controls? }</code> — overrides <code>mode</code> and/or starts controls
+            hidden on a coarse-pointer (touch) device specifically, not a narrow-viewport one. See
+            the <a href="./transitions.html">Transitions guide</a>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Plugin options</h2>
+    <p>
+      Each plugin's own options nest under a key matching its <code>name</code> —
+      <code>zoom: {...}</code> for <code>Shoji.Zoom</code>, and so on (the
+      <a href="./plugins.html"><code>options[plugin.name]</code> convention</a>). Quick reference;
+      see the <a href="./plugins.html">Plugins guide</a> for the full loading contract and the
+      <a href="./layout.html">Layout guide</a> for that plugin's much larger option set.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Options (defaults)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>zoom</code></td>
+          <td>
+            <code>maxScale</code> (4), <code>doubleTapScale</code> (2),
+            <code>buttonStep</code> (1.5)
+          </td>
+        </tr>
+        <tr>
+          <td><code>fullscreen</code></td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td><code>rotateFlip</code></td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td><code>autoplay</code></td>
+          <td><code>interval</code> (5000ms)</td>
+        </tr>
+        <tr>
+          <td><code>activeThumbnail</code></td>
+          <td>
+            <code>activeClass</code> (<code>'shoji-thumb-active'</code>),
+            <code>scrollIntoView</code> (true)
+          </td>
+        </tr>
+        <tr>
+          <td><code>layout</code></td>
+          <td>
+            See the <a href="./layout.html">dedicated guide</a> — <code>type</code>,
+            gutter/column/row sizing, <code>groupBy</code>/headings, breakpoints, and more.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>
+      Next: <a href="./theming.html">Theming</a> — everything configurable via CSS instead of JS
+      options.
+    </footer>
+  </body>
+</html>

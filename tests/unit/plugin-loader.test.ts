@@ -295,4 +295,67 @@ describe('Plugin loader', () => {
     gallery.destroy();
     expect(gallery.getActiveMedia()).toBeNull();
   });
+
+  describe('getActivePlugins()', () => {
+    it('lists successfully initialized plugin names, in registration order', () => {
+      const a = stubPlugin({ name: 'a' });
+      const b = stubPlugin({ name: 'b' });
+      const gallery = makeGallery([a, b]);
+
+      expect(gallery.getActivePlugins()).toEqual(['a', 'b']);
+      gallery.destroy();
+    });
+
+    it('excludes an invalid (undefined) plugins[] entry', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const real = stubPlugin({ name: 'real' });
+      // @ts-expect-error - deliberately malformed, same as the invalid-entry test above
+      const gallery = makeGallery([undefined, real]);
+
+      expect(gallery.getActivePlugins()).toEqual(['real']);
+
+      gallery.destroy();
+      errorSpy.mockRestore();
+    });
+
+    it('excludes a plugin skipped for an unmet requires dependency', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const dependent = stubPlugin({ name: 'dependent', requires: ['missing-dep'] });
+      const gallery = makeGallery([dependent]);
+
+      expect(gallery.getActivePlugins()).toEqual([]);
+
+      gallery.destroy();
+      errorSpy.mockRestore();
+    });
+
+    it('deduplicates a name registered twice', () => {
+      const first = stubPlugin({ name: 'dup' });
+      const second = stubPlugin({ name: 'dup' });
+      const gallery = makeGallery([first, second]);
+
+      expect(gallery.getActivePlugins()).toEqual(['dup']);
+      gallery.destroy();
+    });
+
+    it('reflects a reinit() with a different plugin list, not the union of both', () => {
+      const original = stubPlugin({ name: 'original' });
+      const gallery = makeGallery([original]);
+      expect(gallery.getActivePlugins()).toEqual(['original']);
+
+      const replacement = stubPlugin({ name: 'replacement' });
+      gallery.reinit({ ...gallery.options, plugins: [replacement] });
+
+      expect(gallery.getActivePlugins()).toEqual(['replacement']);
+      gallery.destroy();
+    });
+
+    it('is empty after destroy()', () => {
+      const gallery = makeGallery([stubPlugin({ name: 'a' })]);
+      expect(gallery.getActivePlugins()).toEqual(['a']);
+
+      gallery.destroy();
+      expect(gallery.getActivePlugins()).toEqual([]);
+    });
+  });
 });

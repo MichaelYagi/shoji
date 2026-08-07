@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Methods</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html" aria-current="page">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Methods &amp; properties</h1>
+    <p>
+      The full <code>gallery</code> instance surface — everything callable/readable on a
+      <code>new Shoji(el, options)</code> result. Full type signatures are also in the
+      <a href="../api/index.html">API reference</a>; this page groups them by what they're for.
+    </p>
+
+    <h2>Navigation</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gallery.open(index?)</code></td>
+          <td>
+            Opens the lightbox, to <code>index</code> (default: the <code>index</code> option, or
+            <code>0</code>). No-op if already open.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.close()</code></td>
+          <td>
+            Closes it, animating back into the origin thumbnail if one can be found. Always works,
+            even with <code>closable: false</code> — that option only gates the four
+            viewer-triggered close paths (button, backdrop, <kbd>Escape</kbd>, swipe), never this
+            call.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.goTo(index, options?)</code></td>
+          <td>
+            Jumps to <code>index</code> directly — always clamps an out-of-range value (a directed
+            jump, not a step, so <code>loop</code> doesn't apply).
+            <code>{ animate: false }</code> skips the configured
+            <a href="./transitions.html"><code>mode</code> transition</a> for an instant jump.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.next()</code> / <code>gallery.prev()</code></td>
+          <td>
+            Steps one slide — wraps past the ends by default (<code>loop: true</code>), clamps
+            instead if you set it <code>false</code>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Data</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gallery.updateSlides(items, currentIndex?)</code></td>
+          <td>
+            Replaces the item list — dynamic mode's core update path. Diffs by
+            <code>id</code> (falling back to <code>src</code>) to preserve the active slide across
+            the change when possible, instead of resetting to index 0.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.addSlides(items, atIndex?)</code></td>
+          <td>
+            Sugar over <code>updateSlides()</code> for inserting — splices into a copy of the
+            current list (default: append at the end) and hands the result off.
+            <code>Array.prototype.splice</code> semantics for <code>atIndex</code> (negative counts
+            from the end).
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.removeSlides(match)</code></td>
+          <td>
+            Sugar for removing — a single id/index, or an array mixing both.
+            <code>match</code> as a <code>number</code> is a position in the list
+            <em>as it is now</em>, resolved before any removal (<code>[0, 1]</code> removes the
+            first two items, not "index 0, then whatever became index 1 after that").
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.refresh()</code></td>
+          <td>
+            Selector-mode only — re-scans the DOM and calls <code>updateSlides()</code> with the
+            result. A no-op (with a console warning) in dynamic mode; call
+            <code>updateSlides()</code> yourself there instead.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Instance lifecycle</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gallery.reinit(options?)</code></td>
+          <td>
+            Full teardown + reconstruction on the same <code>gallery</code> object, not a new one —
+            any held reference (<code>Gallery.getInstance(el)</code> included) keeps working across
+            the call. Omit <code>options</code> to rebuild unchanged (a hard reset); pass new ones
+            to reconfigure structurally (e.g. a different <code>plugins</code> list).
+            <code>gallery.on(...)</code> listeners do <strong>not</strong> survive — the event bus
+            is fully cleared, same as <code>destroy()</code> — re-<code>on()</code> anything you
+            still need afterward.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.destroy()</code></td>
+          <td>
+            Removes all listeners, DOM, observers, and any plugin's own cleanup
+            (<code>init()</code>'s returned function). Idempotent — a second call is a no-op.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Introspection</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Member</th>
+          <th>What it tells you</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gallery.items</code></td>
+          <td>The current item list (<code>readonly GalleryItem[]</code>).</td>
+        </tr>
+        <tr>
+          <td><code>gallery.currentIndex</code></td>
+          <td>The active slide's index.</td>
+        </tr>
+        <tr>
+          <td><code>gallery.isOpen</code></td>
+          <td>
+            <code>true</code> from the first <code>open()</code> until
+            <code>close()</code>/<code>destroy()</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.isDestroyed</code></td>
+          <td>
+            <code>true</code> once <code>destroy()</code> has run — a defensive check for a
+            possibly-stale held reference.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.controlsHidden</code></td>
+          <td>
+            Whether auto-hide currently has the toolbar/nav/counter/caption faded out.
+            <code>controls:hide</code>/<code>controls:show</code> (see the
+            <a href="./events.html">Events guide</a>) report every transition; this is for code that
+            mounts later and needs the current state immediately.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.getActiveMedia()</code></td>
+          <td>
+            The active slide's <code>.shoji-slide-media</code> container element, or
+            <code>null</code> once destroyed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.getOriginElement(index)</code></td>
+          <td>
+            The thumbnail for <code>index</code> — a <code>data-shoji-id</code> marker if present,
+            else the scanned selector-mode element, else <code>null</code>. What the open/close zoom
+            transition animates to/from.
+          </td>
+        </tr>
+        <tr>
+          <td><code>gallery.getActivePlugins()</code></td>
+          <td>
+            Names of plugins that actually initialized on this instance — deduplicated, excluding
+            invalid entries or ones skipped for an unmet <code>requires</code>. See the
+            <a href="./plugins.html">Plugins guide</a>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Events</h2>
+    <p>
+      <code>gallery.on(event, fn)</code> returns an unsubscribe function — there's no separate
+      <code>off()</code>. Full event catalog on the <a href="./events.html">Events guide</a>.
+    </p>
+    <pre><code>const unsubscribe = gallery.on('afterSlide', ({ index }) =&gt; console.log(index));
+unsubscribe();</code></pre>
+
+    <h2>Static (on <code>Shoji</code>/<code>Gallery</code>, not an instance)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Member</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Gallery.getInstance(el)</code></td>
+          <td>
+            The gallery constructed on <code>el</code>, if any — <code>undefined</code> otherwise.
+          </td>
+        </tr>
+        <tr>
+          <td><code>Gallery.instances()</code></td>
+          <td>
+            Every live gallery on the page — an iterator, for page-wide teardown or devtools
+            inspection.
+          </td>
+        </tr>
+        <tr>
+          <td><code>Shoji.version</code></td>
+          <td>
+            The loaded library's version string, read from <code>package.json</code> at build time —
+            e.g. for including in a bug report.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>For plugin authors</h2>
+    <p>
+      <code>gallery.registerZoomGate(isZoomed)</code> is a specialized hook (single mutable slot,
+      not a multi-subscriber event) that suspends core's own drag-to-navigate/drag-to-close entirely
+      while the registered predicate returns <code>true</code> — what the Zoom plugin uses so a pan
+      gesture while zoomed in never also changes slides. Only relevant if you're building something
+      with its own pan/zoom interaction; see the <a href="./plugins.html">Plugins guide</a> for the
+      rest of the plugin-authoring surface (<code>ctx.gallery</code> is this same full method list,
+      from inside a plugin's <code>init()</code>).
+    </p>
+
+    <footer>Next: <a href="./events.html">Events</a>.</footer>
+  </body>
+</html>

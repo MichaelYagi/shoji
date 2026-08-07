@@ -5,6 +5,7 @@ import { Fullscreen } from './plugins/fullscreen';
 import { Layout } from './plugins/layout';
 import { RotateFlip } from './plugins/rotateFlip';
 import { Zoom } from './plugins/zoom';
+import { version } from '../package.json';
 
 import './styles/shoji.css';
 
@@ -42,6 +43,8 @@ const Shoji = Object.assign(Gallery, {
   Fullscreen,
   RotateFlip,
   Zoom,
+  /** `package.json`'s own version — the single source of truth, read via a named JSON import so a bundler can tree-shake away everything else in package.json (devDependencies, scripts, ...) rather than embedding the whole file. */
+  version,
 });
 
 export default Shoji;

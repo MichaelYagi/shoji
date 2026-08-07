@@ -108,20 +108,22 @@ export class Gallery {
   private readonly focusTrap = new FocusTrap();
   private readonly liveRegion = new LiveRegion();
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
-  private controlsHidden = false;
+  private autoHidden = false;
   private hoveredControlCount = 0;
   private isClosing = false;
   private itemList: GalleryItem[] = [];
   private scannedElements: HTMLElement[] = [];
   private activeIndex = 0;
-  private isOpen = false;
-  private isDestroyed = false;
+  private opened = false;
+  private destroyed = false;
   private slides: SlideManager | null = null;
   private dom: LightboxDom | null = null;
   private gesture: GestureController | null = null;
   private transition: SlideTransition | null = null;
   private readonly shortcuts = new Map<string, (e: KeyboardEvent) => void>();
   private readonly pluginStorage = new Map<string, unknown>();
+  /** Backs `getActivePlugins()` — reset at the top of each `initPlugins()` call, cleared again in `teardown()`. */
+  private readonly activePluginNames = new Set<string>();
   private zoomGate: (() => boolean) | null = null;
   private pluginCleanups: Array<() => void> = [];
 
@@ -248,6 +250,26 @@ export class Gallery {
     return this.activeIndex;
   }
 
+  /** True from the first `open()` until `close()`/`destroy()`. */
+  get isOpen(): boolean {
+    return this.opened;
+  }
+
+  /** True once `destroy()` has run — a defensive check for a possibly-stale held reference. */
+  get isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  /** Whether auto-hide (§2.8) currently has controls faded. `controls:hide`/`show` cover every transition; this is for late subscribers needing the current state right away. */
+  get controlsHidden(): boolean {
+    return this.autoHidden;
+  }
+
+  /** Names of plugins that actually initialized (excludes invalid entries and ones skipped for an unmet `requires`), deduplicated. The objects themselves are still on `gallery.options.plugins`. */
+  getActivePlugins(): string[] {
+    return [...this.activePluginNames];
+  }
+
   /** The active slide's `.shoji-slide-media` container. Empty before the first `open()`; `null` only after `destroy()`. */
   getActiveMedia(): HTMLElement | null {
     return this.slides?.getActiveMedia() ?? null;
@@ -334,9 +356,9 @@ export class Gallery {
     this.initPlugins();
   }
 
-  /** DESIGN.md §3 — plugins init here, not the constructor. `requires` checks names loaded earlier in the array; an unmet one is skipped (logged), not thrown. */
+  /** DESIGN.md §3 — plugins init here, not the constructor. `requires` checks names loaded earlier; an unmet one is skipped (logged), not thrown. Cleared up front so a `reinit()` doesn't inherit names from before. */
   private initPlugins(): void {
-    const loaded = new Set<string>();
+    this.activePluginNames.clear();
     for (const plugin of this.options.plugins ?? []) {
       // Guards a real, easy-to-hit host mistake: `plugins: [Shoji.SomePlugin]`
       // silently becomes `plugins: [undefined]` if the referenced static
@@ -350,7 +372,7 @@ export class Gallery {
         );
         continue;
       }
-      const missing = (plugin.requires ?? []).filter((name) => !loaded.has(name));
+      const missing = (plugin.requires ?? []).filter((name) => !this.activePluginNames.has(name));
       if (missing.length > 0) {
         console.error(
           `Shoji: plugin "${plugin.name}" requires [${missing.join(', ')}] to be registered first — skipping.`,
@@ -386,7 +408,7 @@ export class Gallery {
 
       const cleanup = plugin.init(ctx);
       if (typeof cleanup === 'function') this.pluginCleanups.push(cleanup);
-      loaded.add(plugin.name);
+      this.activePluginNames.add(plugin.name);
     }
   }
 
@@ -449,20 +471,14 @@ export class Gallery {
   }
 
   /**
-   * DESIGN.md §2.8 — opacity-only, paused only while a control is actually
-   * *hovered* (a real, continuously-tracked state via paired pointerenter/
-   * pointerleave). A real bug: this used to also treat a *focused* control
-   * as active indefinitely, checking `document.activeElement` directly —
-   * but a click leaves a `<button>` focused as an ordinary side effect
-   * (not just deliberate keyboard navigation), and nothing ever un-focuses
-   * it if the viewer simply stops interacting afterward (moves the mouse
-   * away, switches windows, whatever) without clicking anything else in
-   * the dialog first. That permanently blocked `hideControls()` — not "a
-   * long delay," an actual forever, since a no-op'd timer never
-   * reschedules itself. Focus still fully counts as *activity* — `focusin`
-   * already routes through `onActivity()`, resetting the idle clock and
-   * re-showing controls, same as a mouse move — it just no longer *blocks*
-   * the eventual hide the way a genuinely still-hovered button does.
+   * DESIGN.md §2.8 — opacity-only, paused only by a real *hover*
+   * (pointerenter/pointerleave). A real bug: this used to also treat a
+   * *focused* control as active indefinitely via `document.activeElement`
+   * — but a click leaves a `<button>` focused as an ordinary side effect,
+   * and nothing un-focuses it if the viewer just stops interacting
+   * afterward, permanently blocking `hideControls()`. Focus still counts
+   * as activity (`focusin` → `onActivity()`, same as a mouse move) — it
+   * just no longer blocks the eventual hide the way a real hover does.
    */
   private isControlActive(): boolean {
     return this.hoveredControlCount > 0;
@@ -496,7 +512,7 @@ export class Gallery {
       clearTimeout(this.autoHideTimer);
       this.autoHideTimer = null;
     }
-    if (!this.isOpen) return;
+    if (!this.opened) return;
     if (this.autoHideDelay === 0) {
       this.hideControls(); // 0 = hidden immediately, no reveal — see onActivity
       return;
@@ -505,15 +521,15 @@ export class Gallery {
   }
 
   private hideControls(): void {
-    if (!this.dom || this.controlsHidden || this.isControlActive()) return;
-    this.controlsHidden = true;
+    if (!this.dom || this.autoHidden || this.isControlActive()) return;
+    this.autoHidden = true;
     this.dom.dialog.classList.add('shoji-controls-hidden');
     this.bus.emit('controls:hide', {});
   }
 
   private showControls(): void {
-    if (!this.dom || !this.controlsHidden) return;
-    this.controlsHidden = false;
+    if (!this.dom || !this.autoHidden) return;
+    this.autoHidden = false;
     this.dom.dialog.classList.remove('shoji-controls-hidden');
     this.bus.emit('controls:show', {});
   }
@@ -607,10 +623,10 @@ export class Gallery {
   }
 
   open(index = this.options.index ?? 0): void {
-    if (this.isDestroyed || this.isOpen) return;
+    if (this.destroyed || this.opened) return;
     this.bus.emit('beforeOpen', { index });
     this.ensureLightbox();
-    this.isOpen = true;
+    this.opened = true;
     this.activeIndex = index;
     lockBodyScroll();
     this.renderCurrentSlide();
@@ -639,7 +655,7 @@ export class Gallery {
    * flourish — can pass `{ animate: false }`.
    */
   goTo(index: number, options?: { animate?: boolean }): void {
-    if (this.isDestroyed || !this.isOpen || this.itemList.length === 0) return;
+    if (this.destroyed || !this.opened || this.itemList.length === 0) return;
     const target = this.clampToRange(index);
     if (target === this.activeIndex) return;
     const direction: 1 | -1 = target > this.activeIndex ? 1 : -1;
@@ -674,7 +690,7 @@ export class Gallery {
    * the real, configured transition.
    */
   private navigate(target: number, direction: 1 | -1, animate: boolean): void {
-    if (this.isDestroyed || !this.isOpen || this.itemList.length === 0) return;
+    if (this.destroyed || !this.opened || this.itemList.length === 0) return;
     const clamped = this.clampToRange(target);
     if (clamped === this.activeIndex) return;
     const from = this.activeIndex;
@@ -726,7 +742,7 @@ export class Gallery {
   }
 
   close(): void {
-    if (this.isDestroyed || !this.isOpen || this.isClosing) return;
+    if (this.destroyed || !this.opened || this.isClosing) return;
     this.bus.emit('beforeClose', {});
 
     // .shoji-outer must stay display:block for the zoom-out to be visible,
@@ -760,13 +776,13 @@ export class Gallery {
   /**
    * Idempotent on purpose: a pending zoom-out's `transitionend`/fallback
    * timeout can still fire after `destroy()` has already force-finished the
-   * close (§ destroy() below) — the `!this.isOpen` guard makes that a no-op
+   * close (§ destroy() below) — the `!this.opened` guard makes that a no-op
    * instead of a second `close`/`afterClose` emission on a torn-down gallery.
    */
   private finishClose(): void {
-    if (!this.isOpen) return;
+    if (!this.opened) return;
     this.isClosing = false;
-    this.isOpen = false;
+    this.opened = false;
     unlockBodyScroll();
     document.removeEventListener('keydown', this.onKeydown);
     this.focusTrap.deactivate();
@@ -775,7 +791,7 @@ export class Gallery {
       clearTimeout(this.autoHideTimer);
       this.autoHideTimer = null;
     }
-    this.controlsHidden = false;
+    this.autoHidden = false;
     this.hoveredControlCount = 0;
     this.dom?.dialog.classList.remove('shoji-controls-hidden');
     this.bus.emit('close', {});
@@ -784,7 +800,7 @@ export class Gallery {
 
   /** DESIGN.md §2.1 — diffs by id (fallback src), preserving the active slide. */
   updateSlides(items: GalleryItem[], currentIndex?: number): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
 
     const activeItem = this.itemList[this.activeIndex];
     const activeKey = activeItem ? itemKey(activeItem) : undefined;
@@ -800,7 +816,7 @@ export class Gallery {
       Math.max(items.length - 1, 0),
     );
 
-    if (this.isOpen) this.renderCurrentSlide();
+    if (this.opened) this.renderCurrentSlide();
     this.bus.emit('itemsUpdated', { items: this.itemList });
   }
 
@@ -814,7 +830,7 @@ export class Gallery {
    * no extra validation on top of that.
    */
   addSlides(items: GalleryItem[], atIndex?: number): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
     const next = [...this.itemList];
     next.splice(atIndex ?? next.length, 0, ...items);
     this.updateSlides(next);
@@ -830,7 +846,7 @@ export class Gallery {
    * then whatever became index 1 after that").
    */
   removeSlides(match: string | number | Array<string | number>): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
     const matches = Array.isArray(match) ? match : [match];
     const indices = new Set(matches.filter((m): m is number => typeof m === 'number'));
     const keys = new Set(matches.filter((m): m is string => typeof m === 'string'));
@@ -840,7 +856,7 @@ export class Gallery {
 
   /** DESIGN.md §2.7 — selector-mode only; sugar over updateSlides() sourced from a DOM rescan. */
   refresh(): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
     if (this.isDynamicMode) {
       console.warn('Shoji: refresh() is a no-op in dynamic mode — call updateSlides() instead.');
       return;
@@ -852,7 +868,7 @@ export class Gallery {
 
   /** Shared by `destroy()`/`reinit()` (§2.7): force-close, run plugin cleanups, drop gesture/transition/slide/dialog. */
   private teardown(): void {
-    if (this.isOpen) {
+    if (this.opened) {
       if (!this.isClosing) this.bus.emit('beforeClose', {});
       this.finishClose();
     }
@@ -860,6 +876,7 @@ export class Gallery {
     this.pluginCleanups = [];
     this.shortcuts.clear();
     this.pluginStorage.clear();
+    this.activePluginNames.clear();
     if (!this.isDynamicMode) {
       this.element.removeEventListener('click', this.onContainerClick);
     }
@@ -873,7 +890,7 @@ export class Gallery {
   }
 
   destroy(): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
     // Guarded, not a plain delete(): if a second Gallery was constructed on
     // this same element without the first ever being destroyed, the
     // registry entry already points at that newer instance — an old,
@@ -883,7 +900,7 @@ export class Gallery {
     this.teardown();
     this.bus.emit('destroy', {});
     this.bus.clear();
-    this.isDestroyed = true;
+    this.destroyed = true;
   }
 
   /**
@@ -895,7 +912,7 @@ export class Gallery {
    * bus is fully cleared, same as `destroy()` — re-`on()` anything needed.
    */
   reinit(options: GalleryOptions = this.options): void {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
     this.teardown();
     this.bus.clear();
     this.applyOptions(options);

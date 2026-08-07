@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Events</title>
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html" aria-current="page">Events</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./theming.html">Theming</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Events</h1>
+    <p>
+      Every feature is observable: <code>gallery.on(event, fn)</code> returns an unsubscribe
+      function.
+    </p>
+    <pre><code>const off = gallery.on('afterSlide', ({ from, to }) =&gt; console.log(from, '→', to));
+off(); // stop listening</code></pre>
+    <p>
+      <strong>None of these are cancelable right now</strong> — <code>fn</code> just receives a
+      plain detail object, not a real <code>Event</code>; calling <code>.preventDefault()</code> on
+      it would throw. The <code>before*</code>/<code>after*</code> naming is a lifecycle-order
+      convention, not an implemented cancel mechanism — that's a documented future intent, not
+      current behavior, so don't rely on being able to stop something from a <code>before*</code>
+      handler today.
+    </p>
+
+    <h2>Core lifecycle</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>Fires</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>beforeOpen</code></td>
+          <td><code>{ index }</code></td>
+          <td>Right at the start of <code>open()</code>, before any DOM change.</td>
+        </tr>
+        <tr>
+          <td><code>open</code></td>
+          <td><code>{ index }</code></td>
+          <td>After the lightbox DOM is built/shown, before the zoom-in transition starts.</td>
+        </tr>
+        <tr>
+          <td><code>afterOpen</code></td>
+          <td><code>{ index }</code></td>
+          <td>Same tick as <code>open</code> currently — kept distinct for future use.</td>
+        </tr>
+        <tr>
+          <td><code>beforeClose</code></td>
+          <td><code>{}</code></td>
+          <td>
+            First thing inside <code>close()</code>, before anything (including zoom/rotate plugins
+            resetting their own state) reacts.
+          </td>
+        </tr>
+        <tr>
+          <td><code>close</code> / <code>afterClose</code></td>
+          <td><code>{}</code></td>
+          <td>
+            Once the zoom-out-to-thumbnail animation finishes (or immediately, under
+            <code>prefers-reduced-motion</code> or with no origin thumbnail to animate to).
+          </td>
+        </tr>
+        <tr>
+          <td><code>destroy</code></td>
+          <td><code>{}</code></td>
+          <td>
+            End of <code>destroy()</code>, after all teardown — the last event this bus ever emits.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Slides &amp; items</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>Fires</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>beforeSlide</code> / <code>afterSlide</code></td>
+          <td><code>{ from, to }</code></td>
+          <td>
+            Around every navigation — buttons, keyboard, <code>goTo()</code>, a completed swipe.
+          </td>
+        </tr>
+        <tr>
+          <td><code>slideItemLoad</code></td>
+          <td><code>{ index }</code></td>
+          <td>
+            Once the <em>active</em> slide's media has actually settled (image decoded, or video's
+            <code>loadedmetadata</code>) — including instantly, if it was already preloaded. Never
+            fires for a background/preloading neighbor that isn't active yet.
+          </td>
+        </tr>
+        <tr>
+          <td><code>itemsUpdated</code></td>
+          <td><code>{ items }</code></td>
+          <td>
+            After
+            <code>updateSlides()</code>/<code>addSlides()</code>/<code>removeSlides()</code>/<code
+              >refresh()</code
+            >
+            change the item list.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Auto-hide</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>Fires</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>controls:hide</code> / <code>controls:show</code></td>
+          <td><code>{}</code></td>
+          <td>
+            Every auto-hide transition — sync points for a plugin with its own overlay that should
+            fade along with the built-in controls. See
+            <code>gallery.controlsHidden</code> on the <a href="./methods.html">Methods guide</a>
+            for the current-state equivalent.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Gesture relay</h2>
+    <p>
+      Core drives horizontal drag-to-navigate and vertical drag-to-close itself — no event for
+      either. These have no built-in effect at all; they exist purely so a plugin (the Zoom plugin
+      consumes all of them) can react without core depending on that plugin existing. Coordinates
+      are viewport (client) pixels.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>tap</code> / <code>doubleTap</code></td>
+          <td><code>{ x, y }</code></td>
+        </tr>
+        <tr>
+          <td><code>pinchStart</code></td>
+          <td><code>{ centerX, centerY }</code></td>
+        </tr>
+        <tr>
+          <td><code>pinchMove</code></td>
+          <td>
+            <code>{ scale, centerX, centerY }</code> — <code>scale</code> is relative to
+            <em>this</em> pinch's own start distance (1 = unchanged), not cumulative across separate
+            pinches.
+          </td>
+        </tr>
+        <tr>
+          <td><code>pinchEnd</code></td>
+          <td><code>{}</code></td>
+        </tr>
+        <tr>
+          <td><code>wheelZoom</code></td>
+          <td>
+            <code>{ deltaScale, x, y }</code> — <code>deltaScale</code> is a small per-event
+            increment (positive = zoom in); a consumer accumulates it, it isn't an absolute scale.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Plugin-emitted</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Detail</th>
+          <th>From</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>autoplayStart</code> / <code>autoplayStop</code></td>
+          <td><code>{}</code></td>
+          <td>Autoplay</td>
+        </tr>
+        <tr>
+          <td><code>fullscreenChange</code></td>
+          <td><code>{ fullscreen }</code></td>
+          <td>
+            Fullscreen — from the native <code>fullscreenchange</code> event, not the toolbar
+            button's click, so it reflects reality even when fullscreen was entered/exited by other
+            means (browser <kbd>Escape</kbd>, a request rejected).
+          </td>
+        </tr>
+        <tr>
+          <td><code>rotateFlipChange</code></td>
+          <td><code>{ index, flipH, flipV, rotation }</code></td>
+          <td>
+            RotateFlip, on every click — the plugin never persists this itself (resets per slide);
+            store the payload yourself if you need to keep it.
+          </td>
+        </tr>
+        <tr>
+          <td><code>zoomChange</code></td>
+          <td><code>{ index, scale }</code></td>
+          <td>
+            Zoom, on every scale change (gesture or button-driven) — same non-persisted pattern.
+          </td>
+        </tr>
+        <tr>
+          <td><code>layoutRender</code></td>
+          <td><code>{ tiles: { index, element }[] }</code></td>
+          <td>
+            Layout, after a render pass builds/appends tile DOM — <code>tiles</code> is exactly what
+            was built <em>this pass</em>, for injecting custom content (a badge, a selection
+            checkbox) without re-deriving which tiles are new. See the
+            <a href="./layout.html">Layout guide</a>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>Next: <a href="./settings.html">Settings</a>.</footer>
+  </body>
+</html>
