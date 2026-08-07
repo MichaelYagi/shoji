@@ -47,7 +47,10 @@ jobs:
 
   publish-docs:
     needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # workflow_dispatch included so a manual "Run workflow" also republishes
+    # (e.g. re-triggering after a dropped push-event notification, or an
+    # on-demand republish) — both still require actually being on main.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
