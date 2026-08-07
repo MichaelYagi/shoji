@@ -232,6 +232,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Anchors .shoji-video-play-overlay's absolute positioning to this box
+     specifically, not implicitly to whichever positioned ancestor happens
+     to be next up (currently .shoji-slide, coincidentally the same size —
+     explicit here so that stays true even if that ever changes). */
+  position: relative;
 }
 
 .shoji-slide-img,
@@ -240,6 +245,36 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* A paused video's own play affordance — native browser styling for this
+   varies too much to rely on alone (some show a big centered play icon,
+   some don't). Faint/translucent, same visual language as the toolbar's
+   own round icon buttons, just bigger — a primary, hard-to-miss affordance,
+   not a small chrome control. Deliberately not gated by any GalleryOptions
+   flag (purely presentational — hiding it changes nothing functionally,
+   the video is still clickable either way); a host not wanting it just
+   overrides this selector in their own CSS. */
+.shoji-video-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--shoji-video-overlay-size, 64px);
+  height: var(--shoji-video-overlay-size, 64px);
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--shoji-video-overlay-bg, rgba(0, 0, 0, 0.4));
+  color: var(--shoji-video-overlay-color, var(--shoji-color-fg));
+  cursor: pointer;
+}
+
+.shoji-video-play-overlay[hidden] {
+  display: none;
 }
 
 /* DESIGN.md §2.5 — the temporary clone SlideTransition animates the

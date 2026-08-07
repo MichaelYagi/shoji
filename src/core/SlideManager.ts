@@ -1,3 +1,4 @@
+import { PLAY_ICON } from './icons';
 import type { GalleryItem } from './types';
 
 interface Slot {
@@ -14,10 +15,14 @@ interface Slot {
 interface CacheEntry {
   node: HTMLElement;
   item: GalleryItem;
+  /** Video play-overlay button, if any — travels with `node` across cache reuse. */
+  extra?: HTMLElement;
 }
 
 export interface SlideManagerOptions {
   preload: number;
+  /** Play-overlay button's label. */
+  playVideoLabel: string;
 }
 
 /**
@@ -31,6 +36,7 @@ export class SlideManager {
   readonly element: HTMLElement;
   private readonly slots: Slot[];
   private readonly preload: number;
+  private readonly playVideoLabel: string;
   private dragOffsetPx = 0;
 
   /**
@@ -60,6 +66,7 @@ export class SlideManager {
     this.element = document.createElement('div');
     this.element.className = 'shoji-slides';
     this.preload = options.preload;
+    this.playVideoLabel = options.playVideoLabel;
 
     const count = options.preload * 2 + 1;
     this.slots = Array.from({ length: count }, (_, i) => {
@@ -190,26 +197,32 @@ export class SlideManager {
     }
   }
 
-  /** Used by `renderVideo`'s two synchronous paths (the slot is already known at call time) — releases the slot's old content (always just a spinner by now) and swaps the new node in, caching it. `ensureImageDecoding` instead goes through `moveIn` once its decode settles, since which slot (if any) still wants it is only knowable then. */
-  private swapIn(slot: Slot, node: HTMLElement, item: GalleryItem, index: number): void {
+  /** Releases the slot's old content and swaps the new node in, caching it. `extra` rides as a second child. `ensureImageDecoding` goes through `moveIn` instead. */
+  private swapIn(
+    slot: Slot,
+    node: HTMLElement,
+    item: GalleryItem,
+    index: number,
+    extra?: HTMLElement,
+  ): void {
     releaseVideo(slot.media);
     this.applyAspect(slot, item);
-    slot.media.replaceChildren(node);
+    if (extra) slot.media.replaceChildren(node, extra);
+    else slot.media.replaceChildren(node);
     slot.ready = true;
-    this.cache.set(index, { node, item });
+    this.cache.set(index, { node, item, extra });
   }
 
   /**
-   * Moves an already-cached, ready node into `slot` — deliberately skips
-   * `releaseVideo`, unlike `swapIn`: what `slot` currently holds might
-   * still be a live cache entry another slot is about to reclaim this same
-   * `render()` pass (see "Phase 1" above). Plain reparenting is always
-   * safe; only `render()`'s later fresh/clear pass releases genuinely
-   * stale content.
+   * Moves an already-cached, ready node into `slot` — skips `releaseVideo`,
+   * unlike `swapIn`: what `slot` holds might be a live cache entry another
+   * slot reclaims this same `render()` pass (Phase 1). Reparenting is
+   * always safe; only the later fresh/clear pass releases stale content.
    */
   private moveIn(slot: Slot, entry: CacheEntry, index: number): void {
     this.applyAspect(slot, entry.item);
-    slot.media.replaceChildren(entry.node);
+    if (entry.extra) slot.media.replaceChildren(entry.node, entry.extra);
+    else slot.media.replaceChildren(entry.node);
     slot.ready = true;
     this.cache.set(index, entry);
   }
@@ -306,10 +319,28 @@ export class SlideManager {
     // `poster` attribute already shows something meaningful without
     // waiting on `loadedmetadata`, so there's no decode-style gap to close
     // here; deferring would only make video slides slower to show anything.
-    this.swapIn(slot, video, item, index);
+    this.swapIn(slot, video, item, index, this.createVideoPlayOverlay(video));
     const reveal = (): void => onLoad(index);
     video.addEventListener('loadedmetadata', reveal, { once: true });
     video.addEventListener('error', reveal, { once: true });
+  }
+
+  /** Tracks the video's own play/pause/ended state, not Autoplay. No opt-out flag — hide `.shoji-video-play-overlay` in CSS instead. */
+  private createVideoPlayOverlay(video: HTMLVideoElement): HTMLElement {
+    const overlay = document.createElement('button');
+    overlay.type = 'button';
+    overlay.className = 'shoji-video-play-overlay';
+    overlay.innerHTML = PLAY_ICON;
+    overlay.ariaLabel = overlay.title = this.playVideoLabel;
+    overlay.hidden = !video.paused;
+    overlay.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void video.play();
+    });
+    video.addEventListener('play', () => (overlay.hidden = true));
+    video.addEventListener('pause', () => (overlay.hidden = false));
+    video.addEventListener('ended', () => (overlay.hidden = false));
+    return overlay;
   }
 
   destroy(): void {

@@ -42,6 +42,7 @@ const DEFAULT_LOCALE = {
   close: 'Close',
   previous: 'Previous image',
   next: 'Next image',
+  playVideo: 'Play video',
 };
 
 /**
@@ -122,7 +123,7 @@ export class Gallery {
   private transition: SlideTransition | null = null;
   private readonly shortcuts = new Map<string, (e: KeyboardEvent) => void>();
   private readonly pluginStorage = new Map<string, unknown>();
-  /** Backs `getActivePlugins()` — reset at the top of each `initPlugins()` call, cleared again in `teardown()`. */
+  /** Backs `getActivePlugins()`. */
   private readonly activePluginNames = new Set<string>();
   private zoomGate: (() => boolean) | null = null;
   private pluginCleanups: Array<() => void> = [];
@@ -255,17 +256,17 @@ export class Gallery {
     return this.opened;
   }
 
-  /** True once `destroy()` has run — a defensive check for a possibly-stale held reference. */
+  /** True once `destroy()` has run. */
   get isDestroyed(): boolean {
     return this.destroyed;
   }
 
-  /** Whether auto-hide (§2.8) currently has controls faded. `controls:hide`/`show` cover every transition; this is for late subscribers needing the current state right away. */
+  /** Whether auto-hide (§2.8) currently has controls faded. */
   get controlsHidden(): boolean {
     return this.autoHidden;
   }
 
-  /** Names of plugins that actually initialized (excludes invalid entries and ones skipped for an unmet `requires`), deduplicated. The objects themselves are still on `gallery.options.plugins`. */
+  /** Names of plugins that actually initialized. */
   getActivePlugins(): string[] {
     return [...this.activePluginNames];
   }
@@ -293,7 +294,10 @@ export class Gallery {
 
   private ensureLightbox(): void {
     if (this.dom) return;
-    this.slides = new SlideManager({ preload: this.preload });
+    this.slides = new SlideManager({
+      preload: this.preload,
+      playVideoLabel: this.locale.playVideo,
+    });
     this.transition = new SlideTransition(this.slides);
     const dom = buildLightboxDom(this.slides.element, this.locale);
     this.dom = dom;
