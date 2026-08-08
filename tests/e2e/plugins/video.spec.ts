@@ -36,6 +36,24 @@ test('opens a YouTube slide and loads a real embed, replacing the spinner', asyn
   await expect(caption).toBeVisible();
 });
 
+test("the embed's iframe never renders under Shoji's own toolbar (top gutter, DESIGN.md §4-video)", async ({
+  page,
+}) => {
+  await page.goto('/pages/video.html');
+  await page.locator('#gallery > a').last().click();
+
+  const container = page.locator('.shoji-slide-provider-video');
+  await expect(container).toBeVisible({ timeout: 15000 });
+
+  const toolbarBottom = await page
+    .locator('.shoji-toolbar')
+    .evaluate((el) => el.getBoundingClientRect().bottom);
+  const iframeTop = await container
+    .locator('iframe')
+    .evaluate((el) => el.getBoundingClientRect().top);
+  expect(iframeTop).toBeGreaterThanOrEqual(toolbarBottom);
+});
+
 test('Autoplay plays the YouTube embed and waits for its own ended state, not the fixed interval', async ({
   page,
 }) => {

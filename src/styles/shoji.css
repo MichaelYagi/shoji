@@ -42,6 +42,13 @@
      (mobile landscape), where a `rem`-only cap could still eat most of
      the available height. */
   --shoji-caption-max-height: min(8rem, 30%);
+  /* Reserved space at the top of a provider embed (YouTube etc.) so its own
+     hover-revealed title bar never sits under Shoji's toolbar — matches the
+     toolbar's own rendered height (44px button + top/bottom padding).
+     Permanent, not tied to the toolbar's auto-hide state, so the video
+     never resizes as the toolbar fades in/out. HTML5 video has no top-of-
+     player UI at all, so it's untouched. */
+  --shoji-provider-video-top-inset: calc(44px + 2 * var(--shoji-spacing-sm));
   /* DESIGN.md §2.4 — the gesture engine's own documented default easing for
      drag-to-navigate/drag-to-close settle animations specifically (a snap
      tuned for "released mid-motion," distinct from --shoji-easing's
@@ -264,6 +271,8 @@
 .shoji-slide-provider-video {
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
+  padding-top: var(--shoji-provider-video-top-inset);
 }
 
 .shoji-slide-provider-video[hidden] {

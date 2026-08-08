@@ -59,6 +59,12 @@ still include breaking changes).
   caption stay clickable); and, since a caption you can click past but
   still can't see past is still confusing, a video slide's caption now
   defaults to hidden entirely (see `showVideoCaption` above).
+- A provider video's (e.g. YouTube) own title bar, shown at the top on
+  hover, could end up under Shoji's own toolbar — the same problem as
+  above but at the top edge. The embed now reserves a top gutter
+  (`--shoji-provider-video-top-inset`) matching the toolbar's height, so
+  the two never overlap regardless of toolbar visibility. HTML5 video is
+  unaffected — native controls never render anything at the top.
 
 ## [0.1.0-alpha.2] - 2026-08-07
 
