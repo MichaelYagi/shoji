@@ -91,6 +91,57 @@ describe('Gallery — lightbox DOM', () => {
     gallery.destroy();
   });
 
+  it('regression: a video slide (HTML5 or provider, e.g. YouTube) marks its caption with shoji-caption--video so it click-throughs to the video underneath (shoji.css); a photo slide never does', () => {
+    // A real bug: even height-capped (shoji.css §2.3a), the caption's
+    // opaque background could still sit directly over a video's native
+    // control bar — a video filling most of the dialog leaves little to no
+    // letterboxing gap, so even a short caption could land on top of it,
+    // with no way to reach scrub/volume/fullscreen underneath. The actual
+    // fix is CSS (pointer-events: none on this class); this only covers the
+    // half jsdom can verify — that the class lands on the right slides.
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'photo', src: 'a.jpg', caption: 'A photo caption' },
+        {
+          id: 'html5-video',
+          src: 'v.mp4',
+          video: { provider: 'html5' },
+          caption: 'A video caption',
+        },
+        {
+          id: 'yt-video',
+          src: 'https://youtu.be/x',
+          video: { provider: 'youtube', id: 'x' },
+          caption: 'A YouTube caption',
+        },
+      ],
+    });
+
+    gallery.open(0); // photo
+    expect(
+      document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
+    ).toBe(false);
+
+    gallery.next(); // html5 video
+    expect(
+      document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
+    ).toBe(true);
+
+    gallery.next(); // youtube (provider) video
+    expect(
+      document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
+    ).toBe(true);
+
+    gallery.prev();
+    gallery.prev(); // back to the photo
+    expect(
+      document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
+    ).toBe(false);
+
+    gallery.destroy();
+  });
+
   it('announces the live region text on open and navigate', () => {
     const gallery = makeGallery();
     gallery.open(1);

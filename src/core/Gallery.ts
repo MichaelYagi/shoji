@@ -592,6 +592,14 @@ export class Gallery {
     const item = this.itemList[this.activeIndex];
     const noCaption = this.renderCaption(this.dom.caption, item?.caption);
     this.dom.caption.hidden = noCaption || !this.slides.isActiveReady();
+    // A real bug: even height-capped (shoji.css), the caption's opaque
+    // background can still sit directly over a video's native control bar
+    // (same bottom-left corner) — a video that fills most of the dialog
+    // leaves little to no letterboxing gap, so even a short caption can
+    // land right on top of it. `item.video` covers both HTML5 and provider
+    // (e.g. YouTube) slides identically. See shoji.css's `.shoji-caption
+    // --video` rule for the actual click-through fix.
+    this.dom.caption.classList.toggle('shoji-caption--video', !!item?.video);
   }
 
   private renderCurrentSlide(): void {

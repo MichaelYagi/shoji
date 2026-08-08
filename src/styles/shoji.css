@@ -387,6 +387,26 @@
   text-align: left;
 }
 
+/* A real bug: height-capping the caption (above) still isn't enough on its
+   own — a video that fills most of the dialog leaves little to no
+   letterboxing gap, so even a short caption's opaque background can land
+   directly on the native control bar underneath it (same corner). Letting
+   clicks pass straight through the caption on a video slide (Gallery.ts
+   toggles this class from `item.video`, HTML5 or a provider like YouTube
+   alike) is what actually guarantees the controls stay reachable, not just
+   "usually clear of them." Re-enabled on any real child element so a rich
+   HTML caption's own links/buttons (DESIGN.md §2.1) stay clickable — only
+   a plain-string caption (no element children at all) ever fully passes
+   through. Photo slides are untouched: nothing below them needs protecting,
+   so the caption keeps its normal scrollable/selectable behavior there. */
+.shoji-caption--video {
+  pointer-events: none;
+}
+
+.shoji-caption--video > * {
+  pointer-events: auto;
+}
+
 .shoji-caption[hidden] {
   display: none;
 }
