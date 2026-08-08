@@ -573,6 +573,55 @@ describe('SlideManager', () => {
       expect(registryRender).not.toHaveBeenCalled();
     });
 
+    it('regression: a preloaded neighbor is never reused by reparenting into its new slot — moving a live embed (e.g. an <iframe>) resets it in real browsers, silently breaking its already-wired player API', () => {
+      // A real bug: stepping onto a preloaded provider-video neighbor went
+      // through the same cache-reuse path images/native <video> use — moving
+      // the existing node into its new slot via replaceChildren(). That's
+      // safe for an <img>/<video> (browsers preserve their loaded state
+      // across a same-document reparent) but not for a provider's <iframe>:
+      // most browsers reload an iframe's content when it's moved to a new
+      // parent, even within the same document. The already-wired player
+      // (DESIGN.md §4.3) kept looking playable on our side, but commands
+      // sent to it never reached the now-defunct, reloaded iframe. Confirmed
+      // in a real browser: identical code plays fine when landed on
+      // directly (never reparented) but not when reached via the ordinary
+      // "preload the +1 neighbor, then step onto it" flow this test
+      // exercises. Fixed by never reusing a provider-video node this way —
+      // it's always rebuilt fresh in its new slot instead.
+      const renderCalls: HTMLElement[] = [];
+      const aborts: HTMLElement[] = [];
+      const render = vi.fn(
+        (container: HTMLElement, _item: GalleryItem, onReady: () => void, signal: AbortSignal) => {
+          renderCalls.push(container);
+          signal.addEventListener('abort', () => aborts.push(container));
+          onReady();
+        },
+      );
+      const manager = new SlideManager({
+        preload: 1,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map([['youtube', render]]),
+      });
+      const mixed: GalleryItem[] = [{ id: 'photo', src: 'photo.jpg' }, ytItem()];
+
+      manager.render(mixed, 0, vi.fn()); // preloads the YouTube item as the +1 neighbor
+      expect(renderCalls).toHaveLength(1);
+      const preloadedContainer = renderCalls[0];
+
+      manager.render(mixed, 1, vi.fn()); // step onto it, same as an autoplay-driven advance would
+
+      // A fresh render happened — not a reparent of the preloaded node.
+      expect(renderCalls).toHaveLength(2);
+      expect(renderCalls[1]).not.toBe(preloadedContainer);
+      const activeContainer = manager
+        .getActiveMedia()
+        ?.querySelector('.shoji-slide-provider-video');
+      expect(activeContainer).toBe(renderCalls[1]);
+      // The orphaned old node is torn down, not silently leaked or left
+      // running detached (CLAUDE.md: "every plugin must be destroyable").
+      expect(aborts).toEqual([preloadedContainer]);
+    });
+
     it('aborts the signal once evicted from the preload window', () => {
       const aborts: string[] = [];
       const render = vi.fn(
