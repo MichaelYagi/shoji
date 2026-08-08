@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-08-08
+
 ### Added
 
 - `gallery.isOpen`/`isDestroyed`/`controlsHidden` getters and
