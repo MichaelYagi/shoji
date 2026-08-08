@@ -188,7 +188,10 @@ describe('Plugin loader', () => {
     gallery.open(0);
 
     const children = Array.from(document.querySelector('.shoji-toolbar-right')!.children);
-    expect(children.map((el) => el.textContent)).toEqual(['A', 'B', 'C', '']); // close is icon-only, no text
+    // Leading '' — core's own video-caption toggle button (hidden here, no
+    // video slide active, but still a real child of this slot); trailing
+    // '' — close, both icon-only, no text.
+    expect(children.map((el) => el.textContent)).toEqual(['', 'A', 'B', 'C', '']);
     expect(children.at(-1)!.classList.contains('shoji-close')).toBe(true);
 
     gallery.destroy();

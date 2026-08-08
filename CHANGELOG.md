@@ -31,6 +31,12 @@ still include breaking changes).
 - Autoplay's `showProgress` option (default `true`) — set to `false` to
   turn off the timed-slide progress bar entirely; purely presentational,
   doesn't affect timing.
+- A video slide's caption now starts hidden by default, with a toolbar
+  toggle button to show it on demand — `showVideoCaption: boolean`
+  (`GalleryOptions`, default `false`) overrides the starting point. Photo
+  slides are unaffected; their captions are always shown as before.
+  Core's size budget is raised 20 kB → 21 kB min+gzip for this baseline
+  feature (CLAUDE.md/DESIGN.md updated to match).
 
 ### Fixed
 
@@ -46,11 +52,13 @@ still include breaking changes).
   cover the native control bar underneath it, leaving no way to
   scrub/adjust volume/go fullscreen — a long caption by growing tall
   enough to reach it, or even a short one on a video that fills most of
-  the dialog. The caption box is now height-capped
+  the dialog. Fixed in three layers: the caption box is height-capped
   (`--shoji-caption-max-height`) and scrolls internally instead of
-  growing without bound, and on a video slide specifically, clicks pass
-  straight through its background to the video underneath (any actual
-  links in a rich caption stay clickable).
+  growing without bound; on a video slide, clicks pass straight through
+  its background to the video underneath (any actual links in a rich
+  caption stay clickable); and, since a caption you can click past but
+  still can't see past is still confusing, a video slide's caption now
+  defaults to hidden entirely (see `showVideoCaption` above).
 
 ## [0.1.0-alpha.2] - 2026-08-07
 

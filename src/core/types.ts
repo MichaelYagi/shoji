@@ -97,6 +97,8 @@ export interface GalleryOptions {
   preload?: number;
   /** Shows the "N / M" counter badge; default true. Purely visual — the live-region announcement (§2.6) always includes position regardless. */
   counter?: boolean;
+  /** DESIGN.md §2.3a — starts a video slide's caption shown instead of hidden; default `false`. No effect on a photo's caption. */
+  showVideoCaption?: boolean;
   /**
    * DESIGN.md §2.2 — `next()`/`prev()` (and the arrow-key/toolbar-button paths
    * that call them) wrap past the last/first item instead of stopping; default

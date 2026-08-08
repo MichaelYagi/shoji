@@ -28,7 +28,10 @@
       just an ordinary page thumbnail the host supplies, unrelated to the lightbox slide. Autoplay
       is enabled too: press play (or <kbd>Space</kbd>) and it waits for the real YouTube player's
       own <code>ended</code> state before advancing, the same video-aware slideshow behavior a
-      native <code>&lt;video&gt;</code> slide gets.
+      native <code>&lt;video&gt;</code> slide gets. Notice the caption starts hidden on this video
+      slide — a caption sitting over the player's own controls would block them, so a toolbar toggle
+      button reveals it on demand instead (<code>showVideoCaption: true</code> flips the default;
+      see the <a href="../../docs/guides/settings.html">Settings guide</a>).
     </p>
     <div id="gallery" class="thumb-grid"></div>
     <p id="status">Shoji not yet initialized.</p>

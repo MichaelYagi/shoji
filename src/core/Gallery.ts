@@ -43,6 +43,8 @@ const DEFAULT_LOCALE = {
   previous: 'Previous image',
   next: 'Next image',
   playVideo: 'Play video',
+  showCaption: 'Show caption',
+  hideCaption: 'Hide caption',
 };
 
 /**
@@ -103,6 +105,7 @@ export class Gallery {
   private preload = 1;
   private locale: typeof DEFAULT_LOCALE = DEFAULT_LOCALE;
   private showCounter = true;
+  private captionVisibleOnVideo = false; // DESIGN.md §2.3a
   private loop = true;
   private closable = true;
   private autoHideDelay = 5000;
@@ -307,6 +310,10 @@ export class Gallery {
     dom.closeButton.addEventListener('click', () => this.close());
     dom.prevButton.addEventListener('click', () => this.prev());
     dom.nextButton.addEventListener('click', () => this.next());
+    dom.captionToggleButton.addEventListener('click', () => {
+      this.captionVisibleOnVideo = !this.captionVisibleOnVideo;
+      this.updateCaptionVisibility();
+    });
     dom.outer.addEventListener('click', this.onOuterClick);
     dom.outer.addEventListener('pointermove', this.onActivity, { passive: true });
     dom.outer.addEventListener('pointerdown', this.onActivity, { passive: true });
@@ -321,7 +328,12 @@ export class Gallery {
     // to the shared class selector (below), not an enumerated element list,
     // so a plugin-added ctx.ui.toolbar() button (e.g. autoplay's play/pause)
     // participates automatically instead of vanishing mid-hover.
-    for (const button of [dom.closeButton, dom.prevButton, dom.nextButton]) {
+    for (const button of [
+      dom.closeButton,
+      dom.prevButton,
+      dom.nextButton,
+      dom.captionToggleButton,
+    ]) {
       this.wireControlHover(button);
     }
 
@@ -591,15 +603,19 @@ export class Gallery {
     if (!this.dom || !this.slides) return;
     const item = this.itemList[this.activeIndex];
     const noCaption = this.renderCaption(this.dom.caption, item?.caption);
-    this.dom.caption.hidden = noCaption || !this.slides.isActiveReady();
-    // A real bug: even height-capped (shoji.css), the caption's opaque
-    // background can still sit directly over a video's native control bar
-    // (same bottom-left corner) — a video that fills most of the dialog
-    // leaves little to no letterboxing gap, so even a short caption can
-    // land right on top of it. `item.video` covers both HTML5 and provider
-    // (e.g. YouTube) slides identically. See shoji.css's `.shoji-caption
-    // --video` rule for the actual click-through fix.
-    this.dom.caption.classList.toggle('shoji-caption--video', !!item?.video);
+    const isVideo = !!item?.video;
+    this.dom.caption.classList.toggle('shoji-caption--video', isVideo);
+    const hiddenByToggle = isVideo && !this.captionVisibleOnVideo;
+    this.dom.caption.hidden = noCaption || !this.slides.isActiveReady() || hiddenByToggle;
+
+    const btn = this.dom.captionToggleButton;
+    btn.hidden = !isVideo || noCaption;
+    if (!btn.hidden) {
+      btn.setAttribute('aria-pressed', String(this.captionVisibleOnVideo));
+      btn.ariaLabel = btn.title = this.captionVisibleOnVideo
+        ? this.locale.hideCaption
+        : this.locale.showCaption;
+    }
   }
 
   private renderCurrentSlide(): void {
@@ -634,6 +650,7 @@ export class Gallery {
     this.ensureLightbox();
     this.opened = true;
     this.activeIndex = index;
+    this.captionVisibleOnVideo = !!this.options.showVideoCaption;
     lockBodyScroll();
     this.renderCurrentSlide();
     this.dom!.outer.classList.add('shoji-open');

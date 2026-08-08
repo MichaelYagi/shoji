@@ -1,4 +1,4 @@
-import { CLOSE_ICON, NEXT_ICON, PREV_ICON } from './icons';
+import { CAPTION_ICON, CLOSE_ICON, NEXT_ICON, PREV_ICON } from './icons';
 
 let idCounter = 0;
 
@@ -6,6 +6,8 @@ export interface LightboxLabels {
   close: string;
   previous: string;
   next: string;
+  showCaption: string;
+  hideCaption: string;
 }
 
 export interface LightboxDom {
@@ -16,6 +18,7 @@ export interface LightboxDom {
   closeButton: HTMLButtonElement;
   prevButton: HTMLButtonElement;
   nextButton: HTMLButtonElement;
+  captionToggleButton: HTMLButtonElement; // DESIGN.md §2.3a
   /** DESIGN.md §3 — `ctx.ui.toolbar(slot, ...)` inserts into these; close lives in `right`. */
   toolbarLeft: HTMLElement;
   toolbarCenter: HTMLElement;
@@ -62,7 +65,15 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
   const toolbarRight = document.createElement('div');
   toolbarRight.className = 'shoji-toolbar-slot shoji-toolbar-right';
   const closeButton = iconButton('shoji-close', CLOSE_ICON, labels.close);
-  toolbarRight.appendChild(closeButton);
+  // Ahead of close so plugin buttons (always inserted right before close) land between the two.
+  const captionToggleButton = iconButton(
+    'shoji-toolbar-button shoji-caption-toggle',
+    CAPTION_ICON,
+    labels.showCaption,
+  );
+  captionToggleButton.setAttribute('aria-pressed', 'false');
+  captionToggleButton.hidden = true;
+  toolbarRight.append(captionToggleButton, closeButton);
 
   // The counter lives in the toolbar's own left slot (flex flow, not
   // independent absolute positioning) specifically so a plugin button
@@ -97,6 +108,7 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
     closeButton,
     prevButton,
     nextButton,
+    captionToggleButton,
     toolbarLeft,
     toolbarCenter,
     toolbarRight,

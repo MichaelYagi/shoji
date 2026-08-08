@@ -43,6 +43,12 @@ async function openVideoGallery(page: Page, caption: string): Promise<void> {
         // folder is gitignored, user-local sample media, absent in CI/a
         // fresh clone.
         items: [{ id: 'v', src: 'nonexistent.mp4', video: { provider: 'html5' }, caption }],
+        // A video slide's caption now defaults to hidden (§2.3a's separate
+        // toggle-button fix, tests/e2e/core-caption-toggle.spec.ts) — these
+        // tests are specifically about the visible-caption geometry/
+        // click-through case, so force it on rather than clicking the
+        // toggle in every single test.
+        showVideoCaption: true,
       });
       gallery.open(0);
     },
@@ -122,6 +128,7 @@ test('a rich HTML caption on a video slide keeps its own links clickable, even t
           caption: captionEl,
         },
       ],
+      showVideoCaption: true, // this test is about the visible-caption case
     });
     gallery.open(0);
   }, corePath());

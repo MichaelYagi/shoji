@@ -51,7 +51,12 @@ afterEach(() => {
 });
 
 function toggleButton(): HTMLButtonElement {
-  return document.querySelector('.shoji-toolbar-right .shoji-toolbar-button') as HTMLButtonElement;
+  // :not(.shoji-caption-toggle) excludes core's own video-caption toggle
+  // button, which now also lives in this slot (hidden outside a captioned
+  // video slide, but still a real .shoji-toolbar-button in the DOM).
+  return document.querySelector(
+    '.shoji-toolbar-right .shoji-toolbar-button:not(.shoji-caption-toggle)',
+  ) as HTMLButtonElement;
 }
 
 function outer(): HTMLElement {

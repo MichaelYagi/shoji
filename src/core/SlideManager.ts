@@ -157,19 +157,8 @@ export class SlideManager {
       if (!item || slot.assignedIndex === index) continue;
       const cached = this.cache.get(index);
       if (!cached) continue;
-      // Reparenting a live <iframe> resets it — moving it to a new parent,
-      // even within the same document, makes most browsers reload its
-      // content, silently breaking a provider video's already-wired
-      // postMessage-based player API. A real bug this fixes: reached via
-      // this cache-reuse path (the routine "stepping forward moves the
-      // preloaded +1 slot's content into the 0 slot" case), mute()/play()
-      // calls looked like they succeeded on our side but never reached the
-      // now-defunct player — confirmed the same video plays fine when
-      // landed on directly (never reparented) but not when reached this
-      // way. So a provider-video node is never moved via the cache; Phase 2
-      // below rebuilds it fresh in its new slot instead, and the orphaned
-      // old node gets torn down once the slot that physically holds it is
-      // reassigned to something else.
+      // Reparenting a live <iframe> resets it, breaking a provider video's
+      // player API — never moved via the cache; DESIGN.md §2.3 real-bug entry.
       if (cached.node.classList.contains('shoji-slide-provider-video')) continue;
       slot.assignedIndex = index;
       this.moveIn(slot, cached, index);

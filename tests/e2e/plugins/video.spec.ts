@@ -24,10 +24,16 @@ test('opens a YouTube slide and loads a real embed, replacing the spinner', asyn
   await expect(iframe).toHaveCount(1);
   await expect(iframe).toHaveAttribute('src', /youtube\.com\/embed\/jNQXAC9IVRw/);
 
-  // The caption becomes visible once the slide is genuinely ready — same
-  // isActiveReady() gate every other slide type goes through.
-  await expect(page.locator('.shoji-caption')).toBeVisible();
-  await expect(page.locator('.shoji-caption')).toHaveText(/Me at the zoo/);
+  // A video slide's caption defaults to hidden (DESIGN.md §2.3a) — the
+  // toolbar toggle reveals it. The text itself is still correct and ready
+  // the instant the slide is (same isActiveReady() gate every other slide
+  // type goes through), independent of whether it's currently shown.
+  const caption = page.locator('.shoji-caption');
+  await expect(caption).toBeHidden();
+  await expect(caption).toHaveText(/Me at the zoo/);
+
+  await page.locator('.shoji-caption-toggle').click();
+  await expect(caption).toBeVisible();
 });
 
 test('Autoplay plays the YouTube embed and waits for its own ended state, not the fixed interval', async ({

@@ -142,6 +142,138 @@ describe('Gallery — lightbox DOM', () => {
     gallery.destroy();
   });
 
+  describe('video-slide caption toggle (DESIGN.md §2.3a)', () => {
+    function captionToggleButton(): HTMLButtonElement {
+      return document.querySelector('.shoji-caption-toggle') as HTMLButtonElement;
+    }
+
+    function click(el: Element): void {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+
+    const videoItems = [
+      { id: 'photo', src: 'a.jpg', caption: 'A photo caption' },
+      {
+        id: 'video',
+        src: 'v.mp4',
+        video: { provider: 'html5' as const },
+        caption: 'A video caption',
+      },
+      { id: 'silent-video', src: 'w.mp4', video: { provider: 'html5' as const } }, // no caption at all
+    ];
+
+    it('defaults to hidden on a video slide — the caption itself hidden, the toggle button visible, aria-pressed false', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, { items: videoItems });
+
+      gallery.open(1); // the captioned video
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(true);
+      expect(captionToggleButton().hidden).toBe(false);
+      expect(captionToggleButton().getAttribute('aria-pressed')).toBe('false');
+      expect(captionToggleButton().getAttribute('aria-label')).toBe('Show caption');
+
+      gallery.destroy();
+    });
+
+    it('clicking the toggle shows the caption immediately, and again hides it — a plain synchronous flip, no animation/delay', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, { items: videoItems });
+      gallery.open(1);
+
+      click(captionToggleButton());
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
+      expect(captionToggleButton().getAttribute('aria-pressed')).toBe('true');
+      expect(captionToggleButton().getAttribute('aria-label')).toBe('Hide caption');
+
+      click(captionToggleButton());
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(true);
+      expect(captionToggleButton().getAttribute('aria-pressed')).toBe('false');
+
+      gallery.destroy();
+    });
+
+    it('showVideoCaption: true starts a video caption visible instead, toggle still works both ways', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, { items: videoItems, showVideoCaption: true });
+      gallery.open(1);
+
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
+      expect(captionToggleButton().getAttribute('aria-pressed')).toBe('true');
+
+      click(captionToggleButton());
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(true);
+
+      gallery.destroy();
+    });
+
+    it('the toggle button itself is hidden entirely on a photo slide, and on a video slide with no caption at all', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, { items: videoItems });
+
+      gallery.open(0); // photo
+      expect(captionToggleButton().hidden).toBe(true);
+
+      gallery.next(); // captioned video
+      expect(captionToggleButton().hidden).toBe(false);
+
+      gallery.next(); // video with no caption
+      expect(captionToggleButton().hidden).toBe(true);
+
+      gallery.destroy();
+    });
+
+    it('persists across slide navigation within one open session — toggling on for one video keeps it on for the next', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, {
+        items: [
+          { id: 'v1', src: 'a.mp4', video: { provider: 'html5' as const }, caption: 'First' },
+          { id: 'v2', src: 'b.mp4', video: { provider: 'html5' as const }, caption: 'Second' },
+        ],
+      });
+      gallery.open(0);
+
+      click(captionToggleButton());
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
+
+      gallery.next();
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
+      expect(document.querySelector('.shoji-caption')?.textContent).toBe('Second');
+
+      gallery.destroy();
+    });
+
+    it('resets to the configured default on close/reopen — a session preference, not a permanent one', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, { items: videoItems });
+      gallery.open(1);
+
+      click(captionToggleButton());
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
+
+      gallery.close();
+      gallery.open(1);
+      expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(true);
+      expect(captionToggleButton().getAttribute('aria-pressed')).toBe('false');
+
+      gallery.destroy();
+    });
+
+    it('honors locale overrides for the toggle labels', () => {
+      const el = document.createElement('div');
+      const gallery = new Gallery(el, {
+        items: videoItems,
+        locale: { showCaption: 'Mostrar leyenda', hideCaption: 'Ocultar leyenda' },
+      });
+      gallery.open(1);
+
+      expect(captionToggleButton().getAttribute('aria-label')).toBe('Mostrar leyenda');
+      click(captionToggleButton());
+      expect(captionToggleButton().getAttribute('aria-label')).toBe('Ocultar leyenda');
+
+      gallery.destroy();
+    });
+  });
+
   it('announces the live region text on open and navigate', () => {
     const gallery = makeGallery();
     gallery.open(1);

@@ -196,7 +196,8 @@
 }
 
 .shoji-close[hidden],
-.shoji-nav[hidden] {
+.shoji-nav[hidden],
+.shoji-toolbar-button[hidden] {
   display: none;
 }
 
