@@ -89,6 +89,34 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
+  it('shows the progress bar by default while playing a timed slide', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    expect(document.querySelector('.shoji-autoplay-progress')).not.toBeNull();
+    click(toggleButton());
+    expect(document.querySelector('.shoji-autoplay-progress')?.hasAttribute('hidden')).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('showProgress: false never mounts the progress bar at all', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { showProgress: false } });
+    gallery.open(0);
+
+    click(toggleButton());
+    vi.advanceTimersByTime(2000);
+    expect(document.querySelector('.shoji-autoplay-progress')).toBeNull();
+
+    // Purely presentational — timing is unaffected.
+    vi.advanceTimersByTime(3000);
+    expect(gallery.currentIndex).toBe(1);
+
+    gallery.destroy();
+  });
+
   it('clicking pause stops the timer — the clock advancing further does not navigate', () => {
     vi.useFakeTimers();
     const gallery = makeGallery();

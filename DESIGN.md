@@ -351,7 +351,7 @@ A "hello world" plugin is ~10 lines. That's the bar for "simple".
 
 ### 4.1 Autoplay / slideshow (`src/plugins/autoplay`)
 
-`new Shoji(el, { plugins: [Shoji.Autoplay] })` — no `autoplay: {...}` object needed for the default 5000ms interval, per §3's "every official plugin's defaults make a bare `plugins: [X]` complete" rule. A toolbar play/pause button (left slot) and a `Space` shortcut both call the same internal `toggle()`; a thin progress bar (`--shoji-progress`) tracks time-to-next-advance along the dialog's bottom edge for timed slides, hidden during video slides.
+`new Shoji(el, { plugins: [Shoji.Autoplay] })` — no `autoplay: {...}` object needed for the default 5000ms interval, per §3's "every official plugin's defaults make a bare `plugins: [X]` complete" rule. A toolbar play/pause button (left slot) and a `Space` shortcut both call the same internal `toggle()`; a thin progress bar (`--shoji-progress`) tracks time-to-next-advance along the dialog's bottom edge for timed slides, hidden during video slides. `showProgress: false` (default `true`) turns it off entirely — purely presentational, doesn't touch timing — for a host who'd rather the slideshow ran silently; when off, the bar is never even mounted into the DOM, not just visually hidden.
 
 **Ordinary (non-video) slides**: fixed `interval` ms (default 5000, `options.autoplay.interval` to override), then `gallery.next()`. `next()`'s own `loop` behavior (§2.2a) — wrap at the ends, or stop there — applies unchanged; autoplay does **not** have its own separate loop setting. If `loop: false` and autoplay's `next()` lands back on the same index (already at the last item), autoplay stops itself (button reverts to Play) instead of ticking forever with nothing to advance to.
 

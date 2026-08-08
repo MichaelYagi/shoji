@@ -35,6 +35,13 @@ function isPendingProviderVideo(media: HTMLElement | null): boolean {
   return !!provider && typeof provider.play !== 'function';
 }
 
+export interface AutoplayOptions {
+  /** Milliseconds between advances for timed (photo) slides. Default `5000`. */
+  interval?: number;
+  /** Shows the thin progress bar (`--shoji-progress`) tracking time-to-next-advance along the dialog's bottom edge, for timed slides only — never shown during video slides, whose own runtime drives advancement instead. Default `true`. Purely presentational: turning it off doesn't change any timing, only whether it's drawn. */
+  showProgress?: boolean;
+}
+
 /**
  * DESIGN.md §4-autoplay. Advances on a fixed `interval` (default 5000ms) for
  * ordinary slides; for a video slide, plays it and waits for `ended` instead
@@ -46,11 +53,12 @@ function isPendingProviderVideo(media: HTMLElement | null): boolean {
  */
 export const Autoplay: ShojiPlugin = {
   name: 'autoplay',
-  defaults: { interval: 5000 },
+  defaults: { interval: 5000, showProgress: true } satisfies AutoplayOptions,
 
   init(ctx: PluginContext): () => void {
     const { gallery } = ctx;
     const interval = Number(ctx.options.interval ?? 5000);
+    const showProgress = ctx.options.showProgress !== false;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -82,12 +90,14 @@ export const Autoplay: ShojiPlugin = {
     }
 
     function resetProgressBar(): void {
+      if (!showProgress) return;
       progress.hidden = true;
       progressBar.style.transition = 'none';
       progressBar.style.width = '0%';
     }
 
     function runProgressBar(ms: number): void {
+      if (!showProgress) return;
       progress.hidden = false;
       progressBar.style.transition = 'none';
       progressBar.style.width = '0%';
@@ -200,7 +210,7 @@ export const Autoplay: ShojiPlugin = {
 
     // 'right' — clusters immediately before the close button, per DESIGN.md §3.1.
     const removeButton = ctx.ui.toolbar('right', button);
-    const removeProgress = ctx.ui.overlay(progress);
+    const removeProgress = showProgress ? ctx.ui.overlay(progress) : null;
     const removeShortcut = ctx.ui.registerShortcut(' ', toggle);
     // Any slide change — autoplay's own next(), or the viewer manually
     // navigating mid-slideshow via arrows/buttons/goTo() — re-enters here,
@@ -225,7 +235,7 @@ export const Autoplay: ShojiPlugin = {
     return () => {
       stop();
       removeButton();
-      removeProgress();
+      removeProgress?.();
       removeShortcut();
       offSlide();
       offSlideItemLoad();

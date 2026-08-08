@@ -28,6 +28,9 @@ still include breaking changes).
   now auto-detected in selector mode.
 - `ctx.ui.registerVideoProvider(name, renderFn)` — new plugin hook for
   supplying the embed for a non-`'html5'` video provider.
+- Autoplay's `showProgress` option (default `true`) — set to `false` to
+  turn off the timed-slide progress bar entirely; purely presentational,
+  doesn't affect timing.
 
 ### Fixed
 
