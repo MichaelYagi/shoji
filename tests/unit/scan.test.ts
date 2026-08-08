@@ -101,6 +101,62 @@ describe('scanContainer', () => {
     expect(scanned[0]?.item.sources).toEqual([{ src: 'clip.mov', type: 'video/mp4' }]);
   });
 
+  describe('YouTube detection in data-shoji-video', () => {
+    it.each([
+      ['https://youtu.be/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+      ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+      ['https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s', 'dQw4w9WgXcQ'],
+      ['https://youtube.com/embed/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+      ['https://m.youtube.com/watch?v=dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+      ['https://youtube.com/shorts/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+    ])('recognizes %s -> id %s', (url, id) => {
+      const el = container(`<div data-shoji-video="${url}"></div>`);
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item).toMatchObject({
+        src: url,
+        video: { provider: 'youtube', id, url },
+      });
+      // A YouTube-provider item has no `sources` — the html5 fallback path is
+      // the only one that sets it, and this shouldn't have taken it.
+      expect(scanned[0]?.item.sources).toBeUndefined();
+    });
+
+    it('does not treat an unrelated host containing "youtube" as a match', () => {
+      const el = container(
+        `<div data-shoji-video="https://notyoutube.com/watch?v=dQw4w9WgXcQ"></div>`,
+      );
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
+    });
+
+    it('falls back to html5 for a youtube.com URL with no recognizable id', () => {
+      const el = container(`<div data-shoji-video="https://youtube.com/about"></div>`);
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
+    });
+
+    it('still picks up data-shoji-poster/caption/id on a YouTube item', () => {
+      const el = container(
+        `<div data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-poster="poster.jpg" data-shoji-caption="A song" data-shoji-id="yt-1"></div>`,
+      );
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item).toMatchObject({
+        id: 'yt-1',
+        poster: 'poster.jpg',
+        caption: 'A song',
+        video: { provider: 'youtube', id: 'dQw4w9WgXcQ' },
+      });
+    });
+  });
+
   it('skips elements with neither a source nor a video', () => {
     const el = container(`<a data-shoji-id="no-src"></a>`);
 

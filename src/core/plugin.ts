@@ -1,5 +1,5 @@
 import type { Gallery } from './Gallery';
-import type { GalleryEvents } from './types';
+import type { GalleryEvents, GalleryItem } from './types';
 import type { Unsubscribe } from './EventBus';
 
 /**
@@ -28,6 +28,21 @@ export interface ButtonSpec {
 
 export type KeySpec = string;
 
+/**
+ * DESIGN.md §4-video — supplies the embed for a non-`'html5'` provider.
+ * Build into `container`, call `onReady()` once it should show (sync or
+ * async — a spinner shows until then). `signal` fires `'abort'` once this
+ * slide is no longer wanted; a returned cleanup can't work here since setup
+ * is often async and may resolve after eviction — release everything on
+ * abort instead, checking `signal.aborted` before acting on a stale slide.
+ */
+export type VideoProviderRenderer = (
+  container: HTMLElement,
+  item: GalleryItem,
+  onReady: () => void,
+  signal: AbortSignal,
+) => void;
+
 export interface PluginContext {
   gallery: Gallery;
   options: Readonly<Record<string, unknown>>;
@@ -39,6 +54,8 @@ export interface PluginContext {
     overlay(el: HTMLElement, layer?: number): Unsubscribe;
     outer(): HTMLElement;
     registerShortcut(key: KeySpec, fn: (e: KeyboardEvent) => void): Unsubscribe;
+    /** `name` matches `VideoDescriptor['provider']` (e.g. `'youtube'`). Last registration wins; unregistering a stale one is a no-op if something else has since replaced it. */
+    registerVideoProvider(name: string, render: VideoProviderRenderer): Unsubscribe;
   };
   storage: {
     get(key: string): unknown;

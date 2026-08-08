@@ -4,6 +4,7 @@ import { Autoplay } from './plugins/autoplay';
 import { Fullscreen } from './plugins/fullscreen';
 import { Layout } from './plugins/layout';
 import { RotateFlip } from './plugins/rotateFlip';
+import { Video } from './plugins/video';
 import { Zoom } from './plugins/zoom';
 import { version } from '../package.json';
 
@@ -17,7 +18,7 @@ export type {
   VideoDescriptor,
   Unsubscribe,
 } from './core';
-export type { ShojiPlugin, PluginContext } from './core/plugin';
+export type { ShojiPlugin, PluginContext, VideoProviderRenderer } from './core/plugin';
 
 /**
  * `new Shoji(el, options)` — the UMD global (CLAUDE.md: "UMD build exposes
@@ -42,6 +43,7 @@ const Shoji = Object.assign(Gallery, {
   ActiveThumbnail,
   Fullscreen,
   RotateFlip,
+  Video,
   Zoom,
   /** `package.json`'s own version — the single source of truth, read via a named JSON import so a bundler can tree-shake away everything else in package.json (devDependencies, scripts, ...) rather than embedding the whole file. */
   version,

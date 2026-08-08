@@ -52,5 +52,11 @@
     "path": "dist/esm/plugins/zoom/index.js",
     "limit": "8 KB",
     "gzip": true
+  },
+  {
+    "name": "Video plugin (ESM entry)",
+    "path": "dist/esm/plugins/video/index.js",
+    "limit": "8 KB",
+    "gzip": true
   }
 ]

@@ -79,7 +79,7 @@ function scanImage(element: HTMLElement): GalleryItem | undefined {
   return item;
 }
 
-/** DESIGN.md §2.1 "Video detection" — html5 only; provider URLs are Video-plugin territory. */
+/** DESIGN.md §2.1 — a nested `<video>` is always html5; `data-shoji-video` checks known provider hosts first. */
 function scanVideo(element: HTMLElement): GalleryItem | undefined {
   const videoEl = element.querySelector('video');
   if (videoEl) {
@@ -99,11 +99,14 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
 
   const videoUrl = attr(element, 'data-shoji-video');
   if (videoUrl) {
-    const item: GalleryItem = {
-      src: videoUrl,
-      video: { provider: 'html5' },
-      sources: [{ src: videoUrl, type: guessVideoType(videoUrl) }],
-    };
+    const youtubeId = detectYouTubeId(videoUrl);
+    const item: GalleryItem = youtubeId
+      ? { src: videoUrl, video: { provider: 'youtube', id: youtubeId, url: videoUrl } }
+      : {
+          src: videoUrl,
+          video: { provider: 'html5' },
+          sources: [{ src: videoUrl, type: guessVideoType(videoUrl) }],
+        };
     const poster = attr(element, 'data-shoji-poster');
     if (poster) item.poster = poster;
     applyCommon(element, item, videoUrl);
@@ -111,6 +114,22 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
   }
 
   return undefined;
+}
+
+/** `youtu.be/{id}`, `watch?v=`, `/embed/`, `/shorts/` — `undefined` otherwise. */
+function detectYouTubeId(url: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url, window.location.href);
+  } catch {
+    return undefined;
+  }
+  const host = parsed.hostname.replace(/^(www|m)\./, '');
+  if (host === 'youtu.be') return parsed.pathname.slice(1).split('/')[0] || undefined;
+  if (host !== 'youtube.com') return undefined;
+  if (parsed.pathname === '/watch') return parsed.searchParams.get('v') ?? undefined;
+  const match = parsed.pathname.match(/^\/(?:embed|shorts)\/([^/?]+)/);
+  return match?.[1];
 }
 
 function guessVideoType(url: string): string {

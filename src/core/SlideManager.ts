@@ -1,11 +1,12 @@
 import { PLAY_ICON } from './icons';
+import type { VideoProviderRenderer } from './plugin';
 import type { GalleryItem } from './types';
 
 interface Slot {
   root: HTMLElement;
   media: HTMLElement;
   offset: number;
-  /** The index this slot currently wants to show, whether or not that content has arrived yet — also how a later-resolving decode (`pending` below) finds its way to the right slot. */
+  /** The index this slot currently wants to show, whether or not content has arrived — also how a later-resolving decode (`pending` below) finds the right slot. */
   assignedIndex: number | null;
   /** False from the moment a slot is (re)assigned a new index until that index's content has actually swapped in — see `isActiveReady()`. */
   ready: boolean;
@@ -23,6 +24,7 @@ export interface SlideManagerOptions {
   preload: number;
   /** Play-overlay button's label. */
   playVideoLabel: string;
+  videoProviders: Map<string, VideoProviderRenderer>;
 }
 
 /**
@@ -37,6 +39,7 @@ export class SlideManager {
   private readonly slots: Slot[];
   private readonly preload: number;
   private readonly playVideoLabel: string;
+  private readonly videoProviders: Map<string, VideoProviderRenderer>;
   private dragOffsetPx = 0;
 
   /**
@@ -51,14 +54,12 @@ export class SlideManager {
   private readonly cache = new Map<number, CacheEntry>();
 
   /**
-   * Image decodes in flight, keyed by item index rather than by whichever
-   * slot started them — a real bug this fixes: navigating before a preload
-   * decode resolved used to reassign that slot to a different target,
-   * abandoning the decode and starting a duplicate one elsewhere, so a
-   * slow preload could never actually finish, only ever restart. `reveal()`
-   * looks up which slot currently wants this index at resolve time (not
-   * the slot that started the request), so a reshuffled pool still lands
-   * it correctly, and it's a harmless no-op if nothing wants it anymore.
+   * Image decodes in flight, keyed by item index, not by whichever slot
+   * started them — a real bug this fixes: navigating before a preload
+   * decode resolved used to reassign that slot, abandoning the decode and
+   * starting a duplicate elsewhere, so a slow preload could never finish,
+   * only restart. `reveal()` looks up which slot currently wants this
+   * index at resolve time, so a reshuffled pool still lands it correctly.
    */
   private readonly pending = new Map<number, HTMLImageElement>();
 
@@ -67,6 +68,7 @@ export class SlideManager {
     this.element.className = 'shoji-slides';
     this.preload = options.preload;
     this.playVideoLabel = options.playVideoLabel;
+    this.videoProviders = options.videoProviders;
 
     const count = options.preload * 2 + 1;
     this.slots = Array.from({ length: count }, (_, i) => {
@@ -84,37 +86,31 @@ export class SlideManager {
     this.applyTransforms(null);
   }
 
-  /** The active (offset 0) slot's `.shoji-slide-media` element — not `.shoji-slide`, whose transform is already owned by pool-offset positioning. */
+  /** The active slot's `.shoji-slide-media` — not `.shoji-slide`, whose transform is owned by pool-offset positioning. */
   getActiveMedia(): HTMLElement | null {
     return this.slots.find((slot) => slot.offset === 0)?.media ?? null;
   }
 
-  /** False while the active (offset 0) slot's content is still decoding/loading — Gallery.ts uses this right after `render()` to know whether to show the loading state immediately, without waiting for `onLoad`. */
+  /** False while the active slot's content is still decoding — Gallery.ts uses this right after `render()` to show the loading state immediately, without waiting for `onLoad`. */
   isActiveReady(): boolean {
     return this.slots.find((slot) => slot.offset === 0)?.ready ?? false;
   }
 
   /**
-   * DESIGN.md §2.4 — the gesture engine's live drag-to-navigate feedback:
-   * every slot's structural `offset * 100%` position gets this same `px`
-   * added on top, so dragging left/right visually slides the whole pool
-   * together (the adjacent preloaded slot already exists at `±100%`,
-   * sliding into view is exactly what makes the pooled-slide illusion
-   * work — no new DOM, no content re-render mid-drag).
-   *
-   * `transition`: `null` during the live drag itself (1:1 with the
-   * pointer, no lag) — a real CSS transition value (`momentumEasing`) only
-   * for the settle animation after release, and *only* for that one
-   * animated call; the caller is responsible for resetting it back to
-   * `null` once the transition ends (matches the instant-jump-then-
-   * transition-away FLIP pattern `zoomTransition.ts` already uses).
+   * DESIGN.md §2.4 — live drag-to-navigate feedback: every slot's
+   * structural `offset * 100%` position gets this same `px` added on top,
+   * so dragging left/right visually slides the whole pool together (the
+   * adjacent preloaded slot already exists at `±100%`) — no new DOM, no
+   * content re-render mid-drag. `transition`: `null` during the live drag
+   * (1:1 with the pointer); a real value only for the post-release settle
+   * animation, reset back to `null` once that transition ends.
    */
   setDragOffset(px: number, transition: string | null): void {
     this.dragOffsetPx = px;
     this.applyTransforms(transition);
   }
 
-  /** The pool slot's `.shoji-slide` root at a structural offset from center (0 = active) — what the drag settle animation (§2.4) waits for `transitionend` on. */
+  /** The pool slot's `.shoji-slide` root at a structural offset — what the drag settle animation (§2.4) waits for `transitionend` on. */
   getSlotRoot(offset: number): HTMLElement | null {
     return this.slots.find((slot) => slot.offset === offset)?.root ?? null;
   }
@@ -181,8 +177,10 @@ export class SlideManager {
       releaseVideo(slot.media);
       slot.media.replaceChildren(createSpinner());
 
-      if (item.video) {
+      if (item.video?.provider === 'html5') {
         this.renderVideo(item, slot, index, onLoad);
+      } else if (item.video) {
+        this.renderProviderVideo(item, slot, index, onLoad);
       } else {
         this.ensureImageDecoding(item, index, onLoad); // no-ops if index is already being decoded elsewhere
       }
@@ -227,7 +225,7 @@ export class SlideManager {
     this.cache.set(index, entry);
   }
 
-  /** Starts decoding `item` for `index`, but only if nothing is already decoding it (see `pending`) — dedup is the whole fix. Resolves by looking up whichever slot currently wants this index, not the one active when the decode started. */
+  /** Starts decoding `item` for `index`, only if nothing already is (see `pending`). Resolves by looking up whichever slot currently wants this index, not the one active when the decode started. */
   private ensureImageDecoding(
     item: GalleryItem,
     index: number,
@@ -275,13 +273,7 @@ export class SlideManager {
     }
   }
 
-  /**
-   * Real, natively-controllable playback — not just the poster. Native
-   * `<video controls>` gives play/pause/seek/volume/fullscreen for free, no
-   * custom control UI needed. Not autoplayed and not muted: this is a
-   * deliberate click-to-play by the viewer, not a background/preview loop,
-   * so there's no browser autoplay-policy reason to mute it.
-   */
+  /** Native `<video controls>` — real playback, not just a poster. Not autoplayed/muted: a deliberate click-to-play, not a background loop. */
   private renderVideo(
     item: GalleryItem,
     slot: Slot,
@@ -325,7 +317,7 @@ export class SlideManager {
     video.addEventListener('error', reveal, { once: true });
   }
 
-  /** Tracks the video's own play/pause/ended state, not Autoplay. No opt-out flag — hide `.shoji-video-play-overlay` in CSS instead. */
+  /** Tracks the video's own play/pause/ended state. Hide `.shoji-video-play-overlay` in CSS to opt out. */
   private createVideoPlayOverlay(video: HTMLVideoElement): HTMLElement {
     const overlay = document.createElement('button');
     overlay.type = 'button';
@@ -341,6 +333,51 @@ export class SlideManager {
     video.addEventListener('pause', () => (overlay.hidden = false));
     video.addEventListener('ended', () => (overlay.hidden = false));
     return overlay;
+  }
+
+  /** DESIGN.md §4-video. Unregistered provider → same placeholder as no-source video. */
+  private renderProviderVideo(
+    item: GalleryItem,
+    slot: Slot,
+    index: number,
+    onLoad: (index: number) => void,
+  ): void {
+    const video = item.video!;
+    const renderFn =
+      video.provider === 'custom' ? video.render : this.videoProviders.get(video.provider);
+
+    if (!renderFn) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'shoji-slide-placeholder';
+      placeholder.textContent = 'Video';
+      this.swapIn(slot, placeholder, item, index);
+      onLoad(index);
+      return;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'shoji-slide-provider-video';
+    container.hidden = true;
+    const controller = new AbortController();
+    providerAbortControllers.set(container, controller);
+
+    // Unlike an <img> decode, an iframe embed only actually loads once
+    // attached to the live document — attach now, hidden behind the
+    // still-visible spinner, instead of deferring attachment until ready.
+    slot.media.appendChild(container);
+
+    let revealed = false;
+    const onReady = (): void => {
+      if (revealed || controller.signal.aborted) return;
+      revealed = true;
+      container.hidden = false;
+      slot.media.querySelector('.shoji-slide-spinner')?.remove();
+      this.applyAspect(slot, item);
+      slot.ready = true;
+      this.cache.set(index, { node: container, item });
+      onLoad(index);
+    };
+    renderFn(container, item, onReady, controller.signal);
   }
 
   destroy(): void {
@@ -364,17 +401,31 @@ function createSpinner(): HTMLElement {
   return spinner;
 }
 
-/** Pause/release a slot's previous <video>, if any — removing it from the DOM alone doesn't stop playback or free decoder resources. Scoped to a *container* (`.shoji-slide-media`); see `releaseVideoNode` for when the node in hand might be the `<video>` itself. */
+const providerAbortControllers = new WeakMap<HTMLElement, AbortController>();
+
+/** Pause/release a slot's previous <video> or provider content, if any. */
 function releaseVideo(media: HTMLElement): void {
   const video = media.querySelector('video');
   if (video) releaseVideoNode(video);
+  const provider = media.querySelector<HTMLElement>('.shoji-slide-provider-video');
+  if (provider) releaseProviderNode(provider);
 }
 
-/** Cache-eviction counterpart to `releaseVideo` — a cache entry's node is directly whatever `renderVideo`/`ensureImageDecoding` built, so it might *be* the `<video>`, not contain one. No-ops for an `<img>` or the placeholder `<div>`. */
+/** Cache-eviction counterpart — the node itself might *be* the content. */
 function releaseVideoNode(node: HTMLElement): void {
-  if (node.tagName !== 'VIDEO') return;
+  if (node.tagName !== 'VIDEO') {
+    releaseProviderNode(node);
+    return;
+  }
   const video = node as HTMLVideoElement;
   video.pause();
   video.removeAttribute('src');
   video.load();
+}
+
+function releaseProviderNode(node: HTMLElement): void {
+  const controller = providerAbortControllers.get(node);
+  if (!controller) return;
+  providerAbortControllers.delete(node);
+  controller.abort();
 }

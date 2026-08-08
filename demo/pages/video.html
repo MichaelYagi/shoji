@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Demo — Video (YouTube)</title>
+    <link rel="stylesheet" href="../demo.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="demo-nav">
+      <a href="../index.html">Zero-config</a>
+      <a href="./data-attributes.html">data-shoji-* attributes</a>
+      <a href="./custom-selector.html">Custom selector</a>
+      <a href="./dynamic-mode.html">Dynamic mode</a>
+      <a href="./infinite-scroll.html">Infinite scroll</a>
+      <a href="./layout.html">Layout (masonry)</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./video.html" aria-current="page">Video (YouTube)</a>
+    </nav>
+    <p>
+      <code>Shoji.Video</code> renders a <code>{ provider: 'youtube', id }</code> item as a real
+      YouTube embed — core's own native-<code>&lt;video&gt;</code> rendering can't play a YouTube
+      URL at all. The last tile below is a plain
+      <code>data-shoji-video="https://youtu.be/..."</code> link; Shoji's page scanning recognizes
+      the host and extracts the video ID automatically, no JS item-authoring needed. No
+      poster/thumbnail handling by Shoji itself — the grid tile's own <code>&lt;img&gt;</code> is
+      just an ordinary page thumbnail the host supplies, unrelated to the lightbox slide. Autoplay
+      is enabled too: press play (or <kbd>Space</kbd>) and it waits for the real YouTube player's
+      own <code>ended</code> state before advancing, the same video-aware slideshow behavior a
+      native <code>&lt;video&gt;</code> slide gets.
+    </p>
+    <div id="gallery" class="thumb-grid"></div>
+    <p id="status">Shoji not yet initialized.</p>
+    <script type="module" src="./video.ts"></script>
+  </body>
+</html>

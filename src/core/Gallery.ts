@@ -4,7 +4,7 @@ import { buildLightboxDom, type LightboxDom } from './dom';
 import { FocusTrap } from './FocusTrap';
 import { GestureController } from './GestureController';
 import { LiveRegion } from './LiveRegion';
-import type { ButtonSpec, PluginContext } from './plugin';
+import type { ButtonSpec, PluginContext, VideoProviderRenderer } from './plugin';
 import { DEFAULT_SELECTOR, scanContainer } from './scan';
 import { SlideManager } from './SlideManager';
 import type { DangerousHtmlCaption, GalleryEvents, GalleryItem, GalleryOptions } from './types';
@@ -125,6 +125,7 @@ export class Gallery {
   private readonly pluginStorage = new Map<string, unknown>();
   /** Backs `getActivePlugins()`. */
   private readonly activePluginNames = new Set<string>();
+  private readonly videoProviders = new Map<string, VideoProviderRenderer>();
   private zoomGate: (() => boolean) | null = null;
   private pluginCleanups: Array<() => void> = [];
 
@@ -297,6 +298,7 @@ export class Gallery {
     this.slides = new SlideManager({
       preload: this.preload,
       playVideoLabel: this.locale.playVideo,
+      videoProviders: this.videoProviders,
     });
     this.transition = new SlideTransition(this.slides);
     const dom = buildLightboxDom(this.slides.element, this.locale);
@@ -363,6 +365,7 @@ export class Gallery {
   /** DESIGN.md §3 — plugins init here, not the constructor. `requires` checks names loaded earlier; an unmet one is skipped (logged), not thrown. Cleared up front so a `reinit()` doesn't inherit names from before. */
   private initPlugins(): void {
     this.activePluginNames.clear();
+    this.videoProviders.clear();
     for (const plugin of this.options.plugins ?? []) {
       // Guards a real, easy-to-hit host mistake: `plugins: [Shoji.SomePlugin]`
       // silently becomes `plugins: [undefined]` if the referenced static
@@ -401,6 +404,12 @@ export class Gallery {
             this.shortcuts.set(key, fn);
             return () => this.shortcuts.delete(key);
           },
+          registerVideoProvider: (name, render) => {
+            this.videoProviders.set(name, render);
+            return () => {
+              if (this.videoProviders.get(name) === render) this.videoProviders.delete(name);
+            };
+          },
         },
         storage: {
           get: (key) => this.pluginStorage.get(key),
@@ -417,15 +426,11 @@ export class Gallery {
   }
 
   /**
-   * DESIGN.md §3.1 — 'right' is where plugin controls belong: each one
-   * inserts immediately before the close button (never after), so close
-   * stays the fixed rightmost element and plugins cluster directly to its
-   * left, in registration order — `plugins: [A, B, C]` reads left-to-right
-   * as A, B, C, close, since each later plugin's `initPlugins()` call runs
-   * after the earlier ones and inserts at the same "right before close"
-   * point, pushing earlier buttons further left. 'left'/'center' remain
-   * independent zones elsewhere in the toolbar for a plugin that
-   * deliberately doesn't want to sit next to close.
+   * DESIGN.md §3.1 — 'right' inserts immediately before the close button
+   * (never after), so close stays fixed rightmost and plugins cluster to
+   * its left in registration order: `plugins: [A, B, C]` reads A, B, C,
+   * close. 'left'/'center' are independent zones for a plugin that doesn't
+   * want to sit next to close.
    */
   private pluginToolbar(
     slot: 'left' | 'center' | 'right',
@@ -475,14 +480,11 @@ export class Gallery {
   }
 
   /**
-   * DESIGN.md §2.8 — opacity-only, paused only by a real *hover*
-   * (pointerenter/pointerleave). A real bug: this used to also treat a
-   * *focused* control as active indefinitely via `document.activeElement`
-   * — but a click leaves a `<button>` focused as an ordinary side effect,
-   * and nothing un-focuses it if the viewer just stops interacting
-   * afterward, permanently blocking `hideControls()`. Focus still counts
-   * as activity (`focusin` → `onActivity()`, same as a mouse move) — it
-   * just no longer blocks the eventual hide the way a real hover does.
+   * DESIGN.md §2.8 — paused only by a real *hover*. Used to also treat a
+   * *focused* control as active via `document.activeElement`, but a click
+   * leaves a `<button>` focused indefinitely, permanently blocking
+   * `hideControls()`. Focus still counts as activity (`focusin` →
+   * `onActivity()`), it just no longer blocks the eventual hide.
    */
   private isControlActive(): boolean {
     return this.hoveredControlCount > 0;
@@ -490,15 +492,10 @@ export class Gallery {
 
   /**
    * The thumbnail for `index` — what the zoom transition animates to/from,
-   * and what a plugin like `activeThumbnail` marks/scrolls-to as the active
-   * slide changes. `data-shoji-id="<item.id>"` is an explicit opt-in that
-   * works in *any* mode — primarily for dynamic mode, where Shoji has no
-   * automatic knowledge of the host's own thumbnail DOM (the layout plugin's
-   * own rendered tiles set this automatically when `item.id` is present).
-   * Selector mode needs no markup: `scannedElements[index]` is already the
-   * real matched element. Checked in that order so a marker can override
-   * selector mode's default too, e.g. to target an inner element instead of
-   * the outer wrapper.
+   * and what `activeThumbnail` marks/scrolls-to. `data-shoji-id` is an
+   * explicit opt-in that works in any mode (needed for dynamic mode, which
+   * has no scanned DOM); checked first so it can override selector mode's
+   * default `scannedElements[index]` too, e.g. to target an inner element.
    */
   getOriginElement(index: number): HTMLElement | null {
     const item = this.itemList[index];
@@ -585,13 +582,10 @@ export class Gallery {
   }
 
   /**
-   * Caption content is always kept current (so it's already correct the
-   * instant loading finishes, no separate text flash) — only `hidden` is
-   * gated on `isActiveReady()` too, on top of the existing "does this item
-   * even have a caption" check. Otherwise a caption for the *new* slide
-   * would sit there, readable, while the image/video it describes is still
-   * a spinner — same reasoning as `setSlideLoading` dimming feature
-   * buttons during the same window, just for the caption instead.
+   * Content is always kept current (correct the instant loading finishes,
+   * no text flash) — only `hidden` also gates on `isActiveReady()`, so a
+   * caption for the *new* slide can't sit there readable while the
+   * image/video it describes is still a spinner.
    */
   private updateCaptionVisibility(): void {
     if (!this.dom || !this.slides) return;
@@ -881,6 +875,7 @@ export class Gallery {
     this.shortcuts.clear();
     this.pluginStorage.clear();
     this.activePluginNames.clear();
+    this.videoProviders.clear();
     if (!this.isDynamicMode) {
       this.element.removeEventListener('click', this.onContainerClick);
     }

@@ -39,7 +39,11 @@ afterEach(() => {
 });
 
 async function makeManager(): Promise<SlideManager> {
-  const manager = new SlideManager({ preload: 0, playVideoLabel: 'Play video' });
+  const manager = new SlideManager({
+    preload: 0,
+    playVideoLabel: 'Play video',
+    videoProviders: new Map(),
+  });
   document.body.appendChild(manager.element);
   manager.render(items, 0, () => {});
   await flush();

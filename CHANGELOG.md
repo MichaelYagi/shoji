@@ -20,6 +20,14 @@ still include breaking changes).
   visible regardless of auto-hide. Presentational only: no
   `GalleryOptions` toggle, hide `.shoji-video-play-overlay` in CSS instead.
 - Dedicated docs guide pages: Transitions, Methods, Events, Settings.
+- `Shoji.Video` plugin — renders `{ video: { provider: 'youtube', id } }`
+  items as a real YouTube embed (core's native `<video>` rendering only
+  handles `provider: 'html5'`). No poster/thumbnail handling; Autoplay's
+  slideshow waits for the real player's own `ended` state, same as native
+  video. `data-shoji-video` URLs pointing at `youtube.com`/`youtu.be` are
+  now auto-detected in selector mode.
+- `ctx.ui.registerVideoProvider(name, renderFn)` — new plugin hook for
+  supplying the embed for a non-`'html5'` video provider.
 
 ### Fixed
 

@@ -247,6 +247,27 @@
   object-fit: contain;
 }
 
+/* DESIGN.md §4-video — a provider's embed (an <iframe>, typically) has no
+   natural size Shoji can measure the way a decoded image/video does, so
+   this just fills whatever box it's given; supply item.width/height for a
+   correctly-shaped box (applyAspect() sets aspect-ratio on the slide-media
+   container itself from those), same as any other slide. */
+.shoji-slide-provider-video {
+  width: 100%;
+  height: 100%;
+}
+
+.shoji-slide-provider-video[hidden] {
+  display: none;
+}
+
+.shoji-slide-provider-video iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 /* A paused video's own play affordance — native browser styling for this
    varies too much to rely on alone (some show a big centered play icon,
    some don't). Faint/translucent, same visual language as the toolbar's

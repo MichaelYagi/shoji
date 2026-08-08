@@ -148,6 +148,13 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
     &lt;source src="clip.mp4" type="video/mp4"&gt;
   &lt;/video&gt;
 &lt;/a&gt;</code></pre>
+    <p>
+      A <code>data-shoji-video</code> URL pointing at YouTube is recognized too —
+      <code>&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ"&gt;</code> becomes a
+      <code>{ provider: 'youtube', id }</code> item automatically; anything else falls back to a
+      plain HTML5 source. Rendering it needs the <a href="./plugins.html">Video plugin</a>
+      (<code>Shoji.Video</code>) — core only detects the provider, it doesn't embed one.
+    </p>
 
     <h2>GalleryItem fields</h2>
     <p>

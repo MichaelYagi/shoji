@@ -37,14 +37,24 @@ export interface MediaSource {
 }
 
 /**
- * Only `'html5'` is produced by core's DOM scanning today (§2.1). The
- * provider variants exist so the Video plugin (§4, M2) has a stable shape
- * to target — provider URL parsing/ID extraction lives there, not in core.
+ * `'youtube'` is detected by core's DOM scanning too (§2.1) — cheap,
+ * dependency-free URL parsing, not the provider's SDK. *Rendering* any
+ * non-`'html5'` provider is a plugin's job (§4-video), via
+ * `ctx.ui.registerVideoProvider()` or `'custom'`'s own `render`.
  */
 export type VideoDescriptor =
   | { provider: 'html5' }
   | { provider: 'youtube' | 'vimeo' | 'wistia'; id: string; url?: string }
-  | { provider: 'custom'; render: (el: HTMLElement, item: GalleryItem) => void | (() => void) };
+  | {
+      provider: 'custom';
+      /** Same contract as `plugin.ts`'s `VideoProviderRenderer` — see its doc comment. */
+      render: (
+        el: HTMLElement,
+        item: GalleryItem,
+        onReady: () => void,
+        signal: AbortSignal,
+      ) => void;
+    };
 
 export interface GalleryOptions {
   /** DOM selector for gallery items when not using dynamic mode. */

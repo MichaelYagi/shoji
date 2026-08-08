@@ -3,6 +3,31 @@ import { PAUSE_ICON, PLAY_ICON } from './icons';
 import './autoplay.css';
 
 /**
+ * A native `<video>` or a `.shoji-slide-provider-video` container a video
+ * provider plugin (§4-video) has augmented with the same shape — Autoplay
+ * never needs to know which. `play()`'s return type is technically a lie
+ * for the provider case (that `.play` is a synchronous fire-and-forget, no
+ * `HTMLVideoElement.play()`-style promise) — harmless, `enterSlide()`'s own
+ * `typeof playResult.catch === 'function'` guard already treats a
+ * non-promise `play()` result as "nothing to await," same as `undefined`.
+ */
+type PlayableMedia = Pick<
+  HTMLVideoElement,
+  'play' | 'pause' | 'paused' | 'ended' | 'addEventListener' | 'removeEventListener'
+>;
+
+/** `.shoji-slide-provider-video` only counts if it's actually been wired up as playable (§4-video's `wirePlayableContract`) — a provider still mid-async-setup, or one that never opted into Autoplay sync at all, isn't. */
+function findPlayable(media: HTMLElement | null): PlayableMedia | null {
+  const video = media?.querySelector('video');
+  if (video) return video;
+  const provider = media?.querySelector<HTMLElement & Partial<PlayableMedia>>(
+    '.shoji-slide-provider-video',
+  );
+  if (provider && typeof provider.play === 'function') return provider as PlayableMedia;
+  return null;
+}
+
+/**
  * DESIGN.md §4-autoplay. Advances on a fixed `interval` (default 5000ms) for
  * ordinary slides; for a video slide, plays it and waits for `ended` instead
  * — the interval never applies to video. A manual pause on that video pauses
@@ -24,7 +49,7 @@ export const Autoplay: ShojiPlugin = {
 
     let playing = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let currentVideo: HTMLVideoElement | null = null;
+    let currentVideo: PlayableMedia | null = null;
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -94,7 +119,7 @@ export const Autoplay: ShojiPlugin = {
       if (!playing) return;
 
       const media = gallery.getActiveMedia();
-      const video = media?.querySelector('video') ?? null;
+      const video = findPlayable(media);
       if (video) {
         currentVideo = video;
         video.addEventListener('ended', onVideoEnded);

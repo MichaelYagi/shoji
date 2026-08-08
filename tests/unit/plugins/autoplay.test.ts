@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../../src/core';
+import type { PluginContext } from '../../../src/core/plugin';
 import { Autoplay } from '../../../src/plugins/autoplay';
 
 beforeEach(() => {
@@ -318,6 +319,102 @@ describe('Autoplay — video-aware behavior', () => {
 
     expect(HTMLVideoElement.prototype.pause).toHaveBeenCalledTimes(1);
 
+    gallery.destroy();
+  });
+});
+
+describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
+  // A minimal test-only stand-in for the real Video plugin — registers a
+  // 'youtube' renderer that wires up the same play/pause/paused/ended
+  // contract youtube.ts's wirePlayableContract does, without any of the
+  // real IFrame API/network involved. Exercises Autoplay's own
+  // findPlayable() fallback in isolation.
+  function fakeVideoProviderPlugin() {
+    return {
+      name: 'fakeVideoProvider',
+      init: (ctx: PluginContext) =>
+        ctx.ui.registerVideoProvider(
+          'youtube',
+          (container: HTMLElement, _item, onReady: () => void) => {
+            const playable = container as HTMLElement & {
+              play: () => void;
+              pause: () => void;
+              paused: boolean;
+              ended: boolean;
+            };
+            playable.paused = true;
+            playable.ended = false;
+            playable.play = () => {
+              playable.paused = false;
+              playable.dispatchEvent(new Event('play'));
+            };
+            playable.pause = () => {
+              playable.paused = true;
+              playable.dispatchEvent(new Event('pause'));
+            };
+            onReady();
+          },
+        ),
+    };
+  }
+
+  const videoItems = [
+    { id: 'a', src: 'a.jpg' },
+    { id: 'yt', src: 'https://youtu.be/x', video: { provider: 'youtube' as const, id: 'x' } },
+    { id: 'd', src: 'd.jpg' },
+  ];
+
+  function makeProviderGallery() {
+    const el = document.createElement('div');
+    return new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, fakeVideoProviderPlugin()],
+      preload: 0,
+    });
+  }
+
+  function providerContainer(): (HTMLElement & { paused?: boolean; ended?: boolean }) | null {
+    return document.querySelector('.shoji-slide-provider-video');
+  }
+
+  it('arriving at a provider-video slide plays it instead of starting the fixed-interval timer', () => {
+    vi.useFakeTimers();
+    const gallery = makeProviderGallery();
+    gallery.open(1); // the YouTube slide directly
+
+    click(toggleButton());
+    const container = providerContainer()!;
+    expect(container.paused).toBe(false); // our fake play() flips it via the 'play' event
+
+    vi.advanceTimersByTime(5000); // default interval must NOT apply
+    expect(gallery.currentIndex).toBe(1); // still on the video slide
+
+    gallery.destroy();
+  });
+
+  it("the provider container's own 'ended' event advances to the next slide", () => {
+    vi.useFakeTimers();
+    const gallery = makeProviderGallery();
+    gallery.open(1);
+    click(toggleButton());
+
+    providerContainer()!.dispatchEvent(new Event('ended'));
+
+    expect(gallery.currentIndex).toBe(2);
+    gallery.destroy();
+  });
+
+  it('a manual pause on the provider container pauses the whole slideshow, same as native video', () => {
+    vi.useFakeTimers();
+    const gallery = makeProviderGallery();
+    gallery.open(1);
+    click(toggleButton());
+
+    const container = providerContainer()!;
+    container.ended = false;
+    container.dispatchEvent(new Event('pause'));
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
     gallery.destroy();
   });
 });
