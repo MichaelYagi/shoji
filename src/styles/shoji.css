@@ -34,6 +34,14 @@
 
   --shoji-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --shoji-duration: 300ms;
+  /* Caps how tall the caption box can grow before it scrolls internally —
+     an unbounded caption on a long string would otherwise creep up over a
+     video slide's native control bar underneath it (bottom-left, same
+     corner), silently swallowing scrub/volume/fullscreen clicks with no
+     way to reach them. `min()` also bounds it on a short/wide dialog
+     (mobile landscape), where a `rem`-only cap could still eat most of
+     the available height. */
+  --shoji-caption-max-height: min(8rem, 30%);
   /* DESIGN.md §2.4 — the gesture engine's own documented default easing for
      drag-to-navigate/drag-to-close settle animations specifically (a snap
      tuned for "released mid-motion," distinct from --shoji-easing's
@@ -370,6 +378,9 @@
   z-index: var(--shoji-z-toolbar);
   width: fit-content;
   max-width: calc(100% - 2 * var(--shoji-spacing-md));
+  max-height: var(--shoji-caption-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--shoji-spacing-sm) var(--shoji-spacing-md);
   border-radius: 8px;
   background: var(--shoji-color-toolbar-bg);

@@ -42,6 +42,11 @@ still include breaking changes).
   briefly oversized on a fresh open with nothing decoded yet (e.g. a hard
   refresh, opening the first slide) — it was being mistaken for the real
   photo and used as the animation's target size.
+- A very long caption on a video slide could grow tall enough to cover
+  the native `<video>` control bar underneath it, leaving no way to
+  scrub/adjust volume/go fullscreen. The caption box is now height-capped
+  (`--shoji-caption-max-height`) and scrolls internally instead of
+  growing without bound.
 
 ## [0.1.0-alpha.2] - 2026-08-07
 
