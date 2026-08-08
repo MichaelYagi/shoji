@@ -373,6 +373,42 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     });
   }
 
+  // Unlike fakeVideoProviderPlugin above (which wires up synchronously —
+  // matching a provider that's already warm), this one defers wiring until
+  // the test calls the captured trigger — matching a real provider's async
+  // setup (e.g. loading the YouTube IFrame API cold).
+  function delayedVideoProviderPlugin(onRegister: (triggerReady: () => void) => void) {
+    return {
+      name: 'delayedVideoProvider',
+      init: (ctx: PluginContext) =>
+        ctx.ui.registerVideoProvider(
+          'youtube',
+          (container: HTMLElement, _item, onReady: () => void) => {
+            const playable = container as HTMLElement & {
+              play: () => void;
+              pause: () => void;
+              paused: boolean;
+              ended: boolean;
+            };
+            onRegister(() => {
+              playable.paused = true;
+              playable.ended = false;
+              playable.play = () => {
+                playable.paused = false;
+                playable.dispatchEvent(new Event('play'));
+              };
+              playable.pause = () => {
+                playable.paused = true;
+                playable.dispatchEvent(new Event('pause'));
+              };
+              onReady();
+            });
+            // deliberately does not call onReady() here
+          },
+        ),
+    };
+  }
+
   function providerContainer(): (HTMLElement & { paused?: boolean; ended?: boolean }) | null {
     return document.querySelector('.shoji-slide-provider-video');
   }
@@ -415,6 +451,56 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     container.dispatchEvent(new Event('pause'));
 
     expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
+    gallery.destroy();
+  });
+
+  it('regression: a provider video still mid-setup when the slideshow arrives gets played once it becomes ready, instead of being silently treated as an ordinary timed slide', () => {
+    // The real bug this fixes: a YouTube slide's container is attached
+    // immediately, but .play isn't wired until the (async) IFrame API
+    // finishes loading — findPlayable() alone can't tell "no video here"
+    // apart from "video here, not ready yet" at the moment afterSlide
+    // fires, and used to just fall through to the fixed-interval timer,
+    // silently never playing the video at all.
+    vi.useFakeTimers();
+    let triggerReady: (() => void) | null = null;
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, delayedVideoProviderPlugin((fn) => (triggerReady = fn))],
+      preload: 0,
+    });
+
+    gallery.open(1); // the YouTube slide directly
+    click(toggleButton());
+
+    const container = providerContainer()!;
+    expect(typeof (container as unknown as { play?: unknown }).play).toBe('undefined');
+
+    vi.advanceTimersByTime(2000); // well before the 5000ms interval elapses
+    triggerReady!(); // the provider's async setup finally completes
+
+    expect(container.paused).toBe(false); // played automatically, not left sitting there
+    vi.advanceTimersByTime(5000); // the interval must not fire and skip past it now that it's playing
+    expect(gallery.currentIndex).toBe(1); // still on the video slide
+
+    gallery.destroy();
+  });
+
+  it('a provider video that never becomes ready does not stall the slideshow forever — the fallback timer still advances', () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, delayedVideoProviderPlugin(() => {})], // triggerReady never called
+      preload: 0,
+    });
+
+    gallery.open(1);
+    click(toggleButton());
+
+    vi.advanceTimersByTime(5000); // default interval
+
+    expect(gallery.currentIndex).toBe(2); // moved on instead of stalling forever
     gallery.destroy();
   });
 });

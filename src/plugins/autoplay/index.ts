@@ -27,6 +27,14 @@ function findPlayable(media: HTMLElement | null): PlayableMedia | null {
   return null;
 }
 
+/** A provider container is attached to the DOM immediately (§4-video), well before its async setup (loading an SDK, constructing a player) finishes wiring `.play` — this is what tells `enterSlide()` "there's a video here, it's just not playable yet" apart from "no video at all," so it doesn't mistreat a still-loading video as an ordinary timed slide. */
+function isPendingProviderVideo(media: HTMLElement | null): boolean {
+  const provider = media?.querySelector<HTMLElement & Partial<PlayableMedia>>(
+    '.shoji-slide-provider-video',
+  );
+  return !!provider && typeof provider.play !== 'function';
+}
+
 /**
  * DESIGN.md §4-autoplay. Advances on a fixed `interval` (default 5000ms) for
  * ordinary slides; for a video slide, plays it and waits for `ended` instead
@@ -50,6 +58,7 @@ export const Autoplay: ShojiPlugin = {
     let playing = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let currentVideo: PlayableMedia | null = null;
+    let awaitingProviderVideo = false;
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -116,6 +125,7 @@ export const Autoplay: ShojiPlugin = {
       clearTimer();
       detachVideo();
       resetProgressBar();
+      awaitingProviderVideo = false;
       if (!playing) return;
 
       const media = gallery.getActiveMedia();
@@ -136,6 +146,12 @@ export const Autoplay: ShojiPlugin = {
         return;
       }
 
+      // A provider video (e.g. YouTube) still mid-setup isn't an ordinary
+      // slide either — the slideItemLoad listener below re-enters once it's
+      // actually playable. This timer is a fallback in case that never
+      // happens (network failure, blocked, ...), so the slideshow can't
+      // stall on it forever.
+      awaitingProviderVideo = isPendingProviderVideo(media);
       runProgressBar(interval);
       timer = setTimeout(advance, interval);
     }
@@ -186,6 +202,15 @@ export const Autoplay: ShojiPlugin = {
     const offSlide = ctx.on('afterSlide', () => {
       if (playing) enterSlide();
     });
+    // A provider video (§4-video) that was still mid-setup when enterSlide()
+    // last ran — see awaitingProviderVideo there — becomes playable some
+    // time after afterSlide already fired and gave up on it for this pass.
+    // Re-enter once it's genuinely ready, scoped to the still-active index
+    // so a slide the viewer has already moved past doesn't retroactively
+    // hijack the timer.
+    const offSlideItemLoad = ctx.on('slideItemLoad', ({ index }) => {
+      if (playing && awaitingProviderVideo && index === gallery.currentIndex) enterSlide();
+    });
     const offClose = ctx.on('close', () => stop());
 
     return () => {
@@ -194,6 +219,7 @@ export const Autoplay: ShojiPlugin = {
       removeProgress();
       removeShortcut();
       offSlide();
+      offSlideItemLoad();
       offClose();
     };
   },
