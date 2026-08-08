@@ -116,3 +116,27 @@ test('navigating to the next slide resets zoom on the new slide', async ({ page 
   await expect(page.locator('.shoji-counter')).toHaveText('2 / 4');
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
+
+test('zoom-in button eases the transform instead of jumping, and pinch-driven scale does not', async ({
+  page,
+}) => {
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  // Sampled shortly after the click, still mid-animation, then again once it
+  // must have settled — an instant jump would already show the final value
+  // on the first sample; an eased transition shows a different, in-between
+  // computed transform first.
+  const img = await activeImgHandle(page);
+  const mid = await img.evaluate((el) => getComputedStyle(el).transform);
+  await page.waitForTimeout(500);
+  const settled = await img.evaluate((el) => getComputedStyle(el).transform);
+  expect(mid).not.toBe(settled);
+
+  // The transition is cleared afterward, not left permanently set — a
+  // dblclick reset (also a discrete jump) still gets its own transition,
+  // proving the plugin re-applies it per action rather than leaking state.
+  await expect.poll(() => img.evaluate((el) => el.style.transition)).toBe('');
+  await img.dblclick();
+  await expect.poll(() => img.evaluate((el) => el.style.transition)).toContain('transform');
+});

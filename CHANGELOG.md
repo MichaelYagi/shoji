@@ -7,6 +7,27 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- `gallery.isOpen`/`isDestroyed`/`controlsHidden` getters and
+  `gallery.getActivePlugins()` — instance introspection that was tracked
+  internally already but had no public read path.
+- `Shoji.version` — static, sourced from `package.json` so it can't drift
+  from the actual release.
+- A faint, semi-transparent play-button overlay on paused HTML5 video
+  slides (core baseline, not a plugin) — tracks the `<video>`'s own
+  `play`/`pause`/`ended` state, doubles as a click target, always stays
+  visible regardless of auto-hide. Presentational only: no
+  `GalleryOptions` toggle, hide `.shoji-video-play-overlay` in CSS instead.
+- Dedicated docs guide pages: Transitions, Methods, Events, Settings.
+
+### Fixed
+
+- Zoom plugin's toolbar buttons, double-click/double-tap, and "Actual
+  size" now ease into their new scale/pan instead of jumping instantly —
+  pinch, pan-drag, and ctrl+wheel are left untransitioned since they
+  already track the input frame by frame.
+
 ## [0.1.0-alpha.2] - 2026-08-07
 
 ### Added

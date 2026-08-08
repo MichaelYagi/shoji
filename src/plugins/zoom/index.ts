@@ -131,12 +131,22 @@ export const Zoom: ShojiPlugin = {
       ctx.emit('zoomChange', { index: gallery.currentIndex, scale });
     }
 
-    /** Shared by every zoom-in/out entry point (pinch, wheel, buttons, double-tap, actual-size) — anchors on (anchorX, anchorY), clamps scale to [1, ceiling] and pan to the container bounds. `ceiling` defaults to maxScale; actual-size passes its own (possibly larger) target so it isn't capped by the gesture-zoom limit. Deferred via `whenSettled` — see its doc comment — so a zoom action landing right as the lightbox opens doesn't measure mid-animation. */
+    /** Wraps a transform-setting `run` in a transition, for discrete jumps (buttons, double-tap, actual-size) — never for pinch/pan/wheel, which already track the input 1:1 and would visibly lag behind it under a transition. Cleared afterward so it doesn't linger onto the next, possibly-continuous, zoom action. */
+    function withTransition(img: HTMLImageElement, run: () => void): void {
+      img.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+      run();
+      waitForTransitionEnd(img, () => {
+        img.style.transition = '';
+      });
+    }
+
+    /** Shared by every zoom-in/out entry point (pinch, wheel, buttons, double-tap, actual-size) — anchors on (anchorX, anchorY), clamps scale to [1, ceiling] and pan to the container bounds. `ceiling` defaults to maxScale; actual-size passes its own (possibly larger) target so it isn't capped by the gesture-zoom limit. Deferred via `whenSettled` — see its doc comment — so a zoom action landing right as the lightbox opens doesn't measure mid-animation. `animate` — see `withTransition`. */
     function zoomTo(
       targetScale: number,
       anchorX: number,
       anchorY: number,
       ceiling = maxScale,
+      animate = false,
     ): void {
       whenSettled(() => {
         const img = getImg();
@@ -145,21 +155,26 @@ export const Zoom: ShojiPlugin = {
         pan = zoomTowardPoint(natural!, pan, scale, clampedScale, anchorX, anchorY);
         scale = clampedScale;
         pan = clampPan(natural!, container!, scale, pan);
-        apply();
+        if (animate) withTransition(img, apply);
+        else apply();
         emitChange();
       });
     }
 
-    function reset(): void {
+    function reset(animate = false): void {
       scale = 1;
       pan = { tx: 0, ty: 0 };
       natural = null;
       container = null;
       const img = getImg();
       if (img) {
-        img.style.transform = '';
-        img.style.transformOrigin = '';
-        img.classList.remove('shoji-zoomed');
+        const clear = (): void => {
+          img.style.transform = '';
+          img.style.transformOrigin = '';
+          img.classList.remove('shoji-zoomed');
+        };
+        if (animate) withTransition(img, clear);
+        else clear();
       }
     }
 
@@ -169,8 +184,8 @@ export const Zoom: ShojiPlugin = {
     }
 
     function toggleZoom(x: number, y: number): void {
-      if (scale > ZOOM_EPSILON) reset();
-      else zoomTo(doubleTapScale, x, y);
+      if (scale > ZOOM_EPSILON) reset(true);
+      else zoomTo(doubleTapScale, x, y, maxScale, true);
     }
 
     // --- pinch (relayed by core, §2.4 — no built-in effect until this plugin exists) ---
@@ -248,12 +263,12 @@ export const Zoom: ShojiPlugin = {
 
     zoomInBtn.addEventListener('click', () => {
       const { x, y } = centerAnchor();
-      zoomTo(scale * buttonStep, x, y);
+      zoomTo(scale * buttonStep, x, y, maxScale, true);
     });
     zoomOutBtn.addEventListener('click', () => {
       const { x, y } = centerAnchor();
-      if (scale / buttonStep <= ZOOM_EPSILON) reset();
-      else zoomTo(scale / buttonStep, x, y);
+      if (scale / buttonStep <= ZOOM_EPSILON) reset(true);
+      else zoomTo(scale / buttonStep, x, y, maxScale, true);
     });
     actualSizeBtn.addEventListener('click', () => {
       // Reads natural.width directly (unlike every other entry point, which
@@ -264,12 +279,12 @@ export const Zoom: ShojiPlugin = {
         if (!img || !img.naturalWidth) return;
         if (!ensureNatural(img)) return;
         if (scale > ZOOM_EPSILON) {
-          reset();
+          reset(true);
           return;
         }
         const targetScale = img.naturalWidth / natural!.width;
         const { x, y } = centerAnchor();
-        zoomTo(targetScale, x, y, targetScale); // ceiling = targetScale — bypasses maxScale deliberately
+        zoomTo(targetScale, x, y, targetScale, true); // ceiling = targetScale — bypasses maxScale deliberately
       });
     });
 
@@ -296,7 +311,7 @@ export const Zoom: ShojiPlugin = {
     // from the image's current (zoomed, often partly off-screen) rect
     // instead of its real thumbnail-relative size, landing "closed" at a
     // seemingly random spot instead of visibly shrinking into the thumbnail.
-    const offBeforeClose = ctx.on('beforeClose', reset);
+    const offBeforeClose = ctx.on('beforeClose', () => reset());
     const unregisterGate = gallery.registerZoomGate(() => scale > ZOOM_EPSILON);
     markEnabled(); // covers the (unusual but possible) case of the gallery already being open when this plugin initializes
 

@@ -377,6 +377,104 @@ describe('Zoom — events', () => {
   });
 });
 
+describe("Zoom — transition (discrete jumps animate, continuous gestures don't)", () => {
+  it('zoom-in button applies a transform transition', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    click(button('Zoom in'));
+
+    expect(activeImg().style.transition).toContain('transform');
+    gallery.destroy();
+  });
+
+  it('zoom-out button back to neutral applies a transition too', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    click(button('Zoom in'));
+
+    click(button('Zoom out'));
+
+    expect(activeImg().style.transition).toContain('transform');
+    gallery.destroy();
+  });
+
+  it('double-tap applies a transition', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    doubleTapAt(150, 150);
+
+    expect(activeImg().style.transition).toContain('transform');
+    gallery.destroy();
+  });
+
+  it('actual-size applies a transition', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    Object.defineProperty(activeImg(), 'naturalWidth', { value: 600, configurable: true });
+
+    click(button('Actual size'));
+
+    expect(activeImg().style.transition).toContain('transform');
+    gallery.destroy();
+  });
+
+  it('pinch does not apply a transition — it must track the fingers 1:1, not lag behind them', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    const d = dialog();
+
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, pointerId: 1, isPrimary: true });
+    firePointer(d, 'pointerdown', { clientX: 100, clientY: 0, pointerId: 2, isPrimary: false });
+    firePointer(d, 'pointermove', { clientX: 200, clientY: 0, pointerId: 2 });
+
+    expect(activeImg().style.transition).toBe('');
+    gallery.destroy();
+  });
+
+  it("ctrl+wheel does not apply a transition — stays instant, per-tick steps shouldn't stack up a transition each", async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    dialog().dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -100,
+        ctrlKey: true,
+        clientX: 150,
+        clientY: 150,
+        cancelable: true,
+      }),
+    );
+
+    expect(activeImg().style.transition).toBe('');
+    gallery.destroy();
+  });
+
+  it('pan while zoomed does not apply a transition', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    doubleTapAt(150, 150);
+    // The double-tap itself is a discrete jump and legitimately sets one —
+    // clear it so the pan assertion below isn't riding on that leftover.
+    activeImg().style.transition = '';
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 150, clientY: 150 });
+    firePointer(d, 'pointermove', { clientX: 130, clientY: 150 });
+
+    expect(activeImg().style.transition).toBe('');
+    gallery.destroy();
+  });
+});
+
 describe('Zoom — cleanup', () => {
   it('destroy() removes all three toolbar buttons', () => {
     const gallery = makeGallery();
