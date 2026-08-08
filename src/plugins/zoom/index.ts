@@ -131,12 +131,13 @@ export const Zoom: ShojiPlugin = {
       ctx.emit('zoomChange', { index: gallery.currentIndex, scale });
     }
 
-    /** Wraps a transform-setting `run` in a transition, for discrete jumps (buttons, double-tap, actual-size) — never for pinch/pan/wheel, which already track the input 1:1 and would visibly lag behind it under a transition. Cleared afterward so it doesn't linger onto the next, possibly-continuous, zoom action. */
-    function withTransition(img: HTMLImageElement, run: () => void): void {
+    /** Wraps a transform-setting `run` in a transition, for discrete jumps (buttons, double-tap, actual-size) — never for pinch/pan/wheel, which already track the input 1:1 and would visibly lag behind it under a transition. `afterEnd`, if given, runs once the transition actually completes, not before — `reset()` uses it to clear `transformOrigin` only once it's safe to (see its own comment for why clearing it any earlier is a real bug). The transition itself is always cleared afterward, so it doesn't linger onto the next, possibly-continuous, zoom action. */
+    function withTransition(img: HTMLImageElement, run: () => void, afterEnd?: () => void): void {
       img.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
       run();
       waitForTransitionEnd(img, () => {
         img.style.transition = '';
+        afterEnd?.();
       });
     }
 
@@ -167,14 +168,24 @@ export const Zoom: ShojiPlugin = {
       natural = null;
       container = null;
       const img = getImg();
-      if (img) {
-        const clear = (): void => {
-          img.style.transform = '';
+      if (!img) return;
+      const clearTransform = (): void => {
+        img.style.transform = '';
+        img.classList.remove('shoji-zoomed');
+      };
+      if (animate) {
+        // transform-origin has to stay put (0 0) for the duration of the
+        // transition — clearing it to the browser default (center) in the
+        // same tick as starting the transition snaps the scale anchor
+        // instantly, which visibly jumped the image before it eased down
+        // to neutral. Deferred to `afterEnd`, once the transition is done
+        // and transform-origin no longer affects anything visible.
+        withTransition(img, clearTransform, () => {
           img.style.transformOrigin = '';
-          img.classList.remove('shoji-zoomed');
-        };
-        if (animate) withTransition(img, clear);
-        else clear();
+        });
+      } else {
+        clearTransform();
+        img.style.transformOrigin = '';
       }
     }
 

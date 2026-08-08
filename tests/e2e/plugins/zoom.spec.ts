@@ -140,3 +140,43 @@ test('zoom-in button eases the transform instead of jumping, and pinch-driven sc
   await img.dblclick();
   await expect.poll(() => img.evaluate((el) => el.style.transition)).toContain('transform');
 });
+
+test('regression: zoom-out back to neutral keeps transform-origin anchored until the transition genuinely ends, instead of snapping it early and jumping the image', async ({
+  page,
+}) => {
+  await openLightbox(page);
+  const zoomIn = page.locator('.shoji-toolbar-button[aria-label="Zoom in"]');
+  const zoomOut = page.locator('.shoji-toolbar-button[aria-label="Zoom out"]');
+
+  await zoomIn.click(); // scale 1.5
+  const img = await activeImgHandle(page);
+  await expect.poll(() => img.evaluate((el) => el.style.transformOrigin)).toBe('0px 0px');
+
+  // Click and read back in one synchronous round-trip, not two separate
+  // ones — under a busy/parallel test run, a gap between them is enough for
+  // the transition's own end-of-animation cleanup (--shoji-duration + a
+  // 100ms fallback) to have already fired, making this check meaningless.
+  const zoomOutHandle = await zoomOut.elementHandle();
+  const stateRightAfterClick = await page.evaluate(
+    ([buttonEl, imgEl]) => {
+      (buttonEl as HTMLButtonElement).click();
+      return {
+        transformOrigin: (imgEl as HTMLElement).style.transformOrigin,
+        transition: (imgEl as HTMLElement).style.transition,
+      };
+    },
+    [zoomOutHandle, img] as const,
+  );
+
+  // With the old bug, transform-origin was cleared to the browser default
+  // (center) in the same synchronous tick the transition started — the
+  // anchor snapped instantly, visibly displacing the scaled image before it
+  // ever started easing down. It must stay put for the transition's whole
+  // duration and only clear once transitionend genuinely fires.
+  expect(stateRightAfterClick.transformOrigin).toBe('0px 0px');
+  expect(stateRightAfterClick.transition).toContain('transform');
+
+  await expect.poll(() => img.evaluate((el) => el.style.transformOrigin)).toBe('');
+  await expect.poll(() => img.evaluate((el) => el.style.transition)).toBe('');
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+});

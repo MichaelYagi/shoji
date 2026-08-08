@@ -401,6 +401,29 @@ describe("Zoom — transition (discrete jumps animate, continuous gestures don't
     gallery.destroy();
   });
 
+  it('regression: zoom-out-to-neutral keeps transform-origin anchored until the transition actually ends, instead of snapping it early and jumping the image', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    click(button('Zoom in'));
+    const img = activeImg();
+    expect(img.style.transformOrigin).toBe('0 0');
+
+    click(button('Zoom out')); // scale 1.5 / buttonStep 1.5 === 1 -> the reset(true) branch
+
+    // Still mid-transition: the anchor must not have moved yet, or the
+    // scaled image would visibly snap to a new position before easing.
+    expect(img.style.transformOrigin).toBe('0 0');
+    expect(img.style.transition).toContain('transform');
+
+    fireTransitionEnd(img);
+
+    // Only once the transition genuinely finished is it safe to clear.
+    expect(img.style.transformOrigin).toBe('');
+    expect(img.style.transition).toBe('');
+    gallery.destroy();
+  });
+
   it('double-tap applies a transition', async () => {
     const gallery = makeGallery();
     gallery.open(0);
