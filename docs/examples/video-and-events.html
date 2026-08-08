@@ -50,6 +50,9 @@
           video: { provider: 'html5' },
           sources: [{ src: 'clip.mp4', type: 'video/mp4' }],
           poster: svgDataUri('Video (replace src)', '#8e44ad'),
+          // Hidden by default on a video slide — click the toolbar's
+          // caption-toggle button to reveal it (GalleryOptions.showVideoCaption
+          // flips the default; see the Settings guide).
           caption: 'Sample video — replace clip.mp4 with a real file',
         },
       ];

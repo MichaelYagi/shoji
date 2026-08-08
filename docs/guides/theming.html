@@ -149,8 +149,24 @@
           <td><code>--shoji-focus-ring</code></td>
           <td><code>2px solid var(--shoji-color-accent)</code></td>
         </tr>
+        <tr>
+          <td><code>--shoji-caption-max-height</code></td>
+          <td><code>min(8rem, 30%)</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-provider-video-top-inset</code></td>
+          <td><code>calc(44px + 2 * var(--shoji-spacing-sm))</code></td>
+        </tr>
       </tbody>
     </table>
+    <p>
+      <code>--shoji-caption-max-height</code> caps how tall a caption can grow before it scrolls
+      internally, so a long one can't cover a video slide's native controls.
+      <code>--shoji-provider-video-top-inset</code> reserves space at the top of a provider embed
+      (YouTube etc.) matching the toolbar's own height, so the embed's hover-revealed title bar
+      never sits under it. Neither applies to HTML5 video, which has no unbounded caption-overlap or
+      top-of-player UI to protect against.
+    </p>
 
     <h2>Z-index layers</h2>
     <p>No <code>!important</code> anywhere — a documented, layered scale instead:</p>
