@@ -7,6 +7,17 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Autoplay's automatic play on a provider video (e.g. YouTube) could
+  silently never take effect on a CPU-constrained runner (found via CI:
+  reproduced consistently in GitHub Actions across all 5 browser
+  projects) — the embed's postMessage bridge can need more real time
+  after "ready" before it reliably processes its first command. Now
+  retries a few times with a short delay instead of a single best-effort
+  attempt, giving up gracefully (pausing the slideshow) if every retry
+  is exhausted.
+
 ## [0.1.0-alpha.3] - 2026-08-08
 
 ### Added

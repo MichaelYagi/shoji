@@ -448,6 +448,43 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     return document.querySelector('.shoji-slide-provider-video');
   }
 
+  // Simulates a provider whose postMessage bridge silently drops the first
+  // `failCount` play() commands (a real bug, found via CI — DESIGN.md
+  // §4.1 point 9) before finally taking one.
+  function flakyVideoProviderPlugin(failCount: number) {
+    let attempts = 0;
+    return {
+      name: 'flakyVideoProvider',
+      init: (ctx: PluginContext) =>
+        ctx.ui.registerVideoProvider(
+          'youtube',
+          (container: HTMLElement, _item, onReady: () => void) => {
+            const playable = container as HTMLElement & {
+              play: () => void;
+              pause: () => void;
+              paused: boolean;
+              ended: boolean;
+              muted: boolean;
+            };
+            playable.paused = true;
+            playable.ended = false;
+            playable.muted = false;
+            playable.play = () => {
+              attempts++;
+              if (attempts <= failCount) return; // dropped, same as a too-early real command
+              playable.paused = false;
+              playable.dispatchEvent(new Event('play'));
+            };
+            playable.pause = () => {
+              playable.paused = true;
+              playable.dispatchEvent(new Event('pause'));
+            };
+            onReady();
+          },
+        ),
+    };
+  }
+
   it('arriving at a provider-video slide plays it instead of starting the fixed-interval timer', () => {
     vi.useFakeTimers();
     const gallery = makeProviderGallery();
@@ -459,6 +496,51 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
 
     vi.advanceTimersByTime(5000); // default interval must NOT apply
     expect(gallery.currentIndex).toBe(1); // still on the video slide
+
+    gallery.destroy();
+  });
+
+  it('regression: retries an automatic play if the first attempt(s) silently do nothing, instead of leaving the video stuck paused', () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, flakyVideoProviderPlugin(3)], // first 3 play() calls are silently dropped
+      preload: 0,
+    });
+    gallery.open(1);
+
+    click(toggleButton());
+    const container = providerContainer()!;
+    expect(container.paused).toBe(true); // 1st attempt (at click time) didn't take
+
+    vi.advanceTimersByTime(400);
+    expect(container.paused).toBe(true); // 2nd attempt didn't take either
+
+    vi.advanceTimersByTime(400);
+    expect(container.paused).toBe(true); // 3rd attempt didn't take either
+
+    vi.advanceTimersByTime(400);
+    expect(container.paused).toBe(false); // 4th attempt finally does
+
+    gallery.destroy();
+  });
+
+  it('regression: gives up and stops the slideshow if every retry attempt is exhausted, instead of leaving it silently stuck forever', () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, flakyVideoProviderPlugin(999)], // never actually takes
+      preload: 0,
+    });
+    gallery.open(1);
+
+    click(toggleButton());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    vi.advanceTimersByTime(400 * 9); // initial attempt + MAX_PROVIDER_PLAY_ATTEMPTS retries, all exhausted
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // stop() was called
 
     gallery.destroy();
   });

@@ -35,6 +35,13 @@ function isPendingProviderVideo(media: HTMLElement | null): boolean {
   return !!provider && typeof provider.play !== 'function';
 }
 
+// A provider embed's postMessage bridge (DESIGN.md §4.3) can need more real
+// time after "ready" before it reliably processes its first command — a
+// play() issued too soon can silently no-op with nothing to catch. Retries
+// a few times with a short delay instead of a single best-effort attempt.
+const PROVIDER_PLAY_RETRY_MS = 400;
+const MAX_PROVIDER_PLAY_ATTEMPTS = 8; // + the initial attempt = 9 total, ~3.6s before giving up
+
 export interface AutoplayOptions {
   /** Milliseconds between advances for timed (photo) slides. Default `5000`. */
   interval?: number;
@@ -131,6 +138,24 @@ export const Autoplay: ShojiPlugin = {
       currentVideo = null;
     }
 
+    // A provider embed (e.g. YouTube) is cross-origin — unlike native
+    // <video>, its own autoplay policy requires a *direct* user gesture on
+    // the embed itself, which an automatic play() arriving via this
+    // timer/'ended'/slideItemLoad chain never has; it silently no-ops
+    // rather than rejecting, so there's nothing to catch. Muting first is
+    // what actually gets it to play — the viewer can still unmute via the
+    // embed's own controls.
+    function ensureProviderPlaying(video: PlayableMedia, attemptsLeft: number): void {
+      video.muted = true;
+      video.play();
+      setTimeout(() => {
+        if (currentVideo !== video || !playing) return; // stale — slide changed, or already stopped
+        if (!video.paused) return; // took effect
+        if (attemptsLeft > 0) ensureProviderPlaying(video, attemptsLeft - 1);
+        else stop(); // exhausted retries — don't leave the slideshow silently stuck
+      }, PROVIDER_PLAY_RETRY_MS);
+    }
+
     function enterSlide(): void {
       clearTimer();
       detachVideo();
@@ -144,23 +169,18 @@ export const Autoplay: ShojiPlugin = {
         currentVideo = video;
         video.addEventListener('ended', onVideoEnded);
         video.addEventListener('pause', onVideoPause);
-        // A provider embed (e.g. YouTube) is cross-origin — unlike native
-        // <video>, its own autoplay policy requires a *direct* user gesture
-        // on the embed itself, which an automatic play() arriving via this
-        // timer/'ended'/slideItemLoad chain never has; it silently no-ops
-        // rather than rejecting, so there's nothing to catch. Muting first
-        // is what actually gets it to play — the viewer can still unmute
-        // via the embed's own controls. Native video needs none of this
-        // (DESIGN.md §2.3a) and stays unmuted.
-        if (!(video instanceof HTMLVideoElement)) video.muted = true;
-        const playResult = video.play();
-        // Browsers can block an unmuted native <video> play() that isn't a
-        // direct continuation of a user gesture (e.g. one arriving via this
-        // setTimeout/'ended' chain rather than the toggle button's click) —
-        // pause the slideshow and wait for the viewer rather than getting
-        // stuck with a video that silently never plays or advances.
-        if (playResult && typeof playResult.catch === 'function') {
-          playResult.catch(() => stop());
+        if (video instanceof HTMLVideoElement) {
+          const playResult = video.play();
+          // Browsers can block an unmuted native <video> play() that isn't a
+          // direct continuation of a user gesture (e.g. one arriving via this
+          // setTimeout/'ended' chain rather than the toggle button's click) —
+          // pause the slideshow and wait for the viewer rather than getting
+          // stuck with a video that silently never plays or advances.
+          if (playResult && typeof playResult.catch === 'function') {
+            playResult.catch(() => stop());
+          }
+        } else {
+          ensureProviderPlaying(video, MAX_PROVIDER_PLAY_ATTEMPTS);
         }
         return;
       }
