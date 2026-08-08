@@ -150,7 +150,13 @@ test('regression: zoom-out back to neutral keeps transform-origin anchored until
 
   await zoomIn.click(); // scale 1.5
   const img = await activeImgHandle(page);
-  await expect.poll(() => img.evaluate((el) => el.style.transformOrigin)).toBe('0px 0px');
+  // Firefox serializes element.style.transformOrigin with an explicit
+  // z-component ("0px 0px 0px"), Chrome/WebKit omit it ("0px 0px") — both
+  // mean the same top-left anchor, just a browser string-serialization
+  // difference, not something worth pinning to one form.
+  await expect
+    .poll(() => img.evaluate((el) => el.style.transformOrigin))
+    .toMatch(/^0px 0px(?: 0px)?$/);
 
   // Click and read back in one synchronous round-trip, not two separate
   // ones — under a busy/parallel test run, a gap between them is enough for
@@ -173,7 +179,7 @@ test('regression: zoom-out back to neutral keeps transform-origin anchored until
   // anchor snapped instantly, visibly displacing the scaled image before it
   // ever started easing down. It must stay put for the transition's whole
   // duration and only clear once transitionend genuinely fires.
-  expect(stateRightAfterClick.transformOrigin).toBe('0px 0px');
+  expect(stateRightAfterClick.transformOrigin).toMatch(/^0px 0px(?: 0px)?$/);
   expect(stateRightAfterClick.transition).toContain('transform');
 
   await expect.poll(() => img.evaluate((el) => el.style.transformOrigin)).toBe('');
