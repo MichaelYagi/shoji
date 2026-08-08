@@ -27,6 +27,10 @@ still include breaking changes).
   size" now ease into their new scale/pan instead of jumping instantly —
   pinch, pan-drag, and ctrl+wheel are left untransitioned since they
   already track the input frame by frame.
+- The open (zoom-in) transition's loading spinner no longer flashes
+  briefly oversized on a fresh open with nothing decoded yet (e.g. a hard
+  refresh, opening the first slide) — it was being mistaken for the real
+  photo and used as the animation's target size.
 
 ## [0.1.0-alpha.2] - 2026-08-07
 

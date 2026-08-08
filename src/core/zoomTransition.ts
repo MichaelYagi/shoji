@@ -52,10 +52,19 @@ function containedBox(container: Box, aspectRatio: number): Box {
  * aspect ratios didn't match (the common case). Preferred sources: the real
  * rendered media child, if attached; else an analytical contain-box from
  * `aspectRatio`; else the container's own rect as a last resort.
+ *
+ * A real bug this guards against: on a fresh open with nothing decoded yet,
+ * `target`'s only child at this point is the loading spinner (§2.3) — a
+ * fixed ~40px circle, not the photo. Trusting its rect as "the real
+ * rendered media child" made the FLIP transition scale toward/from a box
+ * far smaller than the actual photo, so the scale factor came out inverted
+ * (>1 instead of <1) and the spinner rendered wildly oversized for the
+ * transition's first frames before shrinking back down — never the actual
+ * photo, which hadn't swapped in yet either way.
  */
 function effectiveTargetBox(target: HTMLElement, aspectRatio?: number): Box {
   const child = target.firstElementChild;
-  if (child instanceof HTMLElement) {
+  if (child instanceof HTMLElement && !child.classList.contains('shoji-slide-spinner')) {
     const rect = child.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) return rect;
   }

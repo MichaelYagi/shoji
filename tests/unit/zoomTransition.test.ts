@@ -256,6 +256,35 @@ describe('zoomTransition', () => {
       expect(s).toBeCloseTo(Math.min(140 / 600, 105 / 400), 3);
     });
 
+    it("regression: ignores the loading spinner as target's child instead of trusting its tiny rect — a real bug that made the FLIP transition scale up (>1) instead of down, rendering the spinner briefly oversized on a fresh open with nothing decoded yet", () => {
+      const spinner = document.createElement('div');
+      spinner.className = 'shoji-slide-spinner';
+      target.appendChild(spinner);
+      mockRect(origin, { top: 500, left: 500, width: 140, height: 105 }); // thumbnail
+      mockRect(target, { top: 0, left: 0, width: 1200, height: 400 }); // container — ignored either way
+      mockRect(spinner, { top: 190, left: 580, width: 40, height: 40 }); // the loading spinner, not real media
+
+      zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {});
+
+      const match = target.style.transform.match(
+        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, , , scale] = match!.map(Number);
+
+      // Should fall through to the aspectRatio-derived contained box (same
+      // as the "no child at all" case), not the spinner's own tiny rect.
+      // Contained box for a 3:2 photo in a 1200x400 container: width =
+      // 400*1.5 = 600, height = 400 -> scale = min(140/600, 105/400).
+      const correctScale = Math.min(140 / 600, 105 / 400);
+      expect(scale).toBeCloseTo(correctScale, 3);
+      // The buggy computation trusted the 40x40 spinner as the target box:
+      // scale = min(140/40, 105/40) = 2.625 — inverted (>1) and roughly 10x
+      // the correct value, which is what rendered it visibly oversized.
+      expect(scale).not.toBeCloseTo(Math.min(140 / 40, 105 / 40), 3);
+      expect(scale).toBeLessThan(1);
+    });
+
     it('transitions target toward the origin rect, then calls onComplete once settled', () => {
       mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
       mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
