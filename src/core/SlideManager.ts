@@ -2,6 +2,9 @@ import { PLAY_ICON } from './icons';
 import type { VideoProviderRenderer } from './plugin';
 import type { GalleryItem } from './types';
 
+/** Native scrub-bar dragging genuinely pauses `<video>` for its duration — showing the play-overlay immediately on every `pause` would flash it on every seek. Long enough to swallow that, short enough a real pause doesn't feel delayed. */
+const PAUSE_OVERLAY_DELAY_MS = 200;
+
 interface Slot {
   root: HTMLElement;
   media: HTMLElement;
@@ -325,13 +328,33 @@ export class SlideManager {
     overlay.innerHTML = PLAY_ICON;
     overlay.ariaLabel = overlay.title = this.playVideoLabel;
     overlay.hidden = !video.paused;
+
+    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearPauseTimer = (): void => {
+      if (pauseTimer === null) return;
+      clearTimeout(pauseTimer);
+      pauseTimer = null;
+    };
+
     overlay.addEventListener('click', (event) => {
       event.stopPropagation();
       void video.play();
     });
-    video.addEventListener('play', () => (overlay.hidden = true));
-    video.addEventListener('pause', () => (overlay.hidden = false));
-    video.addEventListener('ended', () => (overlay.hidden = false));
+    video.addEventListener('play', () => {
+      clearPauseTimer();
+      overlay.hidden = true;
+    });
+    video.addEventListener('pause', () => {
+      clearPauseTimer();
+      pauseTimer = setTimeout(() => {
+        pauseTimer = null;
+        if (video.paused) overlay.hidden = false;
+      }, PAUSE_OVERLAY_DELAY_MS);
+    });
+    video.addEventListener('ended', () => {
+      clearPauseTimer();
+      overlay.hidden = false;
+    });
     return overlay;
   }
 

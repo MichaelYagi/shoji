@@ -400,7 +400,8 @@ describe('SlideManager', () => {
       expect(overlay.getAttribute('aria-label')).toBe('Play video');
     });
 
-    it('hides when the video starts playing, reappears on pause and on ended', () => {
+    it('hides when the video starts playing, reappears on pause (after the debounce) and immediately on ended', () => {
+      vi.useFakeTimers();
       const manager = new SlideManager({
         preload: 0,
         playVideoLabel: 'Play video',
@@ -413,12 +414,40 @@ describe('SlideManager', () => {
       expect(overlay.hidden).toBe(true);
 
       video.dispatchEvent(new Event('pause'));
+      expect(overlay.hidden).toBe(true); // not yet — debounced, see the dedicated test below
+      vi.advanceTimersByTime(200);
       expect(overlay.hidden).toBe(false);
 
       video.dispatchEvent(new Event('play'));
       expect(overlay.hidden).toBe(true);
       video.dispatchEvent(new Event('ended'));
-      expect(overlay.hidden).toBe(false);
+      expect(overlay.hidden).toBe(false); // ended is never debounced — always a real, terminal state
+      vi.useRealTimers();
+    });
+
+    it("regression: a native scrub-bar's transient pause-then-resume (well within the debounce window) never flashes the overlay", () => {
+      // Real browsers pause <video> for the duration of a seek-bar drag —
+      // showing the overlay for every one of those would flash it on every
+      // scrub interaction, which is what this whole debounce exists to fix.
+      vi.useFakeTimers();
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      manager.render(items, 3, vi.fn());
+      const { video, overlay } = videoAndOverlay(manager);
+      video.dispatchEvent(new Event('play'));
+
+      video.dispatchEvent(new Event('pause')); // scrub-drag starts
+      vi.advanceTimersByTime(50); // well within the drag, short of the debounce
+      expect(overlay.hidden).toBe(true);
+      video.dispatchEvent(new Event('play')); // scrub-drag released, playback resumes
+
+      vi.advanceTimersByTime(500); // long past where the (now-cancelled) timer would have fired
+      expect(overlay.hidden).toBe(true); // never flashed
+
+      vi.useRealTimers();
     });
 
     it('clicking it plays the video and does not bubble to backdrop-click-to-close', () => {
