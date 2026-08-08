@@ -18,7 +18,7 @@ still include breaking changes).
   exhausted.
 - The HTML5 video play-overlay's click handler could throw an uncaught
   `NotSupportedError` (`Uncaught (in promise) ... The element has no
-  supported sources.`) when clicked on a video whose `src`/`sources`
+supported sources.`) when clicked on a video whose `src`/`sources`
   don't actually resolve to anything playable (a bad path, a removed
   file, an unsupported format) — the rejected `play()` promise had
   nothing to catch it.
