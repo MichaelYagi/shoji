@@ -46,9 +46,22 @@ pre code {
 }
 
 table {
+  display: block;
+  overflow-x: auto;
   border-collapse: collapse;
   width: 100%;
   margin: 1rem 0;
+}
+
+/* Short identifiers/payloads (event names, CSS custom property names,
+   `{ ... }` snippets) read badly wrapped mid-token at a hyphen or space —
+   opt a table into this on a per-page basis where that's genuinely all a
+   column ever holds (events.html's Detail column, theming.html's Property
+   column). Left off elsewhere: some tables' code cells hold longer literal
+   values that are more readable wrapped across lines than forced into one
+   long, horizontally-scrolled row (settings.html's Core options table). */
+.nowrap-code code {
+  white-space: nowrap;
 }
 
 th,
