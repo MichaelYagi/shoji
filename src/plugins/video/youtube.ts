@@ -9,6 +9,9 @@ import type { VideoProviderRenderer } from '../../core/plugin';
 interface YTPlayer {
   playVideo(): void;
   pauseVideo(): void;
+  mute(): void;
+  unMute(): void;
+  isMuted(): boolean;
   destroy(): void;
 }
 
@@ -77,14 +80,27 @@ type PlayableElement = HTMLElement & {
   pause: () => void;
   paused: boolean;
   ended: boolean;
+  muted: boolean;
 };
 
+/**
+ * `muted` is a real accessor (not a plain property) backed by the player's
+ * own `mute()`/`unMute()`/`isMuted()` — DESIGN.md §4.1's autoplay-policy fix
+ * sets `video.muted = true` right before an *automatic* play, the same way
+ * it would for a native `<video>`; a plain property here would just be
+ * inert state that never actually silences the embed.
+ */
 function wirePlayableContract(container: HTMLElement, player: YTPlayer): PlayableElement {
   const playable = container as PlayableElement;
   playable.paused = true;
   playable.ended = false;
   playable.play = () => player.playVideo();
   playable.pause = () => player.pauseVideo();
+  Object.defineProperty(playable, 'muted', {
+    configurable: true,
+    get: () => player.isMuted(),
+    set: (value: boolean) => (value ? player.mute() : player.unMute()),
+  });
   return playable;
 }
 
@@ -126,11 +142,23 @@ export const renderYouTube: VideoProviderRenderer = (container, item, onReady, s
       videoId,
       playerVars: { playsinline: 1, rel: 0 },
       events: {
-        onReady: () => onReady(),
+        // `new YT.Player()` returns before the embed's own internal bootstrap
+        // (its postMessage handshake with youtube.com) finishes — calling
+        // `player.mute()`/`playVideo()`/etc. before that completes can throw
+        // ("player.isMuted is not a function") or silently no-op, even though
+        // the constructor already returned an object. `onReady` is YouTube's
+        // own signal that the real API surface is actually callable now, so
+        // wiring the contract here — not synchronously after construction —
+        // is what makes `findPlayable()`'s "is `.play` wired?" check in
+        // Autoplay (DESIGN.md §4.1) an accurate proxy for "is it really
+        // ready?" instead of just "did we build the wrapper closures?".
+        onReady: () => {
+          wirePlayableContract(container, player);
+          onReady();
+        },
         onStateChange: (event) => handleStateChange(event, YT, playable),
       },
     });
-    wirePlayableContract(container, player);
     signal.addEventListener('abort', () => player.destroy(), { once: true });
   });
 };

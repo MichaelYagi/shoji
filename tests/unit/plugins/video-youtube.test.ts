@@ -30,6 +30,9 @@ function makeYTPlayerMock() {
     videoId: string;
     playVideo: ReturnType<typeof vi.fn>;
     pauseVideo: ReturnType<typeof vi.fn>;
+    mute: ReturnType<typeof vi.fn>;
+    unMute: ReturnType<typeof vi.fn>;
+    isMuted: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     onReady?: () => void;
     onStateChange?: (event: { data: number }) => void;
@@ -38,6 +41,14 @@ function makeYTPlayerMock() {
   class FakePlayer {
     playVideo = vi.fn();
     pauseVideo = vi.fn();
+    muted = false;
+    mute = vi.fn(() => {
+      this.muted = true;
+    });
+    unMute = vi.fn(() => {
+      this.muted = false;
+    });
+    isMuted = vi.fn(() => this.muted);
     destroy = vi.fn();
     videoId: string;
     onReady?: () => void;
@@ -137,6 +148,27 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     expect(container.paused).toBe(true);
     expect(container.ended).toBe(true);
     expect(endedSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires container.muted to the real player — a real accessor (mute()/unMute()/isMuted()), not inert state', async () => {
+    const { YT, instances } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const container = document.createElement('div') as HTMLElement & { muted?: boolean };
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    await Promise.resolve();
+    instances[0]!.onReady?.();
+
+    expect(container.muted).toBe(false);
+
+    container.muted = true;
+    expect(instances[0]!.mute).toHaveBeenCalledTimes(1);
+    expect(container.muted).toBe(true); // getter reflects the real player, not a stale write
+
+    container.muted = false;
+    expect(instances[0]!.unMute).toHaveBeenCalledTimes(1);
+    expect(container.muted).toBe(false);
   });
 
   it('destroys the player once the signal aborts', async () => {

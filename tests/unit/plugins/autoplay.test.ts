@@ -341,9 +341,11 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
               pause: () => void;
               paused: boolean;
               ended: boolean;
+              muted: boolean;
             };
             playable.paused = true;
             playable.ended = false;
+            playable.muted = false;
             playable.play = () => {
               playable.paused = false;
               playable.dispatchEvent(new Event('play'));
@@ -424,6 +426,18 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
 
     vi.advanceTimersByTime(5000); // default interval must NOT apply
     expect(gallery.currentIndex).toBe(1); // still on the video slide
+
+    gallery.destroy();
+  });
+
+  it('regression: mutes a provider video before an automatic play — cross-origin embeds silently refuse to autoplay unmuted without a direct gesture on the embed itself, unlike native <video>', () => {
+    vi.useFakeTimers();
+    const gallery = makeProviderGallery();
+    gallery.open(1);
+
+    click(toggleButton()); // this click is a direct gesture on the *toolbar button*, not the embed
+    const container = providerContainer() as HTMLElement & { muted?: boolean };
+    expect(container.muted).toBe(true);
 
     gallery.destroy();
   });

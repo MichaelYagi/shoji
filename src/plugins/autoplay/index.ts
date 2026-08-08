@@ -13,7 +13,7 @@ import './autoplay.css';
  */
 type PlayableMedia = Pick<
   HTMLVideoElement,
-  'play' | 'pause' | 'paused' | 'ended' | 'addEventListener' | 'removeEventListener'
+  'play' | 'pause' | 'paused' | 'ended' | 'muted' | 'addEventListener' | 'removeEventListener'
 >;
 
 /** `.shoji-slide-provider-video` only counts if it's actually been wired up as playable (§4-video's `wirePlayableContract`) — a provider still mid-async-setup, or one that never opted into Autoplay sync at all, isn't. */
@@ -134,9 +134,18 @@ export const Autoplay: ShojiPlugin = {
         currentVideo = video;
         video.addEventListener('ended', onVideoEnded);
         video.addEventListener('pause', onVideoPause);
+        // A provider embed (e.g. YouTube) is cross-origin — unlike native
+        // <video>, its own autoplay policy requires a *direct* user gesture
+        // on the embed itself, which an automatic play() arriving via this
+        // timer/'ended'/slideItemLoad chain never has; it silently no-ops
+        // rather than rejecting, so there's nothing to catch. Muting first
+        // is what actually gets it to play — the viewer can still unmute
+        // via the embed's own controls. Native video needs none of this
+        // (DESIGN.md §2.3a) and stays unmuted.
+        if (!(video instanceof HTMLVideoElement)) video.muted = true;
         const playResult = video.play();
-        // Browsers can block an unmuted play() that isn't a direct
-        // continuation of a user gesture (e.g. one arriving via this
+        // Browsers can block an unmuted native <video> play() that isn't a
+        // direct continuation of a user gesture (e.g. one arriving via this
         // setTimeout/'ended' chain rather than the toggle button's click) —
         // pause the slideshow and wait for the viewer rather than getting
         // stuck with a video that silently never plays or advances.
