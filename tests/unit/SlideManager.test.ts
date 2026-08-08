@@ -467,6 +467,26 @@ describe('SlideManager', () => {
       expect(bubbledTo).not.toHaveBeenCalled();
     });
 
+    it("regression: clicking it attaches a .catch() to play()'s result, instead of leaving a rejection (e.g. a broken/missing source throwing NotSupportedError) unhandled", () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      manager.render(items, 3, vi.fn());
+      const { video, overlay } = videoAndOverlay(manager);
+      // A bare thenable stand-in with a spied .catch — proves the click
+      // handler actually attaches one, without needing a real rejected
+      // Promise (whose own unhandled-rejection reporting is unreliable to
+      // assert on directly across test runners/Node versions).
+      const catchSpy = vi.fn();
+      video.play = vi.fn(() => ({ catch: catchSpy })) as unknown as typeof video.play;
+
+      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+      expect(catchSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('is absent for the no-source video placeholder (nothing to play)', () => {
       const manager = new SlideManager({
         preload: 0,

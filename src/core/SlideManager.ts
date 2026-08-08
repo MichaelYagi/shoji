@@ -341,7 +341,11 @@ export class SlideManager {
 
     overlay.addEventListener('click', (event) => {
       event.stopPropagation();
-      void video.play();
+      // A broken/missing source (bad path, unsupported format) rejects with
+      // NotSupportedError — a real, if unusual, host-data problem, not a
+      // reason to crash with an unhandled rejection; the native controls
+      // already show their own error state once the 'error' event fires.
+      video.play().catch(() => {});
     });
     video.addEventListener('play', () => {
       clearPauseTimer();

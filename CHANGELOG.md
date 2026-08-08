@@ -16,6 +16,12 @@ still include breaking changes).
   times with a short delay instead of a single best-effort attempt,
   giving up gracefully (pausing the slideshow) if every retry is
   exhausted.
+- The HTML5 video play-overlay's click handler could throw an uncaught
+  `NotSupportedError` (`Uncaught (in promise) ... The element has no
+  supported sources.`) when clicked on a video whose `src`/`sources`
+  don't actually resolve to anything playable (a bad path, a removed
+  file, an unsupported format) — the rejected `play()` promise had
+  nothing to catch it.
 
 ## [0.1.0-alpha.3] - 2026-08-08
 
