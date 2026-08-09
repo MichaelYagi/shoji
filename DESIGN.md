@@ -1,6 +1,6 @@
 # DESIGN.md — Shoji
 
-A zero-dependency, plugin-first lightbox/gallery library. Feature parity with lightGallery, plus multi-select, WebGL edit mode, bidirectional infinite scroll, and slideshow — with a smaller, cleaner core.
+A zero-dependency, plugin-first lightbox/gallery library. Feature parity with lightGallery's core, plus slideshow, video, and a layout engine (grid/masonry/justified) — with a smaller, cleaner core.
 
 ---
 
@@ -10,13 +10,13 @@ A zero-dependency, plugin-first lightbox/gallery library. Feature parity with li
 
 - Drop-in replacement use case for lightGallery: open a lightbox from thumbnails or programmatically (dynamic mode), navigate with touch/drag/keyboard, virtual slides for huge galleries.
 - Everything beyond the minimal lightbox is a plugin with a stable, documented API.
-- First-class: multi-select, edit mode (client-side WebGL adjustments with server persistence hooks), bidirectional infinite scroll, slideshow, deep links, video, thumbnails/pagers, share, comments, fullscreen, rotate/flip, responsive images, a11y.
+- First-class: slideshow, video (HTML5 + YouTube), active-thumbnail sync, fullscreen, rotate/flip (view), zoom, layout (grid/masonry/justified), responsive images, a11y.
 - Buttery performance: hardware-accelerated CSS transitions, ≤ 3 slides in DOM, no layout thrash in gesture paths.
 
 **Non-goals**
 
 - No framework wrappers in core (React/Vue adapters can come later as thin packages).
-- No server component — server interactions are user-provided hooks (editor save, infinite-scroll data source, share URLs).
+- No server component — zero backend dependency, nothing in core or an official plugin ever calls out to a server.
 - No IE / legacy support. Baseline: last 2 versions of evergreen browsers + iOS Safari 16+.
 
 ---
@@ -33,9 +33,8 @@ A zero-dependency, plugin-first lightbox/gallery library. Feature parity with li
 ├──────────────┬────────────────┬───────────────────┤
 │ GestureEngine│ TransitionMgr  │ Toolbar/UI slots  │
 ├──────────────┴────────────────┴───────────────────┤
-│ Plugins: thumbnails · pagers · zoom · video ·     │
-│ autoplay · fullscreen · hash · share · comments · │
-│ rotate · editor · select · scroll · layout        │
+│ Plugins: zoom · fullscreen · rotateFlip ·         │
+│ autoplay · activeThumbnail · video · layout       │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -43,19 +42,18 @@ A zero-dependency, plugin-first lightbox/gallery library. Feature parity with li
 
 ```ts
 interface GalleryItem {
-  id?: string;               // stable id (required for editor/select persistence)
+  id?: string;               // stable id — updateSlides() diffing, ActiveThumbnail's data-shoji-id match, zoom-transition origin lookup. Falls back to src.
   src: string;               // full-size source
   srcset?: string;           // responsive sources
   sizes?: string;
   sources?: MediaSource[];   // <picture>/video sources incl. webp/avif
   thumb?: string;
   poster?: string;           // video poster
-  video?: VideoDescriptor;   // html5 | youtube | vimeo | wistia | custom
+  video?: VideoDescriptor;   // html5 | youtube | vimeo | wistia | custom — only html5/youtube/custom have a renderer today (§4.3)
   width?: number; height?: number;  // for aspect-ratio placeholder
   alt?: string;
-  caption?: string | HTMLElement;
+  caption?: string | HTMLElement | DangerousHtmlCaption;
   download?: string | false;
-  edits?: EditState;         // persisted editor transforms (see §8)
   data?: Record<string, unknown>;   // user payload, untouched by core
 }
 
@@ -65,6 +63,8 @@ type VideoDescriptor =
   | { provider: 'html5' }                                    // sources[] on GalleryItem carries the <source> list
   | { provider: 'youtube' | 'vimeo' | 'wistia'; id: string; url?: string }
   | { provider: 'custom'; render: (el: HTMLElement, item: GalleryItem) => void | (() => void) };  // §4 "custom provider registration"
+
+type DangerousHtmlCaption = { dangerouslySetInnerHTML: string };  // named after React's own escape hatch on purpose; Shoji does not sanitize it
 ```
 
 Items come from DOM scanning (`selector` mode), or arrays (**dynamic mode**), and can be mutated live via `gallery.updateSlides(items, currentIndex?)` — core diffs by `id` (fallback: `src`), preserving the active slide when possible, matching lightGallery's updateSlides semantics. `gallery.addSlides(items, atIndex?)` (default: append) and `gallery.removeSlides(match)` (a single `id`/index, or an array mixing both — index resolved against the list as it is *before* any removal, so `[0, 1]` always means "the first two," not a shifting target) are pure sugar over `updateSlides` for the two most common cases — passing `items.concat(...)`/`items.filter(...)` by hand still works identically, these just read more clearly at the call site.
@@ -322,7 +322,7 @@ Rules:
 - Plugins register UI only through `ctx.ui` slots → consistent styling/theming, automatic cleanup, no z-index wars.
 - Plugins communicate via events, never direct imports of other plugins. `requires` enforces load order and hard deps.
 - Everything a plugin creates through `ctx` is disposed automatically on `destroy()`; the optional returned cleanup handles anything else.
-- Options: `new Shoji(el, { plugins: [Thumbnails, Editor], thumbnails: {...}, editor: {...} })`.
+- Options: `new Shoji(el, { plugins: [Zoom, Autoplay], zoom: {...}, autoplay: {...} })`.
 - Every official plugin's `defaults` are chosen so `new Shoji(el, { plugins: [Zoom] })` — no `zoom: {...}` object at all — is a complete, working config. The per-plugin options objects throughout §4–§8 exist for hosts who want to override something, not because anything is required.
 
 A "hello world" plugin is ~10 lines. That's the bar for "simple".
@@ -352,7 +352,7 @@ A "hello world" plugin is ~10 lines. That's the bar for "simple".
 - **Hash / browser history** — **not implementing.** (Was scoped as `#shoji-<galleryId>-<slideId|index>` deep links; open-on-load if hash matches; back/forward navigates slides.) The user's own gallery (shashin) already has its own share-link feature at the app level with its own URL scheme — a second, Shoji-internal deep-link mechanism would just compete with it, not serve a need.
 - **Share** — **not implementing**, for the same reason as Hash above: shashin already owns this at the app level.
 - **Comments** — **not implementing.** (Was scoped as a mount-point overlay panel with adapters for Facebook Comments and Disqus, plus a `custom` adapter receiving the current item — the widget itself user-supplied.)
-- **Rotate/flip (view)** — **implemented**, see §4.5. (Persistent, pixel-level editing lives in the Editor plugin.)
+- **Rotate/flip (view)** — **implemented**, see §4.5. Non-destructive, resets per slide — persistent, pixel-level editing was scoped to the Editor plugin (§8), which is not implementing; there is no persisted-edit path.
 - **Responsive images**: `srcset`/`sizes`/`<picture>` passthrough, DPR-aware selection, any format (webp/avif/jxl) — core never re-encodes.
 - **Dynamic mode & updateSlides**: covered in §2.1.
 - **Mobile**: `mobileSettings` overrides; CSS-only media sizing; 44px touch targets.
@@ -692,18 +692,14 @@ After save/restore, editor emits `edit:save`/`edit:restore` and calls `updateSli
 **Distribution** — the primary artifact is a single-file pair:
 
 - `dist/shoji.js` + `dist/shoji.css` (and minified variants): core + **all** official plugins in one JS and one CSS file. Plugins ship registered-but-inert — nothing activates until enabled via options, so the all-in-one bundle adds zero runtime cost for unused features. UMD wrapper (global `Shoji`) so the same file works via `<script>` tag or `import`. Sourcemaps included.
-- Secondary: per-plugin ESM entries (`shoji/core`, `shoji/plugins/editor`, …) + `.d.ts` for bundler users who want tree-shaking. Same source, same version, built in the same `npm run build`.
+- Secondary: per-plugin ESM entries (`shoji/core`, `shoji/plugins/zoom`, …) + `.d.ts` for bundler users who want tree-shaking. Same source, same version, built in the same `npm run build`.
 - CSS mirrors this: one `shoji.css` concatenating core + all plugin styles (safe because everything is namespaced `.shoji-*` / `--shoji-*` and plugin styles are inert without their plugin's DOM), with per-plugin css files as the secondary output.
 
-**Budgets** — Core ≤ 21 kB, plugins ≤ 8 kB (editor ≤ 20 kB), full single-file bundle ≤ 90 kB JS / ≤ 20 kB CSS, all min+gzip; enforced via size-limit in CI. Core's original 20 kB ceiling was raised by 1 kB when the video-caption toggle (§2.3a) pushed past it — a real, wanted baseline feature, not bloat; comment-trimming alone couldn't close a ~300 B gap (gzip already compresses prose efficiently, so cutting it has little effect on the compressed size that's actually measured).
+**Budgets** — Core ≤ 21 kB, plugins ≤ 8 kB, full single-file bundle ≤ 90 kB JS / ≤ 20 kB CSS, all min+gzip; enforced via size-limit in CI. Core's original 20 kB ceiling was raised by 1 kB when the video-caption toggle (§2.3a) pushed past it — a real, wanted baseline feature, not bloat; comment-trimming alone couldn't close a ~300 B gap (gzip already compresses prose efficiently, so cutting it has little effect on the compressed size that's actually measured).
 - 60 fps drag on a mid-tier Android profile (Playwright trace-based assertion on long tasks during gesture).
 - Open-to-first-image < 300 ms with warmed cache; virtualization keeps DOM ≤ 3 slides + pooled nodes.
-- E2E must cover: gesture nav (touch + mouse drag), keyboard-only flow, focus trap, hash deep-link, bidirectional prepend with zero scroll jump, editor save/reset/restore enablement matrix (canonicalization cases), multi-select marquee + long-press mode, destroy/leak checks.
+- E2E must cover: gesture nav (touch + mouse drag), keyboard-only flow, focus trap, rotate/flip canonicalization cases, zoom pinch/pan, layout relayout on resize, destroy/leak checks.
 
 ## 11. Milestones
 
-1. **M1 Core**: item model, lifecycle, virtual slides, gestures, transitions, a11y, dynamic mode + updateSlides.
-2. **M2 Essentials**: zoom, thumbnails, fullscreen, autoplay/slideshow, hash, video (HTML5 + YT/Vimeo).
-3. **M3 Differentiators**: layout plugin (grid → masonry → justified), multi-select, infinite scroll (uni → bidirectional), rotate/flip view.
-4. **M4 Editor**: WebGL pipeline, fallbacks, host hooks.
-5. **M5 Long tail**: share, comments, pagers, animated thumbnails, Wistia, theming polish, docs site.
+v1 scope is closed and shipped: core (item model, lifecycle, virtual slides, gestures, transitions, a11y, dynamic mode + `updateSlides`) plus seven official plugins — Zoom, Fullscreen, RotateFlip, Autoplay, ActiveThumbnail, Video (HTML5 + YouTube), and Layout (grid/masonry/justified). Everything originally scoped beyond that — multi-select, the WebGL Editor, bidirectional infinite scroll, Hash/deep-links, Share, Comments, Pagers, Thumbnails-as-its-own-plugin, Vimeo/Wistia providers — was decided **not implementing** (§4's roster, and §6/§7/§8), each for a documented reason rather than left simply unbuilt. Add any of it back only if an actual use case needs it, not speculatively (CLAUDE.md).
