@@ -7,22 +7,6 @@ still include breaking changes).
 
 ## [Unreleased]
 
-### Fixed
-
-- Autoplay's automatic play on a provider video (e.g. YouTube) could
-  silently never take effect on a slow/CPU-constrained device — the
-  embed's postMessage bridge can need more real time after "ready"
-  before it reliably processes its first command. Now retries a few
-  times with a short delay instead of a single best-effort attempt,
-  giving up gracefully (pausing the slideshow) if every retry is
-  exhausted.
-- The HTML5 video play-overlay's click handler could throw an uncaught
-  `NotSupportedError` (`Uncaught (in promise) ... The element has no
-supported sources.`) when clicked on a video whose `src`/`sources`
-  don't actually resolve to anything playable (a bad path, a removed
-  file, an unsupported format) — the rejected `play()` promise had
-  nothing to catch it.
-
 ## [0.1.0-alpha.3] - 2026-08-08
 
 ### Added
@@ -83,6 +67,19 @@ supported sources.`) when clicked on a video whose `src`/`sources`
   (`--shoji-provider-video-top-inset`) matching the toolbar's height, so
   the two never overlap regardless of toolbar visibility. HTML5 video is
   unaffected — native controls never render anything at the top.
+- Autoplay's automatic play on a provider video (e.g. YouTube) could
+  silently never take effect on a slow/CPU-constrained device — the
+  embed's postMessage bridge can need more real time after "ready"
+  before it reliably processes its first command. Now retries a few
+  times with a short delay instead of a single best-effort attempt,
+  giving up gracefully (pausing the slideshow) if every retry is
+  exhausted.
+- The HTML5 video play-overlay's click handler could throw an uncaught
+  `NotSupportedError` (`Uncaught (in promise) ... The element has no
+supported sources.`) when clicked on a video whose `src`/`sources`
+  don't actually resolve to anything playable (a bad path, a removed
+  file, an unsupported format) — the rejected `play()` promise had
+  nothing to catch it.
 
 ## [0.1.0-alpha.2] - 2026-08-07
 
