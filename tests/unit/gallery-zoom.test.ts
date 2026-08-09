@@ -125,6 +125,33 @@ describe('Gallery — zoom transition origin lookup', () => {
     gallery.destroy();
   });
 
+  it('runs the zoom-in animation again on a second open() — after a full close(), not just the first open ever', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+    mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
+
+    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    gallery.open(0);
+    expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
+
+    gallery.close();
+    fireTransitionEnd(activeMedia()); // let the deferred close actually finish
+
+    gallery.open(0);
+    expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(2);
+    // Called with real (non-null-origin, non-zero-rect) args, not silently
+    // skipped a second time — matches the first call's origin identity.
+    expect(zoomTransition.zoomIn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ origin: marker }),
+    );
+
+    marker.remove();
+    gallery.destroy();
+  });
+
   it('skips the animation gracefully in dynamic mode with no marker at all', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);

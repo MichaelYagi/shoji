@@ -347,6 +347,30 @@ describe('Zoom — resets per slide', () => {
     gallery.destroy();
   });
 
+  it("regression: resets a still-zoomed image before navigate() reparents it into a different pool slot via cache-reuse — otherwise it stays transformed, unclipped, bleeding into the new slide (reported from real usage, only reproduces with preload > 0, where the old slide's node actually survives to be reused)", async () => {
+    const gallery = makeGallery({
+      preload: 1,
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'b', src: 'b.jpg' },
+        { id: 'c', src: 'c.jpg' },
+      ],
+    });
+    gallery.open(0);
+    await flushSlideLoad();
+    const zoomedImg = activeImg();
+    doubleTapAt(150, 150);
+    expect(zoomedImg.style.transform).not.toBe('');
+
+    gallery.next();
+
+    // beforeSlide (where the fix resets) fires synchronously inside next(),
+    // before SlideManager.render() ever reparents this same cached node —
+    // no need to await anything to observe it.
+    expect(zoomedImg.style.transform).toBe('');
+    gallery.destroy();
+  });
+
   it('resets to neutral on afterOpen (re-opening after a zoom was applied)', async () => {
     const gallery = makeGallery();
     gallery.open(0);

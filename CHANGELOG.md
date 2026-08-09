@@ -22,6 +22,23 @@ still include breaking changes).
   its own small native size; the real content then swaps in instantly, with
   no animation of its own — the outer zoom already does the growing.
 
+### Fixed
+
+- Zoom plugin: zooming in via "Actual size" (or any zoom), then navigating
+  to the next/previous slide, could leave a strip of the old, still-zoomed
+  photo visibly bled into the new slide along one edge — the zoom reset ran
+  after the old slide's content had already been reused into a different,
+  unclipped pool slot, too late to find and clear its transform. Now also
+  resets before that reassignment happens, not just after.
+- Zoom-from-thumbnail worked on the first `open()` of a session, then
+  silently stopped working on every `open()` after a `close()` — closing
+  left the zoom-out-to-thumbnail transform permanently stuck on the slide,
+  which the next open then mistook for the slide's natural (un-transformed)
+  size, computing a barely-visible zoom instead of a real one. Caused by a
+  real-browser quirk (the CSSOM reformats a transform's numeric values when
+  read back, so comparing it against the raw string that was set never
+  matched) that only reproduces in a real browser, not a unit test.
+
 ## [0.1.0-alpha.3] - 2026-08-08
 
 ### Added

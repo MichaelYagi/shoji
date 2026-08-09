@@ -160,6 +160,26 @@ export function waitForTransitionEnd(target: HTMLElement, cb: () => void): void 
  * matches what this animation itself last wrote — nothing else has touched
  * it since — otherwise leaves it alone. `transition`/`transformOrigin`
  * are always safe to clear; nothing else in this codebase sets them.
+ *
+ * A second real bug, found via reopening the lightbox: `expectedTransform`
+ * must be the value *read back* from `target.style.transform` right after
+ * assigning it, not the raw string `computeTransform()` produced. Setting
+ * `element.style.transform` to a string containing an arbitrary JS float
+ * (e.g. `scale(0.10416666666666667)`, `computeTransform`'s un-rounded
+ * `Math.min(...)` result) and reading it back gives a *differently
+ * formatted* string — the browser's CSSOM serializer rounds/reformats
+ * numeric values on its own (observed in Chromium: `scale(0.104167)`).
+ * Comparing the raw JS string against that reformatted one here always
+ * failed for any scale factor without a short, clean decimal, silently
+ * skipping the clear — permanently leaving `zoomOut`'s shrink transform
+ * applied to `.shoji-slide-media` after the lightbox closed. The next
+ * `open()`'s `computeTransform` then measured that *already-shrunk*
+ * element's `getBoundingClientRect()` as if it were the natural size,
+ * computing a near-1 (barely visible) scale instead of a real zoom-in —
+ * reads as "doesn't zoom, just appears," and compounds on every further
+ * open/close cycle since the stuck transform is never cleared either way.
+ * `zoomIn`'s own `'none'` literal never hit this — a fixed string round-trips
+ * through the CSSOM unchanged, unlike an arbitrary computed float.
  */
 function clearInlineTransform(target: HTMLElement, expectedTransform: string): void {
   target.style.transition = '';
@@ -221,9 +241,13 @@ export function zoomOut(
   target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;
   target.style.transform = transform;
+  // Read back what the browser actually stored, not the raw string just
+  // assigned — see clearInlineTransform's own doc comment for why the two
+  // can differ (CSSOM float reformatting) and why that difference matters.
+  const appliedTransform = target.style.transform;
 
   waitForTransitionEnd(target, () => {
-    clearInlineTransform(target, transform);
+    clearInlineTransform(target, appliedTransform);
     onComplete();
   });
 }

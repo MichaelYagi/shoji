@@ -310,6 +310,18 @@ export const Zoom: ShojiPlugin = {
       reset();
       markEnabled();
     });
+    // Un-animated, and on beforeSlide rather than only afterSlide below:
+    // SlideManager.render() (called synchronously between the two) reuses a
+    // still-cached slide's node via a plain reparent (moveIn(), no state
+    // clearing of its own) into whichever pool slot its new offset needs —
+    // there is no code path afterward that can still find *this* image to
+    // reset it. A real bug, reported from real usage: zoom in via "Actual
+    // size", click next — the old, still-scaled image, now reparented into
+    // the (unclipped, per shoji.css) neighboring slot, visibly bled into the
+    // new slide instead of being invisible off-screen like an unzoomed one
+    // always is. Resetting here, while getActiveMedia() still resolves to
+    // the about-to-move image, clears it before that reparent ever happens.
+    const offBeforeSlide = ctx.on('beforeSlide', () => reset());
     const offSlide = ctx.on('afterSlide', () => {
       reset();
       markEnabled();
@@ -329,6 +341,7 @@ export const Zoom: ShojiPlugin = {
     return () => {
       for (const remove of removeButtons) remove();
       offOpen();
+      offBeforeSlide();
       offSlide();
       offBeforeClose();
       offPinchStart();
