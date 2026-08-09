@@ -450,6 +450,14 @@
   pointer-events: none;
 }
 
+/* !important: wins over any plugin's own cursor styling (e.g. zoom.css's
+   zoom-in/grab affordances) without core needing to know that plugin's
+   selectors — the hidden state means nothing should suggest interactivity. */
+.shoji-controls-hidden,
+.shoji-controls-hidden * {
+  cursor: none !important;
+}
+
 .shoji-live-region {
   position: absolute;
   width: 1px;

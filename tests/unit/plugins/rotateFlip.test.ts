@@ -70,17 +70,20 @@ describe('RotateFlip — rotation', () => {
     gallery.destroy();
   });
 
-  it('rotate left applies a -90deg rotation, normalized to 270', () => {
+  it("rotate left animates to -90deg visually (not the normalized 270deg) — the canonical emitted state still normalizes to 270, just decoupled from what's actually animated", () => {
     const gallery = makeGallery();
     gallery.open(0);
+    const onChange = vi.fn();
+    gallery.on('rotateFlipChange', onChange);
 
     click(button('Rotate left'));
 
-    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(270deg)');
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(-90deg)');
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ rotation: 270 }));
     gallery.destroy();
   });
 
-  it('four rotate-right clicks return to neutral (transform: none)', () => {
+  it('regression: four rotate-right clicks keep animating forward to 360deg, not backward from 270 to 0 — a real bug where the wrapped/normalized rotation value fed the animation directly, making the browser interpolate a 270deg decrease instead of continuing the same 90deg step being clicked through', () => {
     const gallery = makeGallery();
     gallery.open(0);
     const rotateRight = button('Rotate right');
@@ -90,7 +93,21 @@ describe('RotateFlip — rotation', () => {
     click(rotateRight);
     click(rotateRight);
 
-    expect(activeMedia().style.transform).toBe('none');
+    // Visually identical to neutral (a full turn), but 360deg — not the
+    // normalized 0deg/'none' — so the transition from 270deg continued
+    // forward instead of snapping backward to 0.
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(360deg)');
+    gallery.destroy();
+  });
+
+  it('a fifth rotate-right click after a full rotation continues to 450deg, not restarting from 90deg', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    const rotateRight = button('Rotate right');
+
+    for (let i = 0; i < 5; i++) click(rotateRight);
+
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(450deg)');
     gallery.destroy();
   });
 });
@@ -120,18 +137,30 @@ describe('RotateFlip — flipping', () => {
     gallery.destroy();
   });
 
-  it('flipping both axes at once canonicalizes to a pure 180deg rotation, not a double-scale', () => {
+  it('flipping both axes animates as a plain double-scale (not a canonicalized 180deg rotation), even though aria-pressed reflects the canonicalized un-flipped state', () => {
     const gallery = makeGallery();
     gallery.open(0);
+    const onChange = vi.fn();
+    gallery.on('rotateFlipChange', onChange);
 
     click(button('Flip horizontal'));
     click(button('Flip vertical'));
 
-    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(180deg)');
-    // Both toggle buttons reflect the canonicalized (un-flipped) state, not
-    // the raw click history — this is the DESIGN.md §8.1 table in action.
+    // The animated transform stays a plain double-scale, matching a normal
+    // flip motion (only scaleY changes on the second click) — not the
+    // canonicalized rotate(180deg) form, which would make the browser
+    // interpolate scaleX and rotate simultaneously, a visibly "twisting"
+    // compound motion instead of a clean flip.
+    expect(activeMedia().style.transform).toBe('scaleX(-1) scaleY(-1) rotate(0deg)');
+    // But the canonicalized state — aria-pressed and the emitted event —
+    // still collapses to no flips + 180deg rotation, unaffected by the
+    // above: this is the DESIGN.md §8.1 table in action, just decoupled
+    // from what's actually animated.
     expect(button('Flip horizontal').getAttribute('aria-pressed')).toBe('false');
     expect(button('Flip vertical').getAttribute('aria-pressed')).toBe('false');
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ flipH: false, flipV: false, rotation: 180 }),
+    );
     gallery.destroy();
   });
 });
@@ -159,6 +188,28 @@ describe('RotateFlip — resets per slide', () => {
     gallery.open(1);
 
     expect(activeMedia().style.transform).toBe('none');
+    gallery.destroy();
+  });
+});
+
+describe('RotateFlip — transition (button clicks animate)', () => {
+  it('rotate applies a transform transition', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Rotate right'));
+
+    expect(activeMedia().style.transition).toContain('transform');
+    gallery.destroy();
+  });
+
+  it('flip applies a transform transition', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Flip horizontal'));
+
+    expect(activeMedia().style.transition).toContain('transform');
     gallery.destroy();
   });
 });

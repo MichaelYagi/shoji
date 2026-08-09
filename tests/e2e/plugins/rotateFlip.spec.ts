@@ -41,16 +41,26 @@ test('rotate right applies a real rotate() transform, twice compounds to 180deg'
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(180deg\)/);
 });
 
-test('rotate left goes the other direction, normalized into [0, 360) — never a negative degree value', async ({
+test('rotate left animates to a negative degree value, not the normalized 270deg — real browsers interpolate a wrapped value as a backward spin, so the animated transform stays unbounded/unwrapped on purpose (unlike the emitted rotateFlipChange state, which does normalize to 270 — src/core/rotateFlipNormalize.ts)', async ({
   page,
 }) => {
   await openLightbox(page);
 
-  // rotation -90 normalizes to 270 (((-90 % 360) + 360) % 360), per
-  // normalizeRotateFlip (src/core/rotateFlipNormalize.ts) — the style
-  // string never contains a negative rotate() value.
   await page.locator('.shoji-toolbar-button[aria-label="Rotate left"]').click();
-  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(270deg\)/);
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(-90deg\)/);
+});
+
+test('regression: four rotate-right clicks keep animating forward to 360deg, not backward from 270 to 0 (a real bug — animating straight to the wrapped 0deg value made the browser interpolate a 270deg decrease instead of continuing the same 90deg step being clicked through)', async ({
+  page,
+}) => {
+  await openLightbox(page);
+  const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
+
+  for (let i = 0; i < 4; i++) {
+    await rotateRight.click();
+  }
+
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(360deg\)/);
 });
 
 test('flip horizontal composes scaleX(-1) with the current rotation, aria-pressed reflects state', async ({
@@ -67,7 +77,7 @@ test('flip horizontal composes scaleX(-1) with the current rotation, aria-presse
     .toMatch(/scaleX\(-1\) scaleY\(1\) rotate\(0deg\)/);
 });
 
-test('flipping both axes canonicalizes to no flip + 180deg rotation (DESIGN.md §8.1 table)', async ({
+test('aria-pressed canonicalizes flipping both axes to no flip (DESIGN.md §8.1 table), but the animated transform stays a plain double-scale — a real bug, reported from real usage: animating straight to the canonicalized rotate(180deg) form made the browser interpolate scaleX and rotate simultaneously, a visibly "twisting" compound motion for what should look like a normal vertical-flip', async ({
   page,
 }) => {
   await openLightbox(page);
@@ -81,7 +91,7 @@ test('flipping both axes canonicalizes to no flip + 180deg rotation (DESIGN.md �
   await expect(flipVBtn).toHaveAttribute('aria-pressed', 'false');
   await expect
     .poll(() => activeMediaTransform(page))
-    .toMatch(/scaleX\(1\) scaleY\(1\) rotate\(180deg\)/);
+    .toMatch(/scaleX\(-1\) scaleY\(-1\) rotate\(0deg\)/);
 });
 
 test('navigating to the next slide resets rotation/flip to neutral', async ({ page }) => {

@@ -7,6 +7,24 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- The mouse cursor now hides along with the controls once auto-hide kicks
+  in, instead of lingering visibly over the photo — including overriding a
+  plugin's own cursor styling (e.g. Zoom's zoom-in/grab affordance).
+- RotateFlip's four toolbar buttons now ease into their new rotation/flip
+  instead of jumping instantly, same "discrete jumps animate" treatment the
+  Zoom plugin's buttons already had. The per-slide reset on open/navigate
+  stays instant — there's nothing to animate from on a slide that was never
+  rotated. A full rotation (four rotate-right clicks) keeps animating
+  forward the whole way through instead of visibly spinning backward on the
+  last click — the animated value is now a separate, unbounded counter, not
+  the normalized 0-360 state a browser would otherwise interpolate as a
+  large decrease once it wraps back to 0. Flipping horizontal then vertical
+  now animates as a plain flip too, instead of a simultaneous twist+spin —
+  the end orientation was always correct, only the animated path looked
+  wrong before.
+
 ## [0.1.0-alpha.4] - 2026-08-09
 
 ### Added
