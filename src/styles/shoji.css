@@ -263,6 +263,17 @@
   object-fit: contain;
 }
 
+/* max-width/max-height above only ever *cap* size — a real photo is normally
+   bigger than the slide area, so that's correct. A low-res open() placeholder
+   (§2.3) is the opposite case: deliberately small, so it needs to be forced
+   up to fill the frame (blurry, on purpose) instead of rendering at its own
+   tiny natural size. object-fit: contain (inherited above) still letterboxes
+   it within that forced box, just per the thumbnail's own aspect ratio. */
+.shoji-slide-open-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
 /* DESIGN.md §4-video — a provider's embed (an <iframe>, typically) has no
    natural size Shoji can measure the way a decoded image/video does, so
    this just fills whatever box it's given; supply item.width/height for a

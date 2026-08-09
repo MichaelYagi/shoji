@@ -7,7 +7,8 @@ export interface ZoomTransitionTarget {
   aspectRatio?: number;
 }
 
-function prefersReducedMotion(): boolean {
+/** Exported for `SlideManager.ts`'s own placeholder→real-content reveal transition — same accessibility rule, no reason to duplicate the check. */
+export function prefersReducedMotion(): boolean {
   return (
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
