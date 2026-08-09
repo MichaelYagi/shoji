@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Zoom, Fullscreen, RotateFlip</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Zoom, Fullscreen, RotateFlip</h1>
+    <p>
+      Three view-control plugins loaded together — each adds its own toolbar button(s), and none of
+      them know the others exist. All three work with zero configuration: bare
+      <code>plugins: [...]</code>, no options object needed.
+    </p>
+
+    <div id="gallery" class="thumb-grid"></div>
+    <p class="status-line" id="status">Shoji not yet initialized.</p>
+
+    <p>Open a photo, then try:</p>
+    <ul>
+      <li>
+        <strong>Zoom</strong> — the toolbar's +/− buttons, pinch or scroll+ctrl, double-click/
+        double-tap, or the <code>w</code>/<code>s</code> keys. Drag to pan while zoomed in.
+      </li>
+      <li><strong>Fullscreen</strong> — the toolbar button, using the real Fullscreen API.</li>
+      <li>
+        <strong>Rotate/flip</strong> — the toolbar's rotate and flip buttons. Try rotating then
+        flipping, then reset and flip then rotate instead: same end result either order, even though
+        the two operations don't commute — Shoji normalizes it.
+      </li>
+    </ul>
+
+    <script src="../dist/shoji.min.js"></script>
+    <script>
+      function svgDataUri(label, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${color}"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const COLORS = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
+      document.querySelector('#gallery').innerHTML = COLORS.map(
+        (color, i) => `
+          <a href="${svgDataUri(`Photo ${i + 1}`, color)}">
+            <img src="${svgDataUri(`Photo ${i + 1}`, color)}" alt="Photo ${i + 1}">
+          </a>`,
+      ).join('');
+
+      const status = document.querySelector('#status');
+      const gallery = new Shoji('#gallery', {
+        plugins: [Shoji.Zoom, Shoji.Fullscreen, Shoji.RotateFlip],
+      });
+
+      status.textContent = `Loaded ${gallery.items.length} item(s). Open one and try the toolbar buttons above.`;
+      gallery.on('rotateFlipChange', (state) => {
+        status.textContent = `rotateFlipChange: ${JSON.stringify(state)}`;
+      });
+      gallery.on('zoomChange', (state) => {
+        status.textContent = `zoomChange: ${JSON.stringify(state)}`;
+      });
+    </script>
+
+    <h2>Code</h2>
+    <p>The whole integration — three plugins, no options object for any of them:</p>
+    <pre><code>const gallery = new Shoji('#gallery', {
+  plugins: [Shoji.Zoom, Shoji.Fullscreen, Shoji.RotateFlip],
+});</code></pre>
+    <p>
+      Each plugin emits its own change event if you want to react to it — e.g. persisting a viewer's
+      preferred zoom level, or just logging it like this page does:
+    </p>
+    <pre><code>gallery.on('zoomChange', (state) => console.log(state));        // { index, scale }
+gallery.on('rotateFlipChange', (state) => console.log(state));  // { index, rotation, flipH, flipV }</code></pre>
+  </body>
+</html>

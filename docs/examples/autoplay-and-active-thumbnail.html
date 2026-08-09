@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Autoplay + ActiveThumbnail</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+    <style>
+      /* Shoji ships no default styling for the active thumbnail — only the
+         class toggling (DESIGN.md §4.2) — this is the host's own choice of
+         what "active" looks like. */
+      .shoji-thumb-active img {
+        outline: 3px solid #4da3ff;
+        outline-offset: 2px;
+      }
+      /* A horizontally-scrolling strip, not a wrapping grid, so
+         ActiveThumbnail's scrollIntoView (on by default) has somewhere
+         genuinely off-screen to scroll to. */
+      .thumb-strip {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding: 0.25rem;
+        margin: 1rem 0;
+      }
+      .thumb-strip a {
+        flex: 0 0 140px;
+      }
+      .thumb-strip img {
+        width: 140px;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: 6px;
+        cursor: pointer;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Autoplay + ActiveThumbnail</h1>
+    <p>
+      A slideshow (<strong>Autoplay</strong>) that keeps the host's own thumbnail strip in sync with
+      whichever slide is showing (<strong>ActiveThumbnail</strong>) — neither plugin knows the other
+      exists; ActiveThumbnail reacts to the active slide changing by <em>any</em> means, autoplay
+      ticking forward included.
+    </p>
+    <p>
+      Open any photo below, then click the lightbox toolbar's play button (or press
+      <kbd>Space</kbd>). Watch the strip <em>behind</em> the lightbox — the highlighted thumbnail
+      moves and scrolls into view on every advance, twelve items being more than fit on screen at
+      once. Closing the lightbox stops the slideshow too, not just the visual.
+    </p>
+
+    <div id="gallery" class="thumb-strip"></div>
+    <p class="status-line" id="status">Shoji not yet initialized.</p>
+
+    <script src="../dist/shoji.min.js"></script>
+    <script>
+      function svgDataUri(label, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${color}"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const COLORS = [
+        '#c0392b',
+        '#2980b9',
+        '#27ae60',
+        '#8e44ad',
+        '#d35400',
+        '#16a085',
+        '#c0392b',
+        '#2980b9',
+        '#27ae60',
+        '#8e44ad',
+        '#d35400',
+        '#16a085',
+      ];
+      document.querySelector('#gallery').innerHTML = COLORS.map(
+        (color, i) => `
+          <a href="${svgDataUri(`Photo ${i + 1}`, color)}">
+            <img src="${svgDataUri(`Photo ${i + 1}`, color)}" alt="Photo ${i + 1}">
+          </a>`,
+      ).join('');
+
+      const status = document.querySelector('#status');
+      const gallery = new Shoji('#gallery', {
+        plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail],
+        // Shortened from the 5000ms default so the strip's highlight/scroll
+        // is easy to watch move on a documentation page — a real gallery
+        // would likely leave this at the default, or tune it to the photos.
+        autoplay: { interval: 1500 },
+      });
+
+      status.textContent = `Loaded ${gallery.items.length} item(s). Open one, then press play.`;
+      gallery.on('autoplayStart', () => {
+        status.textContent = 'Slideshow playing — watch the strip below the lightbox.';
+      });
+      gallery.on('autoplayStop', () => {
+        status.textContent = 'Slideshow stopped.';
+      });
+    </script>
+
+    <h2>Code</h2>
+    <p>
+      The whole integration — two plugins, a shortened interval, and the CSS that defines "active":
+    </p>
+    <pre><code>const gallery = new Shoji('#gallery', {
+  plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail],
+  autoplay: { interval: 1500 }, // default is 5000ms
+});</code></pre>
+    <pre><code>/* Shoji only toggles the class — you decide what "active" looks like. */
+.shoji-thumb-active img {
+  outline: 3px solid #4da3ff;
+  outline-offset: 2px;
+}</code></pre>
+    <p>
+      <code>ActiveThumbnail</code> also takes an <code>activeClass</code> option (default
+      <code>'shoji-thumb-active'</code>) and a <code>scrollIntoView</code> option (default
+      <code>true</code>) if you'd rather turn the auto-scroll off and keep just the highlight.
+    </p>
+  </body>
+</html>
