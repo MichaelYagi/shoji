@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../src/core';
+import type { PluginContext } from '../../src/core';
 
 beforeEach(() => {
   HTMLImageElement.prototype.decode = vi.fn().mockResolvedValue(undefined);
@@ -181,7 +182,7 @@ describe('Gallery — auto-hide controls', () => {
   });
 });
 
-describe('Gallery — hover pauses auto-hide (buttons only, not counter/caption)', () => {
+describe('Gallery — hover pauses auto-hide (controls, caption, plugin overlays — not the counter)', () => {
   it('hovering the close button prevents hiding past the delay', () => {
     const gallery = makeGallery();
     gallery.open(0);
@@ -220,26 +221,76 @@ describe('Gallery — hover pauses auto-hide (buttons only, not counter/caption)
     gallery.destroy();
   });
 
-  it('does NOT pause auto-hide when hovering the counter', () => {
+  it('hovering the counter prevents hiding past the delay', () => {
     const gallery = makeGallery();
     gallery.open(0);
     hover('.shoji-counter');
 
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(10000);
 
-    expect(isHidden()).toBe(true);
+    expect(isHidden()).toBe(false);
     gallery.destroy();
   });
 
-  it('does NOT pause auto-hide when hovering the caption', () => {
+  it('hovering the toolbar bar itself (not directly on a button — its own padding/gaps) prevents hiding past the delay', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    hover('.shoji-toolbar-right');
+
+    vi.advanceTimersByTime(10000);
+
+    expect(isHidden()).toBe(false);
+    gallery.destroy();
+  });
+
+  it("hovering the caption prevents hiding past the delay — a viewer reading a long one, or clicking a link inside a rich one, shouldn't have it vanish mid-read", () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, { items: [{ id: 'a', src: 'a.jpg', caption: 'A caption' }] });
     gallery.open(0);
     hover('.shoji-caption');
 
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(10000);
 
-    expect(isHidden()).toBe(true);
+    expect(isHidden()).toBe(false);
+    gallery.destroy();
+  });
+
+  it('hovering a plugin-added overlay element (ctx.ui.overlay()) prevents hiding past the delay', () => {
+    const overlayEl = document.createElement('div');
+    overlayEl.className = 'my-plugin-overlay';
+    const plugin = {
+      name: 'test-overlay',
+      init: (ctx: PluginContext) => ctx.ui.overlay(overlayEl),
+    };
+    const gallery = makeGallery({ plugins: [plugin] });
+    gallery.open(0);
+    hover('.my-plugin-overlay');
+
+    vi.advanceTimersByTime(10000);
+
+    expect(isHidden()).toBe(false);
+    gallery.destroy();
+  });
+
+  it('removing a hovered plugin overlay does not leave auto-hide permanently stuck (paused)', () => {
+    const overlayEl = document.createElement('div');
+    overlayEl.className = 'my-plugin-overlay';
+    let removeOverlay: () => void = () => {};
+    const plugin = {
+      name: 'test-overlay',
+      init: (ctx: PluginContext) => {
+        removeOverlay = ctx.ui.overlay(overlayEl);
+        return () => {};
+      },
+    };
+    const gallery = makeGallery({ plugins: [plugin] });
+    gallery.open(0);
+    hover('.my-plugin-overlay');
+    removeOverlay(); // gone mid-hover — no matching pointerleave will ever fire
+
+    vi.advanceTimersByTime(10000);
+
+    expect(isHidden()).toBe(true); // corrected, not stuck paused forever
     gallery.destroy();
   });
 });

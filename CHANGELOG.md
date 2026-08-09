@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-08-09
+
 ### Added
 
 - On a fresh `open()`, a low-res placeholder (scaled by the same zoom-in
@@ -38,6 +40,14 @@ still include breaking changes).
   real-browser quirk (the CSSOM reformats a transform's numeric values when
   read back, so comparing it against the raw string that was set never
   matched) that only reproduces in a real browser, not a unit test.
+- Auto-hide's hover-pause (never hiding while a control is hovered) used to
+  only cover the close/prev/next/caption-toggle buttons — the caption text,
+  the counter, the toolbar bar's own padding, and any plugin-added overlay
+  (`ctx.ui.overlay()`, `ctx.ui.toolbar()`) had no effect on it, so hovering
+  any of those could still let the whole overlay vanish underneath the
+  viewer. Now covers everything in the overlay except the slide media
+  itself (photos still auto-hide on schedule while just being looked at,
+  which is the point).
 
 ## [0.1.0-alpha.3] - 2026-08-08
 

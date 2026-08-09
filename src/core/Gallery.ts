@@ -322,19 +322,23 @@ export class Gallery {
     dom.outer.addEventListener('focusin', this.onActivity);
     dom.outer.addEventListener('focusout', () => this.scheduleAutoHide());
 
-    // Hovering a *button* pauses auto-hide even while the mouse sits still
-    // (pointermove alone wouldn't catch that); the counter/caption are
-    // informational, not interactive, so they're deliberately excluded. Wired
-    // to the shared class selector (below), not an enumerated element list,
-    // so a plugin-added ctx.ui.toolbar() button (e.g. autoplay's play/pause)
-    // participates automatically instead of vanishing mid-hover.
-    for (const button of [
+    // Hovering pauses auto-hide (pointermove alone wouldn't catch a still
+    // mouse) — every part of the overlay, not just individual buttons
+    // (toolbarLeft/Center/Right cover the bar's own padding/gaps too, not
+    // just the buttons already nested inside them). Plugin toolbar
+    // buttons/overlays get this wiring at their own call sites.
+    for (const el of [
       dom.closeButton,
       dom.prevButton,
       dom.nextButton,
       dom.captionToggleButton,
+      dom.caption,
+      dom.counter,
+      dom.toolbarLeft,
+      dom.toolbarCenter,
+      dom.toolbarRight,
     ]) {
-      this.wireControlHover(button);
+      this.wireControlHover(el);
     }
 
     document.body.appendChild(dom.outer);
@@ -449,13 +453,20 @@ export class Gallery {
     el: HTMLElement | ButtonSpec,
   ): Unsubscribe {
     const dom = this.dom!;
-    const node = el instanceof HTMLElement ? el : this.buildToolbarButton(el);
+    // buildToolbarButton() below already wires hover for ButtonSpec; a raw
+    // element needs it here instead, once, not double-wired either way.
+    const isRawElement = el instanceof HTMLElement;
+    const node = isRawElement ? el : this.buildToolbarButton(el);
+    const unhover = isRawElement ? this.wireControlHover(node) : null;
     if (slot === 'right') {
       dom.toolbarRight.insertBefore(node, dom.closeButton);
     } else {
       (slot === 'left' ? dom.toolbarLeft : dom.toolbarCenter).appendChild(node);
     }
-    return () => node.remove();
+    return () => {
+      unhover?.();
+      node.remove();
+    };
   }
 
   private buildToolbarButton(spec: ButtonSpec): HTMLButtonElement {
@@ -476,19 +487,37 @@ export class Gallery {
   private pluginOverlay(el: HTMLElement, layer?: number): Unsubscribe {
     if (layer !== undefined) el.style.zIndex = String(layer);
     this.dom!.dialog.appendChild(el);
-    return () => el.remove();
+    const unhover = this.wireControlHover(el);
+    return () => {
+      unhover();
+      el.remove();
+    };
   }
 
-  /** DESIGN.md §3 — every `ButtonSpec` toolbar button gets hover-pauses-auto-hide, like close/prev/next. */
-  private wireControlHover(button: HTMLElement): void {
-    button.addEventListener('pointerenter', () => {
+  /** DESIGN.md §2.8/§3 — pauses auto-hide while genuinely hovered: controls, caption, and any plugin overlay (`ctx.ui.overlay()`). Unsubscribe also corrects the count if removed mid-hover — a real risk for overlay content a plugin can toggle while the gallery stays open, unlike static buttons. */
+  private wireControlHover(el: HTMLElement): Unsubscribe {
+    let hovering = false;
+    const onEnter = (): void => {
+      hovering = true;
       this.hoveredControlCount++;
       this.onActivity();
-    });
-    button.addEventListener('pointerleave', () => {
+    };
+    const onLeave = (): void => {
+      hovering = false;
       this.hoveredControlCount--;
       this.scheduleAutoHide();
-    });
+    };
+    el.addEventListener('pointerenter', onEnter);
+    el.addEventListener('pointerleave', onLeave);
+    return () => {
+      el.removeEventListener('pointerenter', onEnter);
+      el.removeEventListener('pointerleave', onLeave);
+      if (hovering) {
+        hovering = false;
+        this.hoveredControlCount--;
+        this.scheduleAutoHide();
+      }
+    };
   }
 
   /**
