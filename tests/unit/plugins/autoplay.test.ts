@@ -500,6 +500,55 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     gallery.destroy();
   });
 
+  it("regression: a provider video that errors out (e.g. YouTube's onError) is skipped — advances to the next slide instead of stalling on it", () => {
+    vi.useFakeTimers();
+    const gallery = makeProviderGallery();
+    gallery.open(1); // the YouTube slide directly
+
+    click(toggleButton());
+    const container = providerContainer()!;
+    expect(gallery.currentIndex).toBe(1);
+
+    // Simulates what youtube.ts's onError actually dispatches — this test is
+    // about Autoplay's own reaction, not youtube.ts's dispatching (covered
+    // separately in video-youtube.test.ts).
+    container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 153 } }));
+
+    expect(gallery.currentIndex).toBe(2); // skipped ahead immediately
+    gallery.destroy();
+  });
+
+  it('an error event while the slideshow is paused does not navigate', () => {
+    const gallery = makeProviderGallery();
+    gallery.open(1); // not playing — never clicked the toggle
+
+    const container = providerContainer()!;
+    container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 100 } }));
+
+    expect(gallery.currentIndex).toBe(1); // unchanged
+    gallery.destroy();
+  });
+
+  it('an error on a provider video still mid-setup (never became ready) also skips ahead, not just an already-playing one', () => {
+    vi.useFakeTimers();
+    let trigger: (() => void) | null = null;
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: videoItems,
+      plugins: [Autoplay, delayedVideoProviderPlugin((t) => (trigger = t))],
+      preload: 0,
+    });
+    gallery.open(1);
+    click(toggleButton());
+    expect(trigger).not.toBeNull(); // registered, but onReady() deliberately never called
+
+    const container = providerContainer()!;
+    container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 100 } }));
+
+    expect(gallery.currentIndex).toBe(2); // didn't wait out the fallback interval timer
+    gallery.destroy();
+  });
+
   it('regression: retries an automatic play if the first attempt(s) silently do nothing, instead of leaving the video stuck paused', () => {
     vi.useFakeTimers();
     const el = document.createElement('div');

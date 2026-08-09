@@ -7,6 +7,18 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- `a`/`d` (either letter case) now work as prev/next aliases alongside the
+  existing arrow keys. `w`/`s` zoom in/out by the same step as the Zoom
+  plugin's own toolbar buttons — only when that plugin is loaded, since
+  core has no concept of "zoom" at all.
+- Autoplay now skips a YouTube slide that errors out (removed, private,
+  embedding disabled, ...) instead of stalling on it — the Video plugin
+  surfaces YouTube's own `onError` as a bubbling `error` event, and
+  Autoplay advances to the next slide on it, the same as it would once an
+  ordinary video's `ended` event fires.
+
 ### Fixed
 
 - The open() placeholder could itself show as a blank/black gap — most
@@ -27,6 +39,14 @@ still include breaking changes).
   class of bug. A milder version of the same artifact on the toolbar's own
   buttons (a sibling of the zoomed image) is addressed by giving the
   toolbar its own stable compositing layer (`will-change: transform`).
+- Opening/closing the lightbox felt sluggish, most noticeably with the
+  Layout plugin's masonry/justified modes. Two contributing fixes: the
+  open/close zoom-from-thumbnail animation now uses `translate3d`/`scale3d`
+  and a scoped `will-change: transform` (same GPU-compositing fix as the
+  Zoom plugin, above); and masonry/justified's own container now uses
+  `contain: layout style`, so opening/closing (which has to measure layout)
+  no longer forces the browser to needlessly recompute that container's
+  own — often large — set of individually positioned tiles.
 
 ## [0.1.0-alpha.5] - 2026-08-09
 

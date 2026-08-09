@@ -65,6 +65,10 @@ function click(el: Element): void {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+function press(key: string): void {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+}
+
 function firePointer(
   target: EventTarget,
   type: string,
@@ -168,6 +172,43 @@ describe('Zoom — buttons', () => {
     click(button('Actual size'));
     expect(activeImg().style.transform).toBe('');
     gallery.destroy();
+  });
+});
+
+describe('Zoom — w/s keyboard shortcuts (same fixed step as the toolbar buttons)', () => {
+  it('w zooms in, s zooms out — same as clicking the toolbar buttons', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    press('w');
+    expect(activeImg().style.transform).toContain('scale3d(1.5, 1.5, 1)');
+
+    press('s');
+    expect(activeImg().style.transform).toBe('');
+    gallery.destroy();
+  });
+
+  it('uppercase W/S (Shift held) work the same as lowercase', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    press('W');
+    expect(activeImg().style.transform).toContain('scale3d(1.5, 1.5, 1)');
+
+    press('S');
+    expect(activeImg().style.transform).toBe('');
+    gallery.destroy();
+  });
+
+  it('does nothing once the plugin is torn down (destroy() unregisters the shortcuts)', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    gallery.destroy();
+
+    expect(() => press('w')).not.toThrow();
   });
 });
 

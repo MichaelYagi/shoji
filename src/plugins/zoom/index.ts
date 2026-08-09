@@ -281,19 +281,25 @@ export const Zoom: ShojiPlugin = {
         : { x: 0, y: 0 };
     }
 
+    /** Shared by the zoom-in toolbar button and the `w` keyboard shortcut — same fixed `buttonStep` multiplier either way. */
+    function zoomInStep(): void {
+      const { x, y } = centerAnchor();
+      zoomTo(scale * buttonStep, x, y, maxScale, true);
+    }
+
+    /** Shared by the zoom-out toolbar button and the `s` keyboard shortcut. */
+    function zoomOutStep(): void {
+      const { x, y } = centerAnchor();
+      if (scale / buttonStep <= ZOOM_EPSILON) reset(true);
+      else zoomTo(scale / buttonStep, x, y, maxScale, true);
+    }
+
     const zoomInBtn = buildButton(ZOOM_IN_ICON, zoomInLabel);
     const zoomOutBtn = buildButton(ZOOM_OUT_ICON, zoomOutLabel);
     const actualSizeBtn = buildButton(ZOOM_ACTUAL_SIZE_ICON, actualSizeLabel);
 
-    zoomInBtn.addEventListener('click', () => {
-      const { x, y } = centerAnchor();
-      zoomTo(scale * buttonStep, x, y, maxScale, true);
-    });
-    zoomOutBtn.addEventListener('click', () => {
-      const { x, y } = centerAnchor();
-      if (scale / buttonStep <= ZOOM_EPSILON) reset(true);
-      else zoomTo(scale / buttonStep, x, y, maxScale, true);
-    });
+    zoomInBtn.addEventListener('click', zoomInStep);
+    zoomOutBtn.addEventListener('click', zoomOutStep);
     actualSizeBtn.addEventListener('click', () => {
       // Reads natural.width directly (unlike every other entry point, which
       // just hands zoomTo a target and lets it call ensureNatural itself) —
@@ -318,6 +324,16 @@ export const Zoom: ShojiPlugin = {
     const removeButtons = [zoomInBtn, zoomOutBtn, actualSizeBtn].map((button) =>
       ctx.ui.toolbar('right', button),
     );
+
+    // w/s zoom in/out, same step as the toolbar buttons — both cases
+    // registered explicitly (registerShortcut matches event.key verbatim,
+    // no case-insensitive matching of its own) so Shift/CapsLock still work.
+    const removeShortcuts = [
+      ctx.ui.registerShortcut('w', zoomInStep),
+      ctx.ui.registerShortcut('W', zoomInStep),
+      ctx.ui.registerShortcut('s', zoomOutStep),
+      ctx.ui.registerShortcut('S', zoomOutStep),
+    ];
 
     const offOpen = ctx.on('afterOpen', () => {
       reset();
@@ -353,6 +369,7 @@ export const Zoom: ShojiPlugin = {
 
     return () => {
       for (const remove of removeButtons) remove();
+      for (const remove of removeShortcuts) remove();
       offOpen();
       offBeforeSlide();
       offSlide();

@@ -171,9 +171,13 @@ export class Gallery {
         if (this.closable) this.close();
         break;
       case 'ArrowLeft':
+      case 'a':
+      case 'A':
         this.prev();
         break;
       case 'ArrowRight':
+      case 'd':
+      case 'D':
         this.next();
         break;
       case 'Home':

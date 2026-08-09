@@ -22,6 +22,7 @@ interface FakePlayerOptions {
   events?: {
     onReady?: () => void;
     onStateChange?: (event: { data: number }) => void;
+    onError?: (event: { data: number }) => void;
   };
 }
 
@@ -36,6 +37,7 @@ function makeYTPlayerMock() {
     destroy: ReturnType<typeof vi.fn>;
     onReady?: () => void;
     onStateChange?: (event: { data: number }) => void;
+    onError?: (event: { data: number }) => void;
   }> = [];
 
   class FakePlayer {
@@ -53,11 +55,13 @@ function makeYTPlayerMock() {
     videoId: string;
     onReady?: () => void;
     onStateChange?: (event: { data: number }) => void;
+    onError?: (event: { data: number }) => void;
 
     constructor(_el: HTMLElement, opts: FakePlayerOptions) {
       this.videoId = opts.videoId;
       this.onReady = opts.events?.onReady;
       this.onStateChange = opts.events?.onStateChange;
+      this.onError = opts.events?.onError;
       instances.push(this);
     }
   }
@@ -169,6 +173,44 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     container.muted = false;
     expect(instances[0]!.unMute).toHaveBeenCalledTimes(1);
     expect(container.muted).toBe(false);
+  });
+
+  it("dispatches a bubbling 'error' CustomEvent on the container with the YouTube error code, once onError fires", async () => {
+    const { YT, instances } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const mount = document.createElement('div');
+    const container = document.createElement('div');
+    mount.appendChild(container);
+    document.body.appendChild(mount);
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    await Promise.resolve();
+
+    const onError = vi.fn();
+    mount.addEventListener('error', onError); // an ancestor — proves it bubbles
+
+    instances[0]!.onError?.({ data: 153 });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const event = onError.mock.calls[0]![0] as CustomEvent<{ code: number }>;
+    expect(event.detail).toEqual({ code: 153 });
+  });
+
+  it('dispatches the error event even if onReady never fired (e.g. a removed/private video) — wirePlayableContract is not a prerequisite', async () => {
+    const { YT, instances } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const container = document.createElement('div');
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    await Promise.resolve();
+
+    const onError = vi.fn();
+    container.addEventListener('error', onError);
+
+    expect(() => instances[0]!.onError?.({ data: 100 })).not.toThrow();
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it('destroys the player once the signal aborts', async () => {

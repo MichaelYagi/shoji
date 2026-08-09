@@ -75,6 +75,21 @@ export const Autoplay: ShojiPlugin = {
     let currentVideo: PlayableMedia | null = null;
     let awaitingProviderVideo = false;
 
+    // .shoji-slide-media (offset 0) is a stable node for the gallery's whole
+    // lifetime (SlideManager's pool, DESIGN.md §2.3) — registered once here,
+    // not per enterSlide(), rather than tracked/detached alongside
+    // currentVideo. A provider's own error event (§4-video, e.g. YouTube's
+    // onError) bubbles up to it regardless of which slide is currently
+    // showing there, or whether findPlayable() would even consider it
+    // "ready" yet — a video that errors out before ever becoming playable
+    // would otherwise just sit through the full `interval` fallback timer
+    // instead of skipping ahead immediately.
+    const media = gallery.getActiveMedia();
+    function onVideoError(): void {
+      if (playing) advance();
+    }
+    media?.addEventListener('error', onVideoError);
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'shoji-toolbar-button';
@@ -254,6 +269,7 @@ export const Autoplay: ShojiPlugin = {
 
     return () => {
       stop();
+      media?.removeEventListener('error', onVideoError);
       removeButton();
       removeProgress?.();
       removeShortcut();

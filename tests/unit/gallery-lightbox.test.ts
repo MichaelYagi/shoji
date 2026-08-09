@@ -404,6 +404,20 @@ describe('Gallery — keyboard navigation', () => {
     gallery.destroy();
   });
 
+  it('a/d navigate too — the same prev/next as ArrowLeft/ArrowRight, both letter cases', () => {
+    const gallery = makeGallery();
+    gallery.open(1);
+    press('d');
+    expect(gallery.currentIndex).toBe(2);
+    press('a');
+    expect(gallery.currentIndex).toBe(1);
+    press('D');
+    expect(gallery.currentIndex).toBe(2);
+    press('A');
+    expect(gallery.currentIndex).toBe(1);
+    gallery.destroy();
+  });
+
   it('ignores ArrowLeft/ArrowRight/Home/End while a video has focus, but Escape still closes', () => {
     // jsdom doesn't support focusing <video> at all (confirmed: .focus() is a
     // silent no-op, activeElement never changes) — a documented gap, same

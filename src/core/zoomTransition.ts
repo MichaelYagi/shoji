@@ -122,7 +122,13 @@ function computeTransform(
     originRect.left + originRect.width / 2 - (targetRect.left + targetRect.width / 2);
   const translateY =
     originRect.top + originRect.height / 2 - (targetRect.top + targetRect.height / 2);
-  return `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+  // translate3d/scale3d, not translate()/scale() — forces the GPU
+  // compositing path instead of a main-thread-painted 2D transform, the
+  // same fix already validated for the Zoom plugin's own scale animation
+  // (DESIGN.md §4.6): this is the identical technique (a large photo
+  // scaled via `transform`) on the same element, just driven by open/close
+  // instead of pinch/toolbar zoom.
+  return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scale}, ${scale}, 1)`;
 }
 
 /**
@@ -184,6 +190,7 @@ export function waitForTransitionEnd(target: HTMLElement, cb: () => void): void 
 function clearInlineTransform(target: HTMLElement, expectedTransform: string): void {
   target.style.transition = '';
   target.style.transformOrigin = '';
+  target.style.willChange = '';
   if (target.style.transform === expectedTransform) target.style.transform = '';
 }
 
@@ -204,6 +211,13 @@ export function zoomIn({ origin, target, aspectRatio }: ZoomTransitionTarget): v
   // scaled box ends up offset from origin by however far origin's center
   // sits from its own top-left corner.
   target.style.transformOrigin = 'center';
+  // Promotes target onto its own compositing layer before the animated
+  // transform starts, not mid-animation — same GPU-seam mitigation as the
+  // Zoom plugin (DESIGN.md §4.6). Cleared in clearInlineTransform once the
+  // transition ends, not left on permanently: this is the offset-0 pool
+  // slot, alive for the gallery's whole lifetime, not a class scoped to
+  // only-while-zoomed.
+  target.style.willChange = 'transform';
   target.style.transform = transform;
   void target.offsetHeight; // force the instant jump to commit before transitioning away from it
   target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
@@ -238,6 +252,7 @@ export function zoomOut(
   // scaled box ends up offset from origin by however far origin's center
   // sits from its own top-left corner.
   target.style.transformOrigin = 'center';
+  target.style.willChange = 'transform'; // see zoomIn's doc comment on this line
   target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;
   target.style.transform = transform;

@@ -7,6 +7,24 @@
   position: relative;
 }
 
+/* masonry & justified always give the container an explicit
+   `container.style.height` (index.ts) — never intrinsic/content-driven —
+   so CSS layout containment is safe here and doesn't collapse or misjudge
+   its size. A real, reported slowdown: opening/closing the lightbox reads
+   layout (getBoundingClientRect/offsetHeight — zoomTransition.ts's FLIP
+   technique) which forces the browser to flush *any* pending layout on the
+   page first, including this container's own (often large — hundreds of
+   individually absolutely-positioned tiles) subtree, even though none of
+   that subtree's layout ever changed. `contain: layout` tells the browser
+   this subtree's internal layout can't affect, and isn't affected by,
+   anything outside it, so that flush can skip descending into it. Not
+   applied to grid: its height is intrinsic (content-driven auto-sized
+   rows), which layout containment doesn't safely decouple the same way. */
+.shoji-layout--masonry,
+.shoji-layout--justified {
+  contain: layout style;
+}
+
 .shoji-layout-tile {
   display: block;
   cursor: pointer;

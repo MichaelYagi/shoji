@@ -19,6 +19,18 @@ interface YTPlayerStateEvent {
   data: number;
 }
 
+/**
+ * Same `{ data: number }` shape as `YTPlayerStateEvent` — `data` holds an
+ * error code there (2 invalid parameter, 5 HTML5 player error, 100 video
+ * not found/private, 101/150 embedding disabled by the owner; undocumented
+ * codes like 153 are also reported in the wild) rather than a player state.
+ * Named separately from `YTPlayerStateEvent` for readability at the call
+ * site, not because the shape actually differs.
+ */
+interface YTPlayerErrorEvent {
+  data: number;
+}
+
 interface YTNamespace {
   Player: new (
     el: HTMLElement,
@@ -28,6 +40,7 @@ interface YTNamespace {
       events?: {
         onReady?: () => void;
         onStateChange?: (event: YTPlayerStateEvent) => void;
+        onError?: (event: YTPlayerErrorEvent) => void;
       };
     },
   ) => YTPlayer;
@@ -157,6 +170,16 @@ export const renderYouTube: VideoProviderRenderer = (container, item, onReady, s
           onReady();
         },
         onStateChange: (event) => handleStateChange(event, YT, playable),
+        // bubbles: true — reaches .shoji-slide-media (the pool slot, always
+        // present regardless of readiness) without needing wirePlayableContract
+        // to have run first; onError can fire instead of onReady entirely
+        // (e.g. a removed/private video), so playable isn't a safe assumption
+        // here the way it is in onStateChange. Autoplay (DESIGN.md §4.1)
+        // listens for this to skip to the next slide instead of stalling.
+        onError: (event) =>
+          playable.dispatchEvent(
+            new CustomEvent('error', { bubbles: true, detail: { code: event.data } }),
+          ),
       },
     });
     signal.addEventListener('abort', () => player.destroy(), { once: true });

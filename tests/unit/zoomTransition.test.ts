@@ -95,7 +95,7 @@ describe('zoomTransition', () => {
       // computeTransform's own doc comment for why (the "squeezed image"
       // regression this same fixture's aspect-ratio mismatch used to hit).
       const match = firstTransform.match(
-        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
       );
       expect(match).not.toBeNull();
       const [, tx, ty, s] = match!.map(Number);
@@ -139,14 +139,12 @@ describe('zoomTransition', () => {
 
       zoomOut({ origin, target }, () => {});
 
-      const match = target.style.transform.match(/scale\(([-\d.]+)(?:,\s*([-\d.]+))?\)/);
+      const match = target.style.transform.match(/scale3d\(([-\d.]+),\s*([-\d.]+),\s*1\)/);
       expect(match).not.toBeNull();
       const [, first, second] = match!;
-      // Either a single scale() argument, or two identical ones — never two
-      // *different* values, which is what would distort the image.
-      if (second !== undefined) {
-        expect(Number(second)).toBeCloseTo(Number(first), 5);
-      }
+      // scale3d's x/y args are always the same single scale factor — never
+      // two *different* values, which is what would distort the image.
+      expect(Number(second)).toBeCloseTo(Number(first), 5);
     });
 
     it('does nothing when either rect has zero size (e.g. jsdom, or a genuinely 0x0 element)', () => {
@@ -223,7 +221,7 @@ describe('zoomTransition', () => {
       zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {});
 
       const match = target.style.transform.match(
-        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
       );
       expect(match).not.toBeNull();
       const [, , , scale] = match!.map(Number);
@@ -249,7 +247,7 @@ describe('zoomTransition', () => {
       zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {}); // aspectRatio present too — should still be ignored in favor of the real element
 
       const match = target.style.transform.match(
-        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
       );
       const [, , , s] = match!.map(Number);
       // scale = min(140/600, 105/400) — computed from the real img's rect
@@ -267,7 +265,7 @@ describe('zoomTransition', () => {
       zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {});
 
       const match = target.style.transform.match(
-        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
       );
       expect(match).not.toBeNull();
       const [, , , scale] = match!.map(Number);
@@ -296,7 +294,7 @@ describe('zoomTransition', () => {
       zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {});
 
       const match = target.style.transform.match(
-        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
       );
       expect(match).not.toBeNull();
       const [, , , scale] = match!.map(Number);
