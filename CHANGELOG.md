@@ -19,8 +19,8 @@ still include breaking changes).
   animation always sizes itself to the real photo's dimensions, not the
   placeholder's own (often differently-cropped) shape. The placeholder is
   forced to fill the frame (blurry, deliberately) rather than rendering at
-  its own small native size, and grows the real content in from a smaller,
-  faded start once it arrives, instead of an instant pop.
+  its own small native size; the real content then swaps in instantly, with
+  no animation of its own — the outer zoom already does the growing.
 
 ## [0.1.0-alpha.3] - 2026-08-08
 

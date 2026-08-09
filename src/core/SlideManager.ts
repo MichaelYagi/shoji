@@ -1,7 +1,6 @@
 import { PLAY_ICON } from './icons';
 import type { VideoProviderRenderer } from './plugin';
 import type { GalleryItem } from './types';
-import { prefersReducedMotion, waitForTransitionEnd } from './zoomTransition';
 
 /** Native scrub-bar dragging genuinely pauses `<video>` for its duration — showing the play-overlay immediately on every `pause` would flash it on every seek. Long enough to swallow that, short enough a real pause doesn't feel delayed. */
 const PAUSE_OVERLAY_DELAY_MS = 200;
@@ -273,9 +272,7 @@ export class SlideManager {
       this.cache.set(index, entry);
       const slot = this.slots.find((s) => s.assignedIndex === index);
       if (!slot) return; // nobody currently wants it anymore
-      const hadPlaceholder = slot.media.querySelector('.shoji-slide-open-placeholder') !== null;
       this.moveIn(slot, entry, index);
-      if (hadPlaceholder) growIn(img);
       onLoad(index);
     };
 
@@ -408,7 +405,6 @@ export class SlideManager {
     const onReady = (): void => {
       if (revealed || controller.signal.aborted) return;
       revealed = true;
-      const hadPlaceholder = slot.media.querySelector('.shoji-slide-open-placeholder') !== null;
       container.hidden = false;
       // Whichever loading indicator (Phase 2's spinner, or an open placeholder) is
       // still sitting behind the now-visible embed — never the embed itself.
@@ -416,7 +412,6 @@ export class SlideManager {
       this.applyAspect(slot, item);
       slot.ready = true;
       this.cache.set(index, { node: container, item });
-      if (hadPlaceholder) growIn(container);
       onLoad(index);
     };
     renderFn(container, item, onReady, controller.signal);
@@ -443,24 +438,6 @@ function createOpenPlaceholder(src: string): HTMLImageElement {
   img.draggable = false;
   img.src = src;
   return img;
-}
-
-/** DESIGN.md §2.3 — grows the real content in from smaller/faded, only right after it replaces the open() placeholder — an ordinary cache-hit swap or spinner replacement never calls this. Same instant-jump-then-transition FLIP technique as zoomTransition.ts (inline styles, not classes, so a brand-new node has an actual committed "from" state to transition away from), reusing its waitForTransitionEnd/prefersReducedMotion. */
-function growIn(node: HTMLElement): void {
-  if (prefersReducedMotion()) return;
-  node.style.transition = 'none';
-  node.style.transform = 'scale(0.92)';
-  node.style.opacity = '0';
-  void node.offsetHeight;
-  node.style.transition =
-    'transform var(--shoji-duration) var(--shoji-easing), opacity var(--shoji-duration) var(--shoji-easing)';
-  node.style.transform = 'none';
-  node.style.opacity = '1';
-  waitForTransitionEnd(node, () => {
-    node.style.transition = '';
-    node.style.transform = '';
-    node.style.opacity = '';
-  });
 }
 
 /** DESIGN.md §2.3 — shown in a slot while its content is still decoding/loading, replacing whatever a stale "keep the old image visible" approach would have left there (a previous version of this did that; it read as broken, not helpful, since the old image no longer matches the caption/counter/URL that already moved on). Purely CSS-animated (a rotating ring via `border`), no JS-driven layout. */

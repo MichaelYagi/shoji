@@ -177,47 +177,7 @@ describe('SlideManager', () => {
       expect(real.src).toContain('a.jpg');
     });
 
-    it('grows the real image in from a smaller, faded start once it replaces the placeholder', async () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-      });
-      let resolveDecode!: () => void;
-      HTMLImageElement.prototype.decode = vi.fn(
-        () => new Promise<void>((resolve) => (resolveDecode = resolve)),
-      );
-
-      manager.render(items, 0, vi.fn(), 'thumb-a.jpg');
-      resolveDecode();
-      await flush();
-
-      const real = manager.element.querySelector('img.shoji-slide-img') as HTMLImageElement;
-      // Settled at its natural transform/opacity, with a transition engaged —
-      // proof the FLIP jump-then-transition ran, not an instant, unanimated swap.
-      expect(real.style.transform).toBe('none');
-      expect(real.style.opacity).toBe('1');
-      expect(real.style.transition).toContain('--shoji-duration');
-    });
-
-    it('does not grow-in an ordinary spinner replacement — only a placeholder swap triggers it', async () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-      });
-      manager.render(items, 0, vi.fn()); // no openPlaceholderSrc — plain spinner path
-      await flush();
-
-      const real = manager.element.querySelector('img.shoji-slide-img') as HTMLImageElement;
-      expect(real.style.transform).toBe('');
-      expect(real.style.opacity).toBe('');
-    });
-
-    it('skips the grow-in entirely under prefers-reduced-motion', async () => {
-      window.matchMedia = vi
-        .fn()
-        .mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
+    it('swaps to the real image with no inline transform/opacity of its own — the outer zoom transition already handles the growth, a second animation on the image itself would read as a disconnected extra one', async () => {
       const manager = new SlideManager({
         preload: 0,
         playVideoLabel: 'Play video',
@@ -235,9 +195,6 @@ describe('SlideManager', () => {
       const real = manager.element.querySelector('img.shoji-slide-img') as HTMLImageElement;
       expect(real.style.transform).toBe('');
       expect(real.style.opacity).toBe('');
-
-      // @ts-expect-error - test-only cleanup
-      delete window.matchMedia;
     });
   });
 
