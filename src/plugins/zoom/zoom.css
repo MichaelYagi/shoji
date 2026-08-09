@@ -12,6 +12,14 @@
 
 .shoji-zoom-enabled.shoji-zoomed {
   cursor: grab;
+  /* Reported from real usage: a scaled-up image could show GPU tile-seam
+     lines through its own content while zoomed — the same rasterization
+     quirk as the toolbar's own (shoji.css), just from the image's frequent
+     scale() updates instead of a neighbor's. Scoped to only while actually
+     zoomed (not the whole time this plugin is enabled) — at scale 1 there's
+     no scale-up to tile-seam in the first place, so no reason to spend the
+     extra memory a promoted layer costs. */
+  will-change: transform;
 }
 
 .shoji-zoom-enabled.shoji-zoomed:active {

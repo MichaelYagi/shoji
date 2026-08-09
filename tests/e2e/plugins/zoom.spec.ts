@@ -49,7 +49,7 @@ test('double-click zooms in, second double-click resets', async ({ page }) => {
 
   await (await activeImgHandle(page)).dblclick();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
-  await expect.poll(() => activeImgTransform(page)).toMatch(/scale\(2/);
+  await expect.poll(() => activeImgTransform(page)).toMatch(/scale3d\(2/);
 
   await (await activeImgHandle(page)).dblclick();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);

@@ -53,6 +53,12 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** The open() placeholder now waits for its own decode() to resolve before appearing (SlideManager.ts's revealOpenPlaceholder) — a microtask, not synchronous with open(). */
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function fireTransitionEnd(el: Element): void {
   const event = new Event('transitionend') as Event & { propertyName?: string };
   Object.defineProperty(event, 'propertyName', { value: 'transform' });
@@ -166,7 +172,20 @@ describe('Gallery — zoom transition origin lookup', () => {
 });
 
 describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / origin img)', () => {
-  it("prefers item.thumb over a data-shoji-thumb attribute or the origin's own rendered <img>", () => {
+  beforeEach(() => {
+    // These tests care which *source* resolveOpenPlaceholderSrc picks, not
+    // the placeholder-vs-real-content swap timing (already covered at the
+    // SlideManager level) — so only the placeholder's own decode resolves;
+    // the real slide image's never does, so it can't win the race and
+    // overwrite the placeholder before each assertion runs.
+    HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+      return this.classList.contains('shoji-slide-open-placeholder')
+        ? Promise.resolve()
+        : new Promise<void>(() => {});
+    });
+  });
+
+  it("prefers item.thumb over a data-shoji-thumb attribute or the origin's own rendered <img>", async () => {
     const mount = document.createElement('div');
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', 'x');
@@ -179,6 +198,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
       preload: 0,
     });
     gallery.open(0);
+    await flush();
 
     const placeholder = activeMedia().querySelector(
       'img.shoji-slide-open-placeholder',
@@ -189,7 +209,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
     gallery.destroy();
   });
 
-  it('falls back to a live data-shoji-thumb attribute on the origin element when item.thumb is unset (dynamic mode, no item-array change needed)', () => {
+  it('falls back to a live data-shoji-thumb attribute on the origin element when item.thumb is unset (dynamic mode, no item-array change needed)', async () => {
     const mount = document.createElement('div');
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', 'x');
@@ -198,6 +218,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
 
     const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
     gallery.open(0);
+    await flush();
 
     const placeholder = activeMedia().querySelector(
       'img.shoji-slide-open-placeholder',
@@ -208,13 +229,14 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
     gallery.destroy();
   });
 
-  it("falls back to the origin element's own rendered <img> when neither item.thumb nor data-shoji-thumb is set", () => {
+  it("falls back to the origin element's own rendered <img> when neither item.thumb nor data-shoji-thumb is set", async () => {
     const el = document.createElement('div');
     el.innerHTML = `<a href="a.jpg"><img src="thumb-a.jpg"></a>`;
     document.body.appendChild(el);
 
     const gallery = new Gallery(el, { preload: 0 });
     gallery.open(0);
+    await flush();
 
     const placeholder = activeMedia().querySelector(
       'img.shoji-slide-open-placeholder',

@@ -116,6 +116,19 @@ export const Zoom: ShojiPlugin = {
       waitForTransitionEnd(media, action);
     }
 
+    /**
+     * `translate3d`/`scale3d`, not the 2D `translate`/`scale` this used to
+     * use — a real bug, reported from real usage: evenly-spaced horizontal
+     * lines visible across a zoomed photo, at certain zoom levels, on real
+     * GPU hardware (not reproducible in headless/software rendering, so
+     * this can't be verified here). The regular spacing matches Chromium's
+     * own raster-tile boundaries — a known quirk where scaling large
+     * content via a 2D `scale()` transform can show seams between GPU
+     * tiles. Forcing the fully 3D compositing path instead (functionally
+     * identical — `scale3d(s, s, 1)` and `scale(s)` produce the same
+     * on-screen result) is the commonly effective fix, since it takes a
+     * different rasterization path than the 2D one.
+     */
     function apply(): void {
       const img = getImg();
       if (!img) return;
@@ -123,7 +136,7 @@ export const Zoom: ShojiPlugin = {
       img.style.transform =
         scale === 1 && pan.tx === 0 && pan.ty === 0
           ? 'none'
-          : `translate(${pan.tx}px, ${pan.ty}px) scale(${scale})`;
+          : `translate3d(${pan.tx}px, ${pan.ty}px, 0) scale3d(${scale}, ${scale}, 1)`;
       img.classList.toggle('shoji-zoomed', scale > 1);
     }
 

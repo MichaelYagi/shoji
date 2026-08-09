@@ -121,6 +121,13 @@
   justify-content: space-between;
   padding: var(--shoji-spacing-sm);
   pointer-events: none;
+  /* Reported from real usage: the Zoom plugin's frequent scale() updates on
+     the photo (a sibling, not a descendant) could show as GPU tile-seam
+     artifacts (thin lines) through the toolbar's own semi-transparent,
+     border-radius buttons — the same class of rendering quirk already noted
+     for progressive image decode. Promoting the toolbar to its own stable
+     compositing layer, decoupled from the photo's repaints, avoids it. */
+  will-change: transform;
 }
 
 /* DESIGN.md §3 — ctx.ui.toolbar(slot, ...) inserts plugin buttons into these;

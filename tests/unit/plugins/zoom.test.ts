@@ -128,7 +128,7 @@ describe('Zoom — buttons', () => {
 
     click(button('Zoom in'));
 
-    expect(activeImg().style.transform).toContain('scale(1.5)');
+    expect(activeImg().style.transform).toContain('scale3d(1.5, 1.5, 1)');
     gallery.destroy();
   });
 
@@ -163,7 +163,7 @@ describe('Zoom — buttons', () => {
 
     click(button('Actual size'));
     // natural rendered width is 300 (mocked rect) -> target scale 600/300 = 2
-    expect(activeImg().style.transform).toContain('scale(2)');
+    expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
 
     click(button('Actual size'));
     expect(activeImg().style.transform).toBe('');
@@ -178,7 +178,7 @@ describe('Zoom — double-tap', () => {
     await flushSlideLoad();
 
     doubleTapAt(150, 150);
-    expect(activeImg().style.transform).toContain('scale(2)');
+    expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
 
     doubleTapAt(150, 150);
     expect(activeImg().style.transform).toBe('');
@@ -192,7 +192,7 @@ describe('Zoom — double-tap', () => {
 
     doubleTapAt(150, 150);
 
-    expect(activeImg().style.transform).toContain('scale(3)');
+    expect(activeImg().style.transform).toContain('scale3d(3, 3, 1)');
     gallery.destroy();
   });
 });
@@ -208,7 +208,7 @@ describe('Zoom — pinch/wheel (core gesture relay, DESIGN.md §2.4)', () => {
     firePointer(d, 'pointerdown', { clientX: 100, clientY: 0, pointerId: 2, isPrimary: false });
     firePointer(d, 'pointermove', { clientX: 200, clientY: 0, pointerId: 2 }); // distance doubled -> pinch scale 2
 
-    expect(activeImg().style.transform).toContain('scale(2)');
+    expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
     gallery.destroy();
   });
 
@@ -227,7 +227,7 @@ describe('Zoom — pinch/wheel (core gesture relay, DESIGN.md §2.4)', () => {
       }),
     );
 
-    expect(activeImg().style.transform).toMatch(/scale\(([2-9]|\d\d)/); // clearly zoomed in past 1
+    expect(activeImg().style.transform).toMatch(/scale3d\(([2-9]|\d\d)/); // clearly zoomed in past 1
     gallery.destroy();
   });
 
@@ -332,7 +332,7 @@ describe('Zoom — resets per slide', () => {
     gallery.open(0);
     await flushSlideLoad();
     doubleTapAt(150, 150);
-    expect(activeImg().style.transform).toContain('scale(2)');
+    expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
 
     const onBeforeClose = vi.fn(() => {
       // still zoomed at this exact moment would mean zoomOut() computes its

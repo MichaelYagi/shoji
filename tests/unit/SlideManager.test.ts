@@ -111,18 +111,35 @@ describe('SlideManager', () => {
   });
 
   describe("openPlaceholderSrc (Gallery.open()'s low-res stand-in)", () => {
-    it("replaces the center slot's spinner with the placeholder image, then swaps it for the real image once decoded", async () => {
+    it('keeps the spinner up until the placeholder itself decodes, then swaps it in, then swaps to the real image once that decodes', async () => {
       const manager = new SlideManager({
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
-      let resolveDecode!: () => void;
-      HTMLImageElement.prototype.decode = vi.fn(
-        () => new Promise<void>((resolve) => (resolveDecode = resolve)),
-      );
+      const resolvers = new Map<string, () => void>();
+      HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+        return new Promise<void>((resolve) => resolvers.set(this.src, resolve));
+      });
+      const resolveDecodeFor = (urlSubstring: string): void => {
+        const entry = [...resolvers].find(([src]) => src.includes(urlSubstring));
+        if (!entry) throw new Error(`no pending decode for ${urlSubstring}`);
+        resolvers.delete(entry[0]);
+        entry[1]();
+      };
 
       manager.render(items, 0, vi.fn(), 'thumb-a.jpg');
+
+      // Real content decode not resolved yet either — spinner stays up
+      // rather than showing an undecoded (blank) placeholder image, a real
+      // bug: a "thumb" that's actually a slow, large image (no real
+      // thumbnail-generation step, e.g. Layout's own demo just reuses
+      // item.src) left a visibly blank gap instead of the spinner.
+      expect(manager.element.querySelector('.shoji-slide-spinner')).not.toBeNull();
+      expect(manager.element.querySelector('.shoji-slide-open-placeholder')).toBeNull();
+
+      resolveDecodeFor('thumb-a.jpg');
+      await flush();
 
       expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
       const placeholder = manager.element.querySelector(
@@ -132,7 +149,7 @@ describe('SlideManager', () => {
       expect(placeholder.src).toContain('thumb-a.jpg');
       expect(manager.isActiveReady()).toBe(false); // still the placeholder, not the real content
 
-      resolveDecode();
+      resolveDecodeFor('a.jpg'); // the real image — matches only 'a.jpg', not 'thumb-a.jpg' (already resolved/removed)
       await flush();
 
       expect(manager.element.querySelector('.shoji-slide-open-placeholder')).toBeNull();
@@ -141,19 +158,33 @@ describe('SlideManager', () => {
       expect(manager.isActiveReady()).toBe(true);
     });
 
-    it('only applies to the center slot — a preloaded neighbor still gets the plain spinner', () => {
+    it('only applies to the center slot — a preloaded neighbor never gets a placeholder, even once its own decode resolves', async () => {
       const manager = new SlideManager({
         preload: 1,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
-      HTMLImageElement.prototype.decode = vi.fn(() => new Promise<void>(() => {})); // never resolves
+      const resolvers = new Map<string, () => void>();
+      HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+        return new Promise<void>((resolve) => resolvers.set(this.src, resolve));
+      });
+      const resolveDecodeFor = (urlSubstring: string): void => {
+        const entry = [...resolvers].find(([src]) => src.includes(urlSubstring));
+        if (!entry) throw new Error(`no pending decode for ${urlSubstring}`);
+        resolvers.delete(entry[0]);
+        entry[1]();
+      };
 
       manager.render(items, 1, vi.fn(), 'thumb-b.jpg'); // center = index 1 ('b'), neighbors = 'a', 'c'
 
       const slots = manager.element.querySelectorAll('.shoji-slide');
       const centerMedia = slots[1]!.querySelector('.shoji-slide-media') as HTMLElement;
       const neighborMedia = slots[0]!.querySelector('.shoji-slide-media') as HTMLElement;
+
+      // Resolve the center's placeholder decode only — the neighbor's own
+      // (real-content) decode is deliberately left pending.
+      resolveDecodeFor('thumb-b.jpg');
+      await flush();
 
       expect(centerMedia.querySelector('.shoji-slide-open-placeholder')).not.toBeNull();
       expect(centerMedia.querySelector('.shoji-slide-spinner')).toBeNull();
@@ -643,7 +674,7 @@ describe('SlideManager', () => {
       expect(onLoad).toHaveBeenCalledWith(0);
     });
 
-    it('regression: an open placeholder image is removed once the embed reveals, not left behind alongside it', () => {
+    it('regression: an open placeholder image is removed once the embed reveals, not left behind alongside it', async () => {
       let capturedOnReady: (() => void) | null = null;
       const render = vi.fn((container: HTMLElement, _item: GalleryItem, onReady: () => void) => {
         capturedOnReady = onReady;
@@ -656,6 +687,7 @@ describe('SlideManager', () => {
       });
 
       manager.render([ytItem()], 0, vi.fn(), 'thumb-yt.jpg');
+      await flush(); // let the placeholder's own decode resolve before it's expected to appear
 
       expect(manager.element.querySelector('.shoji-slide-open-placeholder')).not.toBeNull();
       capturedOnReady!();

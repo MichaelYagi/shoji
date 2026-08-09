@@ -125,7 +125,7 @@ export class SlideManager {
     }
   }
 
-  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only ever passed by `Gallery.open()`) replaces the centerIndex slot's spinner with a low-res placeholder, if not already ready. */
+  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only from `Gallery.open()`) swaps the centerIndex slot's spinner for a low-res placeholder once it decodes, if not already ready. */
   render(
     items: readonly GalleryItem[],
     centerIndex: number,
@@ -182,11 +182,10 @@ export class SlideManager {
       slot.assignedIndex = index;
       slot.ready = false;
       releaseVideo(slot.media);
-      slot.media.replaceChildren(
-        index === centerIndex && openPlaceholderSrc
-          ? createOpenPlaceholder(openPlaceholderSrc)
-          : createSpinner(),
-      );
+      slot.media.replaceChildren(createSpinner());
+      if (index === centerIndex && openPlaceholderSrc) {
+        this.revealOpenPlaceholder(openPlaceholderSrc, slot, index);
+      }
 
       if (item.video?.provider === 'html5') {
         this.renderVideo(item, slot, index, onLoad);
@@ -276,6 +275,24 @@ export class SlideManager {
       onLoad(index);
     };
 
+    if (typeof img.decode === 'function') {
+      img.decode().then(reveal, reveal);
+    } else {
+      img.addEventListener('load', reveal, { once: true });
+      img.addEventListener('error', reveal, { once: true });
+    }
+  }
+
+  /** DESIGN.md §2.3 — swaps the spinner for the open() placeholder only once *it* decodes, never immediately: `item.thumb` is often just `item.src` again (no real thumbnail step), so an undecoded placeholder could leave a blank gap as long as that "thumbnail" took to decode — worse than the spinner it replaced. */
+  private revealOpenPlaceholder(src: string, slot: Slot, index: number): void {
+    const img = createOpenPlaceholder(src);
+    const reveal = (): void => {
+      if (slot.assignedIndex !== index || slot.ready) return; // stale, or the real content already won the race
+      // Only the spinner, not slot.media wholesale — a provider video may
+      // have already appended its own (still-hidden) container alongside it.
+      slot.media.querySelector('.shoji-slide-spinner')?.remove();
+      slot.media.appendChild(img);
+    };
     if (typeof img.decode === 'function') {
       img.decode().then(reveal, reveal);
     } else {

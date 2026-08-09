@@ -7,6 +7,27 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- The open() placeholder could itself show as a blank/black gap — most
+  visibly with the Layout plugin, whose tiles (including Shoji's own demo)
+  commonly reuse the full-resolution image as `item.thumb`, with only CSS
+  shrinking its on-screen size. A brand-new `<img>` still has to fully
+  decode a large file before it paints anything, regardless of cache
+  status, so inserting the placeholder immediately could leave a longer
+  blank gap than just showing the spinner would have. It now waits for its
+  own decode to finish before appearing — a genuinely small/fast thumb is
+  unaffected, a slow one just leaves the spinner up a little longer instead
+  of showing nothing.
+- Zoom plugin: evenly-spaced horizontal lines could appear across a zoomed
+  photo at certain zoom levels on real GPU hardware — a known Chromium
+  rendering quirk (GPU raster-tile seams) with 2D `scale()` transforms on
+  large scaled content, also independently observed in lightGalleryJS. Now
+  uses `translate3d`/`scale3d` instead, the standard mitigation for this
+  class of bug. A milder version of the same artifact on the toolbar's own
+  buttons (a sibling of the zoomed image) is addressed by giving the
+  toolbar its own stable compositing layer (`will-change: transform`).
+
 ## [0.1.0-alpha.5] - 2026-08-09
 
 ### Added
