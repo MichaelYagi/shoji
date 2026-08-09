@@ -285,6 +285,29 @@ describe('zoomTransition', () => {
       expect(scale).toBeLessThan(1);
     });
 
+    it("regression: ignores the open-transition placeholder as target's child too — its rect reflects its own crop/aspect ratio, not the real photo's", () => {
+      const placeholder = document.createElement('img');
+      placeholder.className = 'shoji-slide-img shoji-slide-open-placeholder';
+      target.appendChild(placeholder);
+      mockRect(origin, { top: 500, left: 500, width: 140, height: 105 }); // thumbnail
+      mockRect(target, { top: 0, left: 0, width: 1200, height: 400 }); // container — ignored either way
+      mockRect(placeholder, { top: 150, left: 500, width: 200, height: 200 }); // low-res thumb's own square crop, not the real 3:2 photo
+
+      zoomOut({ origin, target, aspectRatio: 3 / 2 }, () => {});
+
+      const match = target.style.transform.match(
+        /translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+)\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, , , scale] = match!.map(Number);
+
+      // Should fall through to the aspectRatio-derived contained box, same as
+      // the spinner case — not the placeholder's own 200x200 rect.
+      const correctScale = Math.min(140 / 600, 105 / 400);
+      expect(scale).toBeCloseTo(correctScale, 3);
+      expect(scale).not.toBeCloseTo(Math.min(140 / 200, 105 / 200), 3);
+    });
+
     it('transitions target toward the origin rect, then calls onComplete once settled', () => {
       mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
       mockRect(target, { top: 0, left: 0, width: 800, height: 600 });

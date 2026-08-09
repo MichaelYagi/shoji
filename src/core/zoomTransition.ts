@@ -61,10 +61,23 @@ function containedBox(container: Box, aspectRatio: number): Box {
  * (>1 instead of <1) and the spinner rendered wildly oversized for the
  * transition's first frames before shrinking back down — never the actual
  * photo, which hadn't swapped in yet either way.
+ *
+ * Same reasoning excludes `.shoji-slide-open-placeholder` (§2.3's low-res
+ * open() stand-in): it's a real, non-spinner `<img>`, but its own rendered
+ * rect reflects *its* crop/aspect ratio, not the real photo's — trusting it
+ * would scale toward the placeholder's shape instead of the real photo's,
+ * only to visibly jump again once the real photo swaps in and this
+ * transition (already run) no longer applies. Excluding it falls through to
+ * the analytical `aspectRatio`-based box below, sized for the real photo
+ * regardless of what shape the placeholder happens to be.
  */
 function effectiveTargetBox(target: HTMLElement, aspectRatio?: number): Box {
   const child = target.firstElementChild;
-  if (child instanceof HTMLElement && !child.classList.contains('shoji-slide-spinner')) {
+  const isPlaceholder =
+    child instanceof HTMLElement &&
+    (child.classList.contains('shoji-slide-spinner') ||
+      child.classList.contains('shoji-slide-open-placeholder'));
+  if (child instanceof HTMLElement && !isPlaceholder) {
     const rect = child.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) return rect;
   }

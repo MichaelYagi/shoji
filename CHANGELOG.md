@@ -15,7 +15,9 @@ still include breaking changes).
   Checked in order: `item.thumb`, a live `data-shoji-thumb` attribute on the
   origin element, then whatever `<img>` is already rendered inside it — no
   new config, existing spinner behavior unchanged if none apply. Only
-  applies to `open()`, never ordinary slide-to-slide navigation.
+  applies to `open()`, never ordinary slide-to-slide navigation. The
+  animation always sizes itself to the real photo's dimensions, not the
+  placeholder's own (often differently-cropped) shape.
 
 ## [0.1.0-alpha.3] - 2026-08-08
 
