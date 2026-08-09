@@ -138,6 +138,82 @@ describe('Gallery — zoom transition origin lookup', () => {
   });
 });
 
+describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / origin img)', () => {
+  it("prefers item.thumb over a data-shoji-thumb attribute or the origin's own rendered <img>", () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    marker.setAttribute('data-shoji-thumb', 'from-attr.jpg');
+    marker.innerHTML = '<img src="from-dom.jpg">';
+    document.body.append(mount, marker);
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', thumb: 'from-item.jpg' }],
+      preload: 0,
+    });
+    gallery.open(0);
+
+    const placeholder = activeMedia().querySelector(
+      'img.shoji-slide-open-placeholder',
+    ) as HTMLImageElement;
+    expect(placeholder.src).toContain('from-item.jpg');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('falls back to a live data-shoji-thumb attribute on the origin element when item.thumb is unset (dynamic mode, no item-array change needed)', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    marker.setAttribute('data-shoji-thumb', 'from-attr.jpg');
+    document.body.append(mount, marker);
+
+    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    gallery.open(0);
+
+    const placeholder = activeMedia().querySelector(
+      'img.shoji-slide-open-placeholder',
+    ) as HTMLImageElement;
+    expect(placeholder.src).toContain('from-attr.jpg');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it("falls back to the origin element's own rendered <img> when neither item.thumb nor data-shoji-thumb is set", () => {
+    const el = document.createElement('div');
+    el.innerHTML = `<a href="a.jpg"><img src="thumb-a.jpg"></a>`;
+    document.body.appendChild(el);
+
+    const gallery = new Gallery(el, { preload: 0 });
+    gallery.open(0);
+
+    const placeholder = activeMedia().querySelector(
+      'img.shoji-slide-open-placeholder',
+    ) as HTMLImageElement;
+    expect(placeholder.src).toContain('thumb-a.jpg');
+
+    gallery.destroy();
+  });
+
+  it('shows no placeholder — same spinner as before — when none of the three sources are available', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div'); // tagged for origin lookup, but no thumb source at all
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+
+    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    gallery.open(0);
+
+    expect(activeMedia().querySelector('.shoji-slide-open-placeholder')).toBeNull();
+    expect(activeMedia().querySelector('.shoji-slide-spinner')).not.toBeNull();
+
+    marker.remove();
+    gallery.destroy();
+  });
+});
+
 describe('Gallery — deferred close animation', () => {
   function openGallery(count = 3) {
     const el = document.createElement('div');

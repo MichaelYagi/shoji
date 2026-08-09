@@ -184,16 +184,25 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
           <td>—</td>
           <td>
             The grid/tile image — Layout plugin tiles prefer this over <code>src</code> (see the
-            <a href="./layout.html">Layout guide</a>). Not used by the lightbox itself.
+            <a href="./layout.html">Layout guide</a>). Also the preferred source for the
+            open-transition placeholder — see
+            <a href="./transitions.html#open-placeholder">Transitions</a>.
           </td>
         </tr>
         <tr>
           <td><code>id</code></td>
           <td>—</td>
           <td>
-            <code>updateSlides</code> diffing, and finding the origin thumbnail for the open/close
-            zoom transition and <code>ActiveThumbnail</code> (via a matching
-            <code>data-shoji-id</code>). Falls back to <code>src</code> if omitted.
+            Two separate uses, with different fallback behavior. For
+            <code>updateSlides</code> diffing, it falls back to <code>src</code> if omitted. For
+            finding the origin thumbnail — used by the open/close zoom transition and
+            <code>ActiveThumbnail</code>, via a <code>data-shoji-id</code> element matching this
+            <code>id</code> — there is <strong>no fallback</strong>: omit <code>id</code>, or omit
+            the matching <code>data-shoji-id</code> attribute on your thumbnail element, and the
+            origin lookup returns nothing. No error is thrown; the zoom transition and
+            <code>ActiveThumbnail</code> just silently don't do anything. See
+            <a href="./transitions.html#zoom-from-thumbnail">Transitions</a> for what's required to
+            enable it.
           </td>
         </tr>
         <tr>

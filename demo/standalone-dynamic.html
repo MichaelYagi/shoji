@@ -85,7 +85,15 @@ gallery.open(0);
     <script>
         const gallery = new Shoji('#gallery', {
             items: [
-                { id: '1', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/1.jpg', caption: 'Sunset 1' },
+                // thumb: shown, scaled by the zoom-in animation, in place of the
+                // loading spinner on a fresh open() while src is still decoding —
+                // see docs/guides/transitions.html#open-placeholder. Only item '1'
+                // sets it explicitly here; every other item still gets a placeholder
+                // too, falling back to its own thumbnail <img> in the grid above
+                // (data-shoji-thumb on that <a> would be a third option, no
+                // items-array change needed — useful if a host builds items
+                // separately from the markup that renders them).
+                { id: '1', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/1.jpg', thumb: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/1.jpg', caption: 'Sunset 1' },
                 { id: '2', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/2.jpg', caption: 'Sunset 2' },
                 { id: '3', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/4.jpg', caption: 'Sunset 4' },
                 { id: '4', src: 'file:///C:/Users/Michael/Documents/development/shoji/demo/assets/5.jpg', caption: 'Sunset 5' },

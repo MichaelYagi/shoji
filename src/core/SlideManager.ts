@@ -125,11 +125,12 @@ export class SlideManager {
     }
   }
 
-  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. */
+  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only ever passed by `Gallery.open()`) replaces the centerIndex slot's spinner with a low-res placeholder, if not already ready. */
   render(
     items: readonly GalleryItem[],
     centerIndex: number,
     onLoad: (index: number) => void,
+    openPlaceholderSrc?: string,
   ): void {
     // Trim the cache to the same centerIndex ± preload window the slots
     // cover — releases a dropped video here rather than just letting the
@@ -181,7 +182,11 @@ export class SlideManager {
       slot.assignedIndex = index;
       slot.ready = false;
       releaseVideo(slot.media);
-      slot.media.replaceChildren(createSpinner());
+      slot.media.replaceChildren(
+        index === centerIndex && openPlaceholderSrc
+          ? createOpenPlaceholder(openPlaceholderSrc)
+          : createSpinner(),
+      );
 
       if (item.video?.provider === 'html5') {
         this.renderVideo(item, slot, index, onLoad);
@@ -401,7 +406,9 @@ export class SlideManager {
       if (revealed || controller.signal.aborted) return;
       revealed = true;
       container.hidden = false;
-      slot.media.querySelector('.shoji-slide-spinner')?.remove();
+      // Whichever loading indicator (Phase 2's spinner, or an open placeholder) is
+      // still sitting behind the now-visible embed — never the embed itself.
+      slot.media.querySelector('.shoji-slide-spinner, .shoji-slide-open-placeholder')?.remove();
       this.applyAspect(slot, item);
       slot.ready = true;
       this.cache.set(index, { node: container, item });
@@ -421,6 +428,16 @@ export class SlideManager {
     this.pending.clear();
     this.element.remove();
   }
+}
+
+/** DESIGN.md §2.3 — low-res open() placeholder; reuses .shoji-slide-img's sizing so the zoom-in FLIP measures it like real content (zoomTransition.ts's effectiveTargetBox only special-cases the spinner as non-content). */
+function createOpenPlaceholder(src: string): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'shoji-slide-img shoji-slide-open-placeholder';
+  img.alt = '';
+  img.draggable = false;
+  img.src = src;
+  return img;
 }
 
 /** DESIGN.md §2.3 — shown in a slot while its content is still decoding/loading, replacing whatever a stale "keep the old image visible" approach would have left there (a previous version of this did that; it read as broken, not helpful, since the old image no longer matches the caption/counter/URL that already moved on). Purely CSS-animated (a rotating ring via `border`), no JS-driven layout. */

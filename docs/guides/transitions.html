@@ -34,9 +34,64 @@
     <pre><code>new Shoji('#gallery', { mode: 'fade' });</code></pre>
     <p>
       This is a separate system from the open/close animation (the photo growing out of its
-      thumbnail, and shrinking back into it) — that one always plays the same FLIP-style zoom
-      regardless of <code>mode</code>, which only ever governs switching between slides
+      thumbnail, and shrinking back into it) — that one plays the same FLIP-style zoom regardless of
+      <code>mode</code>, which only ever governs switching between slides
       <em>while already open</em>.
+    </p>
+
+    <h2 id="zoom-from-thumbnail">Enabling the zoom-from-thumbnail transition</h2>
+    <p>
+      Unlike slide-to-slide transitions, the open/close zoom is <strong>not unconditional</strong>.
+      It needs an <em>origin element</em> — the actual thumbnail DOM node to animate to/from — and
+      Shoji has no reliable way to find one on its own in dynamic mode (items passed as JS objects
+      rather than scanned from existing markup). If no origin is found, the lightbox just appears
+      and disappears instantly, with no animation and no error.
+    </p>
+    <p>
+      To enable it, both of the following must be true at the moment you call <code>open()</code>:
+    </p>
+    <ol>
+      <li>Each <code>GalleryItem</code> has a stable, unique <code>id</code>.</li>
+      <li>
+        The corresponding thumbnail element in your page has a matching
+        <code>data-shoji-id="&lt;that id&gt;"</code> attribute, and is actually present in the DOM
+        (a virtualized/windowed grid that unmounts off-screen thumbnails will break this for
+        anything not currently mounted).
+      </li>
+    </ol>
+    <pre><code>const items = photos.map((p) => ({ id: p.metadataId, src: p.url }));
+
+// in your thumbnail grid:
+// &lt;img data-shoji-id="${photo.metadataId}" src="${photo.thumbUrl}" /&gt;</code></pre>
+    <p>
+      Selector mode (scanning existing markup instead of passing dynamic items) gets this for free —
+      the scanned element itself is the origin, no <code>data-shoji-id</code> needed.
+    </p>
+
+    <h2 id="open-placeholder">Open-transition placeholder</h2>
+    <p>
+      On a fresh <code>open()</code>, if the real content isn't decoded yet (a slow connection, a
+      large photo), a spinner shows by default — same as navigating to any other undecoded slide. If
+      a low-res thumbnail is available for that item, Shoji shows <em>that</em> instead, scaled up
+      by the same zoom-in animation as the real content, then swaps to the real image the instant it
+      finishes decoding (mid-animation if it lands there). This only ever applies to
+      <code>open()</code> — ordinary slide-to-slide navigation always uses the spinner, since
+      there's no low-res version of a slide you haven't opened yet to reuse the same way.
+    </p>
+    <p>Checked in this order, first match wins:</p>
+    <ol>
+      <li><code>item.thumb</code>, if set.</li>
+      <li>
+        A live <code>data-shoji-thumb</code> attribute on the origin element (see above) — lets a
+        dynamic-mode host opt in by tagging existing markup, with no item-array change needed.
+      </li>
+      <li>Whatever <code>&lt;img&gt;</code> is already rendered inside the origin element.</li>
+    </ol>
+    <p>If none apply, it's the ordinary spinner — never a broken/blank state.</p>
+    <p>
+      Selector mode gets this for free too: <code>thumb</code> auto-populates from the scanned
+      <code>&lt;img src&gt;</code> (or a <code>data-shoji-thumb</code> override) at scan time, so
+      the first tier above already covers it.
     </p>
 
     <h2>Built-in presets</h2>

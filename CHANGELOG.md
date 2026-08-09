@@ -7,6 +7,16 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- On a fresh `open()`, a low-res placeholder (scaled by the same zoom-in
+  animation as the real content) now shows in place of the loading spinner
+  when one's available, swapping to the real image the instant it decodes.
+  Checked in order: `item.thumb`, a live `data-shoji-thumb` attribute on the
+  origin element, then whatever `<img>` is already rendered inside it — no
+  new config, existing spinner behavior unchanged if none apply. Only
+  applies to `open()`, never ordinary slide-to-slide navigation.
+
 ## [0.1.0-alpha.3] - 2026-08-08
 
 ### Added

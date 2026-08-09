@@ -618,16 +618,21 @@ export class Gallery {
     }
   }
 
-  private renderCurrentSlide(): void {
+  private renderCurrentSlide(openPlaceholderSrc?: string): void {
     if (!this.slides || !this.dom) return;
     const dom = this.dom;
-    this.slides.render(this.itemList, this.activeIndex, (loadedIndex) => {
-      if (loadedIndex === this.activeIndex) {
-        this.bus.emit('slideItemLoad', { index: loadedIndex });
-        this.setSlideLoading(false);
-        this.updateCaptionVisibility();
-      }
-    });
+    this.slides.render(
+      this.itemList,
+      this.activeIndex,
+      (loadedIndex) => {
+        if (loadedIndex === this.activeIndex) {
+          this.bus.emit('slideItemLoad', { index: loadedIndex });
+          this.setSlideLoading(false);
+          this.updateCaptionVisibility();
+        }
+      },
+      openPlaceholderSrc,
+    );
     this.setSlideLoading(!this.slides.isActiveReady());
 
     const item = this.itemList[this.activeIndex];
@@ -652,7 +657,8 @@ export class Gallery {
     this.activeIndex = index;
     this.captionVisibleOnVideo = !!this.options.showVideoCaption;
     lockBodyScroll();
-    this.renderCurrentSlide();
+    const origin = this.getOriginElement(index);
+    this.renderCurrentSlide(this.resolveOpenPlaceholderSrc(this.itemList[index], origin));
     this.dom!.outer.classList.add('shoji-open');
     document.addEventListener('keydown', this.onKeydown);
     this.focusTrap.activate(this.dom!.dialog);
@@ -660,13 +666,24 @@ export class Gallery {
     this.applyMobileControlsSetting();
 
     const media = this.slides?.getActiveMedia();
-    const origin = this.getOriginElement(index);
     if (media && origin) {
       zoomIn({ origin, target: media, aspectRatio: this.resolveAspectRatio(index, origin) });
     }
 
     this.bus.emit('open', { index });
     this.bus.emit('afterOpen', { index });
+  }
+
+  /** DESIGN.md §2.3 — low-res open() placeholder source, checked in order: item.thumb, a live data-shoji-thumb on origin, else origin's own rendered <img>. */
+  private resolveOpenPlaceholderSrc(
+    item: GalleryItem | undefined,
+    origin: HTMLElement | null,
+  ): string | undefined {
+    if (item?.thumb) return item.thumb;
+    const dataThumb = origin?.getAttribute('data-shoji-thumb');
+    if (dataThumb) return dataThumb;
+    const img = origin?.querySelector('img');
+    return img?.currentSrc || img?.src || undefined;
   }
 
   /**

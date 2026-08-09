@@ -110,6 +110,74 @@ describe('SlideManager', () => {
     expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
   });
 
+  describe("openPlaceholderSrc (Gallery.open()'s low-res stand-in)", () => {
+    it("replaces the center slot's spinner with the placeholder image, then swaps it for the real image once decoded", async () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      let resolveDecode!: () => void;
+      HTMLImageElement.prototype.decode = vi.fn(
+        () => new Promise<void>((resolve) => (resolveDecode = resolve)),
+      );
+
+      manager.render(items, 0, vi.fn(), 'thumb-a.jpg');
+
+      expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
+      const placeholder = manager.element.querySelector(
+        'img.shoji-slide-open-placeholder',
+      ) as HTMLImageElement;
+      expect(placeholder).not.toBeNull();
+      expect(placeholder.src).toContain('thumb-a.jpg');
+      expect(manager.isActiveReady()).toBe(false); // still the placeholder, not the real content
+
+      resolveDecode();
+      await flush();
+
+      expect(manager.element.querySelector('.shoji-slide-open-placeholder')).toBeNull();
+      const real = manager.element.querySelector('img.shoji-slide-img') as HTMLImageElement;
+      expect(real.src).toContain('a.jpg');
+      expect(manager.isActiveReady()).toBe(true);
+    });
+
+    it('only applies to the center slot — a preloaded neighbor still gets the plain spinner', () => {
+      const manager = new SlideManager({
+        preload: 1,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      HTMLImageElement.prototype.decode = vi.fn(() => new Promise<void>(() => {})); // never resolves
+
+      manager.render(items, 1, vi.fn(), 'thumb-b.jpg'); // center = index 1 ('b'), neighbors = 'a', 'c'
+
+      const slots = manager.element.querySelectorAll('.shoji-slide');
+      const centerMedia = slots[1]!.querySelector('.shoji-slide-media') as HTMLElement;
+      const neighborMedia = slots[0]!.querySelector('.shoji-slide-media') as HTMLElement;
+
+      expect(centerMedia.querySelector('.shoji-slide-open-placeholder')).not.toBeNull();
+      expect(centerMedia.querySelector('.shoji-slide-spinner')).toBeNull();
+      expect(neighborMedia.querySelector('.shoji-slide-open-placeholder')).toBeNull();
+      expect(neighborMedia.querySelector('.shoji-slide-spinner')).not.toBeNull();
+    });
+
+    it('does not show a placeholder for a slot whose content is already cached/ready', async () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      manager.render(items, 0, vi.fn()); // 'a' decodes and caches normally
+      await flush();
+
+      manager.render(items, 0, vi.fn(), 'thumb-a.jpg'); // same index, already cached
+
+      expect(manager.element.querySelector('.shoji-slide-open-placeholder')).toBeNull();
+      const real = manager.element.querySelector('img.shoji-slide-img') as HTMLImageElement;
+      expect(real.src).toContain('a.jpg');
+    });
+  });
+
   it('preload keeps neighbors decoded ahead of time — navigating to one shows it instantly, no spinner, onLoad fires synchronously', async () => {
     const manager = new SlideManager({
       preload: 1,
@@ -553,6 +621,28 @@ describe('SlideManager', () => {
       expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
       expect(manager.isActiveReady()).toBe(true);
       expect(onLoad).toHaveBeenCalledWith(0);
+    });
+
+    it('regression: an open placeholder image is removed once the embed reveals, not left behind alongside it', () => {
+      let capturedOnReady: (() => void) | null = null;
+      const render = vi.fn((container: HTMLElement, _item: GalleryItem, onReady: () => void) => {
+        capturedOnReady = onReady;
+        container.appendChild(document.createElement('iframe'));
+      });
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map([['youtube', render]]),
+      });
+
+      manager.render([ytItem()], 0, vi.fn(), 'thumb-yt.jpg');
+
+      expect(manager.element.querySelector('.shoji-slide-open-placeholder')).not.toBeNull();
+      capturedOnReady!();
+
+      expect(manager.element.querySelector('.shoji-slide-open-placeholder')).toBeNull();
+      const container = manager.element.querySelector<HTMLElement>('.shoji-slide-provider-video');
+      expect(container?.hidden).toBe(false);
     });
 
     it('falls back to the same plain placeholder as no-source video for an unregistered provider name', () => {
