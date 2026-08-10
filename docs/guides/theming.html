@@ -26,16 +26,33 @@
     <p>
       No hardcoded colors or sizes anywhere in Shoji's CSS or JS — everything routes through
       <code>--shoji-*</code> custom properties. Dark is the default theme; add the
-      <code>shoji-light</code> class to a gallery's container (or any ancestor) to switch to light:
+      <code>shoji-light</code> class to switch to light.
     </p>
-    <pre><code>&lt;div id="gallery" class="shoji-light"&gt;...&lt;/div&gt;</code></pre>
     <p>
-      Override any property the same way — scoped to one gallery, or globally on <code>:root</code>:
+      <strong>Important:</strong> the lightbox (<code>.shoji-outer</code>) is always appended
+      directly to <code>&lt;body&gt;</code>, not nested inside your gallery container — CSS custom
+      properties only inherit down real DOM ancestry, so applying <code>shoji-light</code> (or any
+      <code>--shoji-*</code> override) to the gallery container itself has
+      <strong>no effect</strong> on the lightbox. Apply it to <code>&lt;body&gt;</code>,
+      <code>&lt;html&gt;</code>, or another real ancestor of both the gallery container and where
+      Shoji mounts:
     </p>
-    <pre><code>#gallery {
+    <pre><code>&lt;body class="shoji-light"&gt;
+  ...
+  &lt;div id="gallery"&gt;...&lt;/div&gt;
+&lt;/body&gt;</code></pre>
+    <p>Override any property the same way — globally on <code>:root</code> or <code>body</code>:</p>
+    <pre><code>body {
   --shoji-color-accent: #ff6b4a;
   --shoji-duration: 200ms;
 }</code></pre>
+    <p>
+      There is currently no way to scope a theme to just <em>one</em> gallery instance on a page
+      with multiple instances — <code>&lt;body&gt;</code>-level classes/overrides apply to all of
+      them. Per-instance theming would need a new <code>GalleryOptions</code> field (e.g. a
+      <code>className</code> option applied directly to <code>.shoji-outer</code>) that doesn't
+      exist yet.
+    </p>
 
     <h2>Colors</h2>
     <table class="nowrap-code">

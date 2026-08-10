@@ -2,6 +2,13 @@
  * Core theme tokens (DESIGN.md §9). Dark is the default theme; `.shoji-light`
  * overrides to light. No hardcoded colors/sizes elsewhere in JS or CSS —
  * everything routes through these custom properties.
+ *
+ * `.shoji-outer` always mounts directly on `document.body` (Gallery.ts),
+ * never nested inside the host's own gallery container — so `.shoji-light`
+ * (or any `--shoji-*` override) must be applied to `<body>`/`<html>`/another
+ * real ancestor of the mount point, not the gallery container itself, or it
+ * silently does nothing (custom properties only inherit down real DOM
+ * ancestry).
  */
 :root {
   /* .shoji-outer's own page-level z-index — relative to the rest of the
