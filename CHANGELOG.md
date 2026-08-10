@@ -23,10 +23,12 @@ still include breaking changes).
   footprint width/height, and on a non-square dialog (the common case,
   especially on mobile) the swapped footprint no longer fit back within the
   original space, so the far edges were clipped away rather than the whole
-  rotated photo staying visible. A scale factor, based on the photo's own
-  size (not just the surrounding dialog's shape, which could otherwise
-  shrink an already-full-bleed photo far more than necessary), is now
-  applied at those rotations to keep it fully visible.
+  rotated photo staying visible. A photo is now shrunk exactly as much as
+  needed to avoid that, and grown back up to fill newly-available space on
+  rotation — but never past its own native resolution, so a genuinely
+  low-resolution photo doesn't visibly blur from being upscaled larger than
+  its real pixel size, while a high-resolution one grows to fill the screen
+  the way it should.
 
 ## [0.1.0-alpha.6] - 2026-08-09
 

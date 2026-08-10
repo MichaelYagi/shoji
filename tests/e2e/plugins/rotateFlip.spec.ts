@@ -157,6 +157,109 @@ test("regression: a rotated photo's own visible box stays within .shoji-slides i
   expect(imgBox.height).toBeLessThanOrEqual(slidesBox.height + 1);
 });
 
+/**
+ * The fixture's own items are always 800x600 (e2e-plugins.ts) — plenty of
+ * native resolution for any of this suite's viewports, so it never
+ * exercises the resolution ceiling (DESIGN.md §4.5) on its own. Overriding
+ * `item.width`/`height` directly (the exact input `resolveNaturalSize`
+ * reads, fresh, on every rotate click — a live reference off `gallery.items`,
+ * not a defensive copy) is more robust than trying to reverse-engineer a
+ * viewport/DPR combination that happens to trigger it.
+ */
+async function setActiveItemNaturalSize(page: Page, width: number, height: number): Promise<void> {
+  await page.evaluate(
+    ({ width, height }) => {
+      const gallery = (
+        window as unknown as {
+          __shojiGallery: {
+            items: Array<{ width?: number; height?: number }>;
+            currentIndex: number;
+          };
+        }
+      ).__shojiGallery;
+      const item = gallery.items[gallery.currentIndex]!;
+      item.width = width;
+      item.height = height;
+    },
+    { width, height },
+  );
+}
+
+test('regression: a low-resolution photo does not grow when rotated, even though its ideal best-fit size for the new orientation would be larger — reported from real usage: recomputing the ideal size on every rotation made small photos visibly balloon, which read as a glitch since nothing that dramatic happens to a large, high-resolution photo in the same rotation', async ({
+  page,
+}) => {
+  // Portrait-ish viewport: what makes this specific photo (letterboxed
+  // vertically, matching its own aspect ratio) the "ideal fit would grow"
+  // case this test targets — a wide desktop viewport instead lands it in
+  // the ordinary shrink case already covered by the test above.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' }); // see the test above for why
+  await openLightbox(page);
+  await setActiveItemNaturalSize(page, 80, 60); // same 4:3 shape as the fixture default, but low-res
+
+  const before = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
+
+  const after = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  // The photo's own dimensions swap (it's now rotated 90°), but its size
+  // as an object doesn't change — before's width becomes after's height
+  // and vice versa, not some larger recomputed "ideal" size for the new
+  // orientation.
+  expect(after.height).toBeCloseTo(before.width, 0);
+  expect(after.width).toBeCloseTo(before.height, 0);
+});
+
+test('regression: a high-resolution photo grows fully to fill newly-available space when rotated — reported from real usage: a 6144x8160 photo on a 1080p monitor did not fill the screen after rotating, because an earlier fix capped ALL growth at 1x regardless of how much real resolution the photo had to spare', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 }); // same "ideal fit would grow" shape as the test above
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openLightbox(page);
+  await setActiveItemNaturalSize(page, 8000, 6000); // same 4:3 shape, but ample resolution
+
+  const before = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
+
+  const after = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  // Genuinely grew, not just rotated in place — the opposite assertion
+  // from the low-resolution test above.
+  expect(after.width * after.height).toBeGreaterThan(before.width * before.height * 1.1);
+});
+
 test('navigating to the next slide resets rotation/flip to neutral', async ({ page }) => {
   await openLightbox(page);
 

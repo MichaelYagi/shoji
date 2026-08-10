@@ -187,37 +187,93 @@ function mockMediaSize(media: HTMLElement, width: number, height: number): void 
 }
 
 describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', () => {
-  it("regression: a landscape photo in a portrait container is scaled UP when rotated 90° so it fills the container instead of staying tiny — before this fix, rotating either clipped the photo's edges or (an intermediate, also-wrong fix) shrank it far more than necessary by scaling to the container's own shape instead of the photo's", () => {
+  it('regression: a photo with plenty of native resolution grows fully to fill newly-available space when rotated — reported from real usage: a 6144x8160 photo on a 1080p monitor did not fill the screen after rotating, unlike an equivalent landscape photo, because an earlier fix capped ALL growth at 1x regardless of how much real resolution the photo had to spare', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 800, height: 400 }], // 2:1 landscape
+      items: [{ id: 'a', src: 'a.jpg', width: 4000, height: 2000 }], // 2:1, high-res
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600); // portrait container
 
     click(button('Rotate right'));
 
-    // containedBox(300x600, AR 2) -> 300x150; fitScale = min(300/150, 600/300) = 2.
+    // containedBox(300x600, AR 2) -> 300x150; ideal fit = min(300/150, 600/300) = 2.
+    // resCeiling = max(1, min(4000/150, 2000/300)) = max(1, min(26.7, 6.7)) = 6.7 —
+    // far above the ideal fit, so it's not the binding constraint here.
     expect(activeMedia().style.transform).toBe('scaleX(2) scaleY(2) rotate(90deg)');
     gallery.destroy();
   });
 
-  it('a portrait photo in a portrait container is scaled DOWN when rotated 90° — rotating a photo whose long edge already roughly matches the container can only make it narrower once turned sideways, same as any real photo viewer', () => {
+  it('regression: a low-resolution photo does NOT grow when rotated, even though its ideal best-fit size for the new orientation is larger — growing it would mean upscaling past its own native pixel size (visibly blurry), which is the actual reason to hold it back, not merely "it was small on screen before"', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 240, height: 600 }], // 0.4 AR portrait
+      items: [{ id: 'a', src: 'a.jpg', width: 170, height: 85 }], // 2:1, low-res
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
 
     click(button('Rotate right'));
 
-    // containedBox(300x600, AR 0.4) -> 240x600; fitScale = min(300/600, 600/240) = 0.5.
+    // Same ideal fit (2) as the high-res case above, but resCeiling =
+    // max(1, min(170/150, 85/300)) = max(1, min(1.13, 0.28)) = 1 — the
+    // photo's own resolution can't support growing past its current size.
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('grows only partway when the photo has some, but not unlimited, resolution headroom — the cap is a real ceiling, not a binary all-or-nothing switch', () => {
+    const gallery = makeGallery({
+      items: [{ id: 'a', src: 'a.jpg', width: 900, height: 450 }], // 2:1
+    });
+    gallery.open(0);
+    mockMediaSize(activeMedia(), 300, 600);
+
+    click(button('Rotate right'));
+
+    // resCeiling = max(1, min(900/150, 450/300)) = max(1, min(6, 1.5)) = 1.5,
+    // below the ideal fit of 2 — grows, but only as far as resolution allows.
+    expect(activeMedia().style.transform).toBe('scaleX(1.5) scaleY(1.5) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('a large/near-full-bleed photo still shrinks exactly enough to avoid getting clipped when rotated — the resolution ceiling only ever blocks growing, never blocks a needed shrink', () => {
+    const gallery = makeGallery({
+      items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }], // 0.4 AR portrait, high-res
+    });
+    gallery.open(0);
+    mockMediaSize(activeMedia(), 300, 600);
+
+    click(button('Rotate right'));
+
+    // containedBox(300x600, AR 0.4) -> 240x600; ideal fit = min(300/600, 600/240)
+    // = 0.5 (would shrink) — resCeiling = max(1, min(2400/600, 6000/240)) =
+    // max(1, 4) = 4, well above 1, so the shrink is unaffected by it.
+    expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('does not force a shrink just because a photo was already being upscaled before rotating — the resolution ceiling is floored at 1x, only ever capping further growth', () => {
+    const gallery = makeGallery({
+      items: [{ id: 'a', src: 'a.jpg', width: 170, height: 340 }], // 0.5 AR, low-res, already upscaled by object-fit:contain even pre-rotation
+    });
+    gallery.open(0);
+    mockMediaSize(activeMedia(), 300, 600);
+
+    click(button('Rotate right'));
+
+    // AR 0.5 exactly matches containerRatio (300/600 = 0.5), so
+    // containedBox(300x600, AR 0.5) fills the container exactly: 300x600,
+    // no letterboxing. Ideal fit = min(300/600, 600/300) = 0.5 (shrink).
+    // Without the floor, resCeiling = min(170/600, 340/300) = min(0.28,
+    // 1.13) = 0.28, which would force an even smaller scale than the
+    // shrink alone needs — the floor at 1 keeps resCeiling from ever doing
+    // that, leaving the shrink exactly as `idealFit` alone already
+    // determined.
     expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
     gallery.destroy();
   });
 
   it("does not apply a fit-scale at 180° — a rectangle's own bounding box is unchanged by a half-turn, so there is nothing to re-fit", () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 800, height: 400 }],
+      items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }], // would shrink at 90°, if not for the 180° short-circuit
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
@@ -230,7 +286,7 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
     gallery.destroy();
   });
 
-  it('does not apply a fit-scale when no aspect ratio is known at all (no item.width/height, and jsdom never actually decodes an <img>) — skipped entirely rather than guessing', () => {
+  it('does not apply a fit-scale when no natural size is known at all (no item.width/height, and jsdom never actually decodes an <img>) — skipped entirely rather than guessing', () => {
     const gallery = makeGallery(); // default fixture items — no width/height
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
@@ -243,7 +299,7 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
 
   it('does not apply a fit-scale when the container has not been measured yet (jsdom reports 0 for clientWidth/clientHeight by default, same as a not-yet-laid-out element in a real browser) — skipped entirely rather than dividing by zero', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 800, height: 400 }],
+      items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }],
     });
     gallery.open(0); // mockMediaSize deliberately not called
 
@@ -255,7 +311,7 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
 
   it('composes with flip — the fit-scale multiplies into scaleX/scaleY alongside the -1, not a separate transform function', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 800, height: 400 }],
+      items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }], // shrinks, so the composed value is distinguishable from a plain flip
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
@@ -266,25 +322,27 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
     // of 90°, so the fit-scale still applies the same way.
     click(button('Rotate right'));
 
-    expect(activeMedia().style.transform).toBe('scaleX(-2) scaleY(2) rotate(-90deg)');
+    expect(activeMedia().style.transform).toBe('scaleX(-0.5) scaleY(0.5) rotate(-90deg)');
     gallery.destroy();
   });
 
   it("item.width/height take priority over the <img>'s own natural dimensions when both happen to be available", async () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 800, height: 400 }],
+      items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }], // 0.4 AR, high-res -> shrinks to 0.5
     });
     gallery.open(0);
     await flush(); // the <img> isn't in the DOM until decode() resolves (SlideManager's moveIn)
     const media = activeMedia();
     mockMediaSize(media, 300, 600);
     const img = media.querySelector('img')!;
+    // AR 1, low-res -> would produce a completely different (capped-to-1)
+    // result if wrongly preferred over item.width/height.
     Object.defineProperty(img, 'naturalWidth', { value: 100, configurable: true });
-    Object.defineProperty(img, 'naturalHeight', { value: 100, configurable: true }); // would give AR 1, not 2, if wrongly preferred
+    Object.defineProperty(img, 'naturalHeight', { value: 100, configurable: true });
 
     click(button('Rotate right'));
 
-    expect(activeMedia().style.transform).toBe('scaleX(2) scaleY(2) rotate(90deg)');
+    expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
     gallery.destroy();
   });
 
@@ -295,12 +353,12 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
     const media = activeMedia();
     mockMediaSize(media, 300, 600);
     const img = media.querySelector('img')!;
-    Object.defineProperty(img, 'naturalWidth', { value: 800, configurable: true });
-    Object.defineProperty(img, 'naturalHeight', { value: 400, configurable: true });
+    Object.defineProperty(img, 'naturalWidth', { value: 2400, configurable: true });
+    Object.defineProperty(img, 'naturalHeight', { value: 6000, configurable: true });
 
     click(button('Rotate right'));
 
-    expect(activeMedia().style.transform).toBe('scaleX(2) scaleY(2) rotate(90deg)');
+    expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
     gallery.destroy();
   });
 });
