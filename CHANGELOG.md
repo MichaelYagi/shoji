@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-08-09
+
 ### Added
 
 - `a`/`d` (either letter case) now work as prev/next aliases alongside the
