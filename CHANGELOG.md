@@ -14,10 +14,19 @@ still include breaking changes).
   the whole page was scrolled right to reach it. The rotated/flipped slide
   painting outside its own box was already clipped correctly within the
   lightbox, but some mobile browsers decide whether to widen the page's own
-  layout viewport by checking `<html>`'s own horizontal overflow, not
-  what's already clipped further down the tree. The scroll lock already
-  applied while the lightbox is open now also locks `<html>`'s
-  `overflow-x` for the same duration, not just `document.body`'s.
+  layout viewport by checking `<html>`'s own overflow, not what's already
+  clipped further down the tree. The scroll lock already applied while the
+  lightbox is open now also locks `document.documentElement`'s `overflow`
+  for the same duration, not just `document.body`'s.
+- RotateFlip plugin: rotating a photo could crop its edges instead of
+  shrinking it to fit — rotating by 90°/270° swaps the container's own
+  footprint width/height, and on a non-square dialog (the common case,
+  especially on mobile) the swapped footprint no longer fit back within the
+  original space, so the far edges were clipped away rather than the whole
+  rotated photo staying visible. A scale factor, based on the photo's own
+  size (not just the surrounding dialog's shape, which could otherwise
+  shrink an already-full-bleed photo far more than necessary), is now
+  applied at those rotations to keep it fully visible.
 
 ## [0.1.0-alpha.6] - 2026-08-09
 

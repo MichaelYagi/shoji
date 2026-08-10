@@ -22,15 +22,15 @@ function parseCssTime(value: string): number {
   return 0;
 }
 
-interface Box {
+export interface Box {
   left: number;
   top: number;
   width: number;
   height: number;
 }
 
-/** The `object-fit: contain` box for `aspectRatio` within `container` — computed analytically since the real image may not be loaded/attached yet. */
-function containedBox(container: Box, aspectRatio: number): Box {
+/** The `object-fit: contain` box for `aspectRatio` within `container` — computed analytically since the real image may not be loaded/attached yet. Exported: the RotateFlip plugin (§4.5) reuses this same contain-fit math for its own rotated-orientation fit-scale, rather than re-deriving it. */
+export function containedBox(container: Box, aspectRatio: number): Box {
   const containerRatio = container.width / container.height;
   const width = aspectRatio > containerRatio ? container.width : container.height * aspectRatio;
   const height = aspectRatio > containerRatio ? container.width / aspectRatio : container.height;

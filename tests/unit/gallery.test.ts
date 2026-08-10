@@ -78,7 +78,7 @@ describe('Gallery lifecycle', () => {
 describe('Gallery — body scroll lock', () => {
   afterEach(() => {
     document.body.style.overflow = '';
-    document.documentElement.style.overflowX = '';
+    document.documentElement.style.overflow = '';
   });
 
   it('locks document.body scrolling while open, restores it on close', () => {
@@ -133,27 +133,27 @@ describe('Gallery — body scroll lock', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
-  it("regression: also locks <html>'s own overflow-x, not just body's — reported from real usage: rotating a photo on a narrow mobile viewport grew window.innerWidth itself (a rotated slide's ink overflow reaching the real viewport, since mobile browsers decide whether to widen the layout viewport past device-width by looking at <html>'s own overflow-x, not at what's already clipped further down the tree), pushing the toolbar off-screen until the page was scrolled right to reach it", () => {
+  it("regression: also locks <html>'s own overflow (both axes, the shorthand — not just overflow-x), not just body's. Two real bugs found in sequence here: (1) rotating a photo on a narrow mobile viewport grew window.innerWidth itself — mobile browsers decide whether to widen the layout viewport past device-width by looking at <html>'s own overflow-x, not at what's already clipped further down the tree; (2) locking overflow-x alone (the first fix) silently promoted <html>'s overflow-y from 'visible' to 'auto' per spec (mixing hidden+visible isn't allowed), revealing a real scrollbar around the lightbox that wasn't there before — only the full shorthand avoids that promotion. jsdom doesn't expand the shorthand into readable overflowX/overflowY getters, so this only checks the shorthand property itself; the scrollbar half was only actually observable in a real browser, see DESIGN.md §2.6a.", () => {
     const gallery = new Gallery(document.createElement('div'));
 
     gallery.open();
-    expect(document.documentElement.style.overflowX).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     gallery.close();
-    expect(document.documentElement.style.overflowX).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
 
     gallery.destroy();
   });
 
-  it("restores <html>'s exact prior overflow-x value, not just clears it", () => {
-    document.documentElement.style.overflowX = 'scroll';
+  it("restores <html>'s exact prior overflow value, not just clears it", () => {
+    document.documentElement.style.overflow = 'scroll';
     const gallery = new Gallery(document.createElement('div'));
 
     gallery.open();
-    expect(document.documentElement.style.overflowX).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     gallery.close();
-    expect(document.documentElement.style.overflowX).toBe('scroll');
+    expect(document.documentElement.style.overflow).toBe('scroll');
 
     gallery.destroy();
   });

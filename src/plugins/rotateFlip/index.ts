@@ -1,6 +1,6 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
 import { normalizeRotateFlip, type RotateFlipState } from '../../core/rotateFlipNormalize';
-import { waitForTransitionEnd } from '../../core/zoomTransition';
+import { containedBox, waitForTransitionEnd } from '../../core/zoomTransition';
 import { FLIP_H_ICON, FLIP_V_ICON, ROTATE_LEFT_ICON, ROTATE_RIGHT_ICON } from './icons';
 
 const NEUTRAL: RotateFlipState = { flipH: false, flipV: false, rotation: 0 };
@@ -42,10 +42,77 @@ const NEUTRAL: RotateFlipState = { flipH: false, flipV: false, rotation: 0 };
  * for the shortcut below — every rotate click adds ±90, so it only lands
  * back on exactly `0` at genuine reset/initial state, never a masked
  * multiple of 360.
+ *
+ * `fitScale` (see `fitScaleFor` below) is folded directly into `scaleX`/
+ * `scaleY` — a single uniform factor commutes with everything else already
+ * in this transform (rotate, and flip's own -1), so multiplying it in here
+ * is exactly equivalent to a separate trailing `scale()` function, without
+ * adding a fourth transform function for the browser to interpolate.
  */
-function transformFor(flipH: boolean, flipV: boolean, rotationDeg: number): string {
-  if (!flipH && !flipV && rotationDeg === 0) return 'none';
-  return `scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1}) rotate(${rotationDeg}deg)`;
+function transformFor(
+  flipH: boolean,
+  flipV: boolean,
+  rotationDeg: number,
+  fitScale: number,
+): string {
+  if (!flipH && !flipV && rotationDeg === 0 && fitScale === 1) return 'none';
+  const scaleX = (flipH ? -1 : 1) * fitScale;
+  const scaleY = (flipV ? -1 : 1) * fitScale;
+  return `scaleX(${scaleX}) scaleY(${scaleY}) rotate(${rotationDeg}deg)`;
+}
+
+/**
+ * DESIGN.md §4.5 — keeps the *visible photo* filling as much of
+ * `.shoji-slide-media` as it can when rotated, instead of shrinking to a
+ * sliver or getting its edges clipped away. `.shoji-slide-media` is always
+ * its full box (`width`/`height`: 100%) — the photo inside is usually
+ * *smaller*, letterboxed to its own aspect ratio by `object-fit: contain`
+ * — and rotate/flip is applied to that full container (not the `<img>`
+ * itself — unlike the Zoom plugin, §4.6, which deliberately targets the
+ * image so the two nest without conflicting), so rotating swaps its own
+ * footprint's width/height and can leave the letterboxed photo either
+ * clipped (nothing to shrink it) or needlessly tiny (shrunk to fit the
+ * *container's* own now-swapped shape, margins included, rather than the
+ * photo's actual size).
+ *
+ * Computed from the photo's own contain-fit box (`containedBox`,
+ * `zoomTransition.ts` — the same "object-fit: contain" math the open/close
+ * zoom transition already relies on, reused rather than re-derived), not
+ * the container's raw dimensions: an intermediate version used the
+ * container's own shape instead, reasoning it was simpler and always
+ * "safe" — technically true (it can never overflow), but a real
+ * regression reported from real usage: an already near-full-bleed photo
+ * (container and photo sharing a similar aspect ratio, minimal
+ * letterboxing) shrank dramatically on rotation instead of staying
+ * roughly the same size, since the container-only scale is derived from
+ * the *container's* shape, margins included, not the photo's actual
+ * (usually much less extreme) one. The container's own margins *can* still
+ * paint outside `.shoji-slides` once rotated with this fix — confirmed
+ * harmless: `.shoji-slides`' `overflow: hidden` already clips them (they're
+ * invisible, nothing to see), and the page itself no longer grows from it
+ * either, handled independently by locking `<html>`'s own `overflow`
+ * (`src/core/bodyScrollLock.ts`) while the lightbox is open.
+ *
+ * `1` (a no-op) for 0°/180° — a rectangle's own bounding box is unchanged
+ * by a half-turn, nothing to re-fit — and whenever either media dimension
+ * isn't known yet (not yet laid out) or the photo's own aspect ratio isn't
+ * known at all (video, or an image that hasn't decoded) — skipped
+ * entirely rather than guessing.
+ */
+function fitScaleFor(
+  mediaWidth: number,
+  mediaHeight: number,
+  rotationDeg: number,
+  aspectRatio: number | undefined,
+): number {
+  if (!mediaWidth || !mediaHeight || !aspectRatio) return 1;
+  if ((rotationDeg / 90) % 2 === 0) return 1;
+  const photo = containedBox(
+    { left: 0, top: 0, width: mediaWidth, height: mediaHeight },
+    aspectRatio,
+  );
+  if (!photo.width || !photo.height) return 1;
+  return Math.min(mediaWidth / photo.height, mediaHeight / photo.width);
 }
 
 /**
@@ -91,10 +158,25 @@ export const RotateFlip: ShojiPlugin = {
      * open/close zoom transition's own later use of this same element's
      * `transform` (`zoomTransition.ts`, `.shoji-slide-media`).
      */
+    /** `item.width`/`height` when known, else the active image's own natural dimensions — same fallback order the zoom transition (§2.3b) uses for its own aspect ratio, just sourced from the slide itself rather than the origin thumbnail. `undefined` for anything else (video, an image not yet decoded) — `fitScaleFor` treats that as nothing to fit, not a guess. */
+    function resolveAspectRatio(media: HTMLElement): number | undefined {
+      const item = gallery.items[gallery.currentIndex];
+      if (item?.width && item.height) return item.width / item.height;
+      const img = media.querySelector('img');
+      if (img?.naturalWidth && img.naturalHeight) return img.naturalWidth / img.naturalHeight;
+      return undefined;
+    }
+
     function apply(animate: boolean): void {
       const media = gallery.getActiveMedia();
       if (!media) return;
-      const transform = transformFor(visualFlipH, visualFlipV, visualRotation);
+      const fitScale = fitScaleFor(
+        media.clientWidth,
+        media.clientHeight,
+        visualRotation,
+        resolveAspectRatio(media),
+      );
+      const transform = transformFor(visualFlipH, visualFlipV, visualRotation, fitScale);
       if (!animate) {
         media.style.transform = transform;
         return;

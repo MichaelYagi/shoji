@@ -104,9 +104,57 @@ test('regression: "Rotate right" while flipped horizontally still spins clockwis
   await flipHBtn.click();
   await rotateRightBtn.click();
 
-  await expect
-    .poll(() => activeMediaTransform(page))
-    .toMatch(/scaleX\(-1\) scaleY\(1\) rotate\(-90deg\)/);
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(-90deg\)/);
+  // scaleX/scaleY aren't asserted as exactly -1/1 here: the fixture image
+  // has a real aspect ratio (800x600), so the fit-scale (DESIGN.md §4.5)
+  // now genuinely applies at this 90°-family rotation — scaleX and scaleY
+  // still carry the same magnitude, opposite sign (flipH, not flipV), just
+  // scaled by whatever factor keeps the rotated photo contained.
+  const [scaleX, scaleY] = await page.evaluate(() => {
+    const media = (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery.getActiveMedia();
+    const m = media?.style.transform.match(/scaleX\(([-\d.]+)\) scaleY\(([-\d.]+)\)/);
+    return [Number(m?.[1]), Number(m?.[2])];
+  });
+  expect(scaleX).toBeCloseTo(-scaleY, 5);
+  expect(scaleY).toBeGreaterThan(0);
+});
+
+test("regression: a rotated photo's own visible box stays within .shoji-slides instead of getting its edges clipped — before the fit-scale (DESIGN.md §4.5), rotating painted the photo well outside its available space, cropped by .shoji-slides' overflow:hidden rather than shrunk to fit", async ({
+  page,
+}) => {
+  // Checked against the <img>'s own box, not .shoji-slide-media's (the
+  // full container) — .shoji-slide-media can still legitimately paint
+  // outside .shoji-slides once rotated (its own invisible letterbox
+  // margins, harmlessly clipped, DESIGN.md §4.5's own writeup), only the
+  // *visible* photo staying uncropped is the actual invariant that matters
+  // here. getBoundingClientRect() reflects the live, currently-*painted*
+  // geometry — mid-transition that can briefly be larger than the settled
+  // end state (a non-square rectangle's rotated bounding box peaks
+  // partway through a 0->90 sweep, not at either endpoint, same reasoning
+  // as the mobile viewport-widening bug, DESIGN.md §2.6a). Emulating
+  // reduced motion collapses --shoji-duration to 0ms (shoji.css), making
+  // the rotate instant instead of racing a real CSS transition under
+  // parallel-test CPU contention — a real flake this test hit before this
+  // change.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openLightbox(page);
+
+  const slidesBox = (await page.locator('.shoji-slides').boundingBox())!;
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
+
+  const imgBox = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+  expect(imgBox.width).toBeLessThanOrEqual(slidesBox.width + 1);
+  expect(imgBox.height).toBeLessThanOrEqual(slidesBox.height + 1);
 });
 
 test('navigating to the next slide resets rotation/flip to neutral', async ({ page }) => {
