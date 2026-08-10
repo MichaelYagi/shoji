@@ -196,14 +196,17 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
 
     click(button('Rotate right'));
 
-    // containedBox(300x600, AR 2) -> 300x150; ideal fit = min(300/150, 600/300) = 2.
-    // resCeiling = max(1, min(4000/150, 2000/300)) = max(1, min(26.7, 6.7)) = 6.7 —
-    // far above the ideal fit, so it's not the binding constraint here.
+    // scaleAt0 = min(1, 300/4000, 600/2000) = 0.075 (needs shrinking even
+    // unrotated — plenty of native resolution, so this is purely a
+    // container-size constraint, not a resolution one).
+    // scaleAt90 = min(1, 300/2000, 600/4000) = 0.15 (same, rotated).
+    // fitScale = 0.15 / 0.075 = 2 — pure container-driven growth, neither
+    // scale hits the native-resolution "1" ceiling.
     expect(activeMedia().style.transform).toBe('scaleX(2) scaleY(2) rotate(90deg)');
     gallery.destroy();
   });
 
-  it('regression: a low-resolution photo does NOT grow when rotated, even though its ideal best-fit size for the new orientation is larger — growing it would mean upscaling past its own native pixel size (visibly blurry), which is the actual reason to hold it back, not merely "it was small on screen before"', () => {
+  it('regression: a low-resolution photo does NOT grow when rotated, even though it would have room to in the container — reported from real usage: a small demo photo, comfortably smaller than the dialog in both orientations, still shrank on rotation because an earlier version of this formula wrongly assumed the photo was already stretched to fill the dialog before rotating, when it was actually rendering at its own native (untouched) size', () => {
     const gallery = makeGallery({
       items: [{ id: 'a', src: 'a.jpg', width: 170, height: 85 }], // 2:1, low-res
     });
@@ -212,29 +215,36 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
 
     click(button('Rotate right'));
 
-    // Same ideal fit (2) as the high-res case above, but resCeiling =
-    // max(1, min(170/150, 85/300)) = max(1, min(1.13, 0.28)) = 1 — the
-    // photo's own resolution can't support growing past its current size.
+    // scaleAt0 = min(1, 300/170, 600/85) = 1 (fits natively both ways —
+    // renders untouched, matching the real CSS's max-width/max-height cap).
+    // scaleAt90 = min(1, 300/85, 600/170) = 1 (still fits natively, rotated).
+    // fitScale = 1/1 = 1 — no change at all, correctly.
     expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(90deg)');
     gallery.destroy();
   });
 
   it('grows only partway when the photo has some, but not unlimited, resolution headroom — the cap is a real ceiling, not a binary all-or-nothing switch', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 900, height: 450 }], // 2:1
+      items: [{ id: 'a', src: 'a.jpg', width: 375, height: 150 }], // 2.5:1
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
 
     click(button('Rotate right'));
 
-    // resCeiling = max(1, min(900/150, 450/300)) = max(1, min(6, 1.5)) = 1.5,
-    // below the ideal fit of 2 — grows, but only as far as resolution allows.
-    expect(activeMedia().style.transform).toBe('scaleX(1.5) scaleY(1.5) rotate(90deg)');
+    // scaleAt0 = min(1, 300/375, 600/150) = min(1, 0.8, 4) = 0.8 (needs a
+    // little shrinking unrotated — its own width alone already exceeds the
+    // container's, regardless of resolution).
+    // scaleAt90 = min(1, 300/150, 600/375) = min(1, 2, 1.6) = 1 (once
+    // rotated, its native size already fits without any scaling — this is
+    // the "1" resolution ceiling, not a container-shape coincidence).
+    // fitScale = 1 / 0.8 = 1.25 — grows, but only back up to native size,
+    // not further.
+    expect(activeMedia().style.transform).toBe('scaleX(1.25) scaleY(1.25) rotate(90deg)');
     gallery.destroy();
   });
 
-  it('a large/near-full-bleed photo still shrinks exactly enough to avoid getting clipped when rotated — the resolution ceiling only ever blocks growing, never blocks a needed shrink', () => {
+  it('a large/near-full-bleed photo still shrinks exactly enough to avoid getting clipped when rotated', () => {
     const gallery = makeGallery({
       items: [{ id: 'a', src: 'a.jpg', width: 2400, height: 6000 }], // 0.4 AR portrait, high-res
     });
@@ -243,31 +253,28 @@ describe('RotateFlip — fit-scale on 90°/270° rotation (DESIGN.md §4.5)', ()
 
     click(button('Rotate right'));
 
-    // containedBox(300x600, AR 0.4) -> 240x600; ideal fit = min(300/600, 600/240)
-    // = 0.5 (would shrink) — resCeiling = max(1, min(2400/600, 6000/240)) =
-    // max(1, 4) = 4, well above 1, so the shrink is unaffected by it.
+    // scaleAt0 = min(1, 300/2400, 600/6000) = 0.1 (shrinks to fit, plenty
+    // of native resolution to spare either way).
+    // scaleAt90 = min(1, 300/6000, 600/2400) = 0.05.
+    // fitScale = 0.05 / 0.1 = 0.5.
     expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
     gallery.destroy();
   });
 
-  it('does not force a shrink just because a photo was already being upscaled before rotating — the resolution ceiling is floored at 1x, only ever capping further growth', () => {
+  it('a photo that fits fine unrotated can still need to shrink once rotated — orientation mismatch, not a resolution limit', () => {
     const gallery = makeGallery({
-      items: [{ id: 'a', src: 'a.jpg', width: 170, height: 340 }], // 0.5 AR, low-res, already upscaled by object-fit:contain even pre-rotation
+      items: [{ id: 'a', src: 'a.jpg', width: 200, height: 400 }], // 0.5 AR
     });
     gallery.open(0);
     mockMediaSize(activeMedia(), 300, 600);
 
     click(button('Rotate right'));
 
-    // AR 0.5 exactly matches containerRatio (300/600 = 0.5), so
-    // containedBox(300x600, AR 0.5) fills the container exactly: 300x600,
-    // no letterboxing. Ideal fit = min(300/600, 600/300) = 0.5 (shrink).
-    // Without the floor, resCeiling = min(170/600, 340/300) = min(0.28,
-    // 1.13) = 0.28, which would force an even smaller scale than the
-    // shrink alone needs — the floor at 1 keeps resCeiling from ever doing
-    // that, leaving the shrink exactly as `idealFit` alone already
-    // determined.
-    expect(activeMedia().style.transform).toBe('scaleX(0.5) scaleY(0.5) rotate(90deg)');
+    // scaleAt0 = min(1, 300/200, 600/400) = 1 (fits natively, untouched).
+    // scaleAt90 = min(1, 300/400, 600/200) = 0.75 (rotated, its own now-wide
+    // shape no longer fits the container's width without shrinking).
+    // fitScale = 0.75 / 1 = 0.75.
+    expect(activeMedia().style.transform).toBe('scaleX(0.75) scaleY(0.75) rotate(90deg)');
     gallery.destroy();
   });
 

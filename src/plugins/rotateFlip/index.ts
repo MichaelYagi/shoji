@@ -1,6 +1,6 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
 import { normalizeRotateFlip, type RotateFlipState } from '../../core/rotateFlipNormalize';
-import { containedBox, waitForTransitionEnd } from '../../core/zoomTransition';
+import { waitForTransitionEnd } from '../../core/zoomTransition';
 import { FLIP_H_ICON, FLIP_V_ICON, ROTATE_LEFT_ICON, ROTATE_RIGHT_ICON } from './icons';
 
 const NEUTRAL: RotateFlipState = { flipH: false, flipV: false, rotation: 0 };
@@ -65,69 +65,45 @@ function transformFor(
  * DESIGN.md §4.5 — shrinks the *visible photo* exactly as much as needed to
  * keep it from getting its edges clipped away when rotated, and grows it
  * back up to fill newly-available space on rotation, but never past its
- * own native pixel resolution. `.shoji-slide-media` is always its full box
- * (`width`/`height`: 100%) — the photo inside is usually *smaller*,
- * letterboxed to its own aspect ratio by `object-fit: contain` — and
- * rotate/flip is applied to that full container (not the `<img>` itself —
- * unlike the Zoom plugin, §4.6, which deliberately targets the image so
- * the two nest without conflicting), so rotating swaps its own footprint's
- * width/height: a photo that was already filling most of the container
- * can end up clipped once swapped, while a smaller, more letterboxed
- * photo's swapped footprint often still fits without any help at all.
+ * own native pixel resolution.
  *
- * **The cap is on native resolution, not on "did it already fit" — a real,
- * reported correction to a real, reported correction.** The first version
- * of this always recomputed the photo's *ideal* best-fit size for its new
- * orientation, uncapped, which could grow *any* letterboxed photo — small
- * or large — to fill newly-available space; reported back as surprising
- * for small photos specifically (visibly growing on rotation reads as a
- * glitch). The fix after that instead capped growth at `1` outright — never
- * scale up, full stop — which *did* fix small photos, but was too blunt:
- * reported back a second time, this time for a large one. A 6144×8160
- * photo, letterboxed on a 1080p monitor before rotating (its portrait
- * shape doesn't match a landscape screen), was capped from growing to fill
- * the newly-available width after rotating — even though a photo with
- * that much native resolution has far more pixels than a 1080p screen
- * could ever need, so growing it costs nothing in quality. The two capped
- * cases (`1`) looked identical by that formula — "was it already filling
- * the screen" — even though the *reason* not to grow only applies to one
- * of them: a 170×222 photo can't grow without exceeding its own native
- * pixel size (visibly blurring, real upscaling past native resolution),
- * while the 6144×8160 one has orders of magnitude of headroom before that
- * ever becomes a concern. "How much of the screen it fills" and "how much
- * resolution it has" are different questions; the previous fix conflated
- * them into one binary cap.
+ * **A real bug in the previous version of this fix, caught from real usage
+ * on the docs site itself: it assumed `.shoji-slide-img` always scales to
+ * *touch* the container on at least one axis (`object-fit: contain`'s
+ * usual behavior), which is wrong.** The actual CSS is `max-width: 100%;
+ * max-height: 100%` — a *cap*, not a forced fill (documented in
+ * `shoji.css`'s own comment: real photos are assumed bigger than the
+ * slide area, so never growing past natural size is the correct default).
+ * A small placeholder photo, comfortably smaller than the dialog, simply
+ * renders at its own native size — untouching every edge, nothing scaled.
+ * The previous formula didn't know this: it computed an imagined
+ * "as if `object-fit: contain` always scales to fill" pre-rotation size
+ * (e.g. an 800×600 photo hypothetically stretched to ~1267×950 in a
+ * 1920×950 window), then shrank *from that invented size* — a real,
+ * visible shrink relative to what was actually on screen a moment
+ * earlier, even though nothing should have changed at all. Confirmed
+ * directly: measuring the real `<img>` on the real deployed docs page
+ * showed it rendered at exactly its 800×600 native size, not the
+ * "contain-fit" size the old formula assumed.
  *
- * `resCeiling` computes the largest scale that keeps the rotated photo's
- * rendered size, in real device pixels (`window.devicePixelRatio`, so a
- * HiDPI/Retina screen doesn't get a bigger free pass than its physical
- * pixel density actually allows), at or under `naturalWidth`/`naturalHeight`
- * in *both* axes — beyond that is genuine upscaling, not free. Floored at
- * `1`: if the photo is already being upscaled even at its current,
- * pre-rotation size (a very low-res photo displayed at a much larger
- * layout size — unrelated to rotation, already true beforehand), this
- * isn't the place to *additionally* shrink it back down to native size;
- * the floor means it only ever caps *further* growth, never forces a new
- * shrink. `Math.min(idealFit, resCeiling)`: grows up to whichever is more
- * restrictive — the container's own available space, or the photo's own
- * resolution ceiling — and still shrinks by `idealFit` alone whenever it's
- * below `1` (avoiding clipping), completely unaffected by `resCeiling`'s
- * floor.
- *
- * Both computed from the photo's own contain-fit box (`containedBox`,
- * `zoomTransition.ts` — the same "object-fit: contain" math the open/close
- * zoom transition already relies on, reused rather than re-derived), not
- * the container's raw dimensions — a separate, earlier correction: an
- * intermediate version used the container's own shape instead, which is
- * always "safe" (can never overflow) but shrinks based on the *container's*
- * shape, margins included, not the photo's actual (usually much less
- * extreme) one, so it over-shrank large near-full-bleed photos. The
- * container's own margins *can* still paint outside `.shoji-slides` with
- * this fix — confirmed harmless: `.shoji-slides`' `overflow: hidden`
- * already clips them (they're invisible, nothing to see), and the page
- * itself no longer grows from it either, handled independently by locking
- * `<html>`'s own `overflow` (`src/core/bodyScrollLock.ts`) while the
- * lightbox is open.
+ * **The fix: compute the photo's real render scale at each orientation
+ * the same way the browser's own CSS does, then compare the two —
+ * instead of computing an idealized target size and separately capping
+ * it.** `scaleAt0`/`scaleAt90` are each `Math.min(1, mediaWidth /
+ * relevantNaturalWidth, mediaHeight / relevantNaturalHeight)` — exactly
+ * mirroring `max-width/max-height: 100%`'s own "shrink to fit, never grow
+ * past native size" rule, once for the current (unrotated) orientation
+ * and once for the rotated one (natural width/height swapped). The result
+ * is simply their ratio: how much *more* (or less) of its own native
+ * resolution the rotated orientation can use compared to what's already
+ * on screen. This single ratio does everything the old two-step
+ * idealFit-then-cap formula tried to do, correctly and for free: neither
+ * `scaleAt0` nor `scaleAt90` can ever exceed `1` (native resolution is
+ * never exceeded, in *either* orientation, not just relative to a
+ * possibly-wrong assumed starting point), and whichever one is more
+ * constrained by the container — rather than by native resolution —
+ * still shrinks or grows the ratio exactly as far as that constraint
+ * requires.
  *
  * `1` (a no-op) for 0°/180° — a rectangle's own bounding box is unchanged
  * by a half-turn, nothing to re-fit — and whenever either media dimension
@@ -144,21 +120,9 @@ function fitScaleFor(
 ): number {
   if (!mediaWidth || !mediaHeight || !naturalWidth || !naturalHeight) return 1;
   if ((rotationDeg / 90) % 2 === 0) return 1;
-  const photo = containedBox(
-    { left: 0, top: 0, width: mediaWidth, height: mediaHeight },
-    naturalWidth / naturalHeight,
-  );
-  if (!photo.width || !photo.height) return 1;
-  const idealFit = Math.min(mediaWidth / photo.height, mediaHeight / photo.width);
-  const dpr = window.devicePixelRatio || 1;
-  // Rotated+scaled-by-S, the photo's rendered box is (photo.height*S) wide
-  // by (photo.width*S) tall (swapped) — in CSS px; multiplying by dpr
-  // converts to real device px, comparable against naturalWidth/Height.
-  const resCeiling = Math.max(
-    1,
-    Math.min(naturalWidth / (photo.height * dpr), naturalHeight / (photo.width * dpr)),
-  );
-  return Math.min(idealFit, resCeiling);
+  const scaleAt0 = Math.min(1, mediaWidth / naturalWidth, mediaHeight / naturalHeight);
+  const scaleAt90 = Math.min(1, mediaWidth / naturalHeight, mediaHeight / naturalWidth);
+  return scaleAt90 / scaleAt0;
 }
 
 /**

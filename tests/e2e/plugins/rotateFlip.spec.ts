@@ -260,6 +260,55 @@ test('regression: a high-resolution photo grows fully to fill newly-available sp
   expect(after.width * after.height).toBeGreaterThan(before.width * before.height * 1.1);
 });
 
+test("regression: the real bug as originally reported — a small photo with no item.width/height at all (relying entirely on the <img>'s own natural size, exactly like docs/examples/*.html's inline-SVG items) does not change size when rotated in a wide desktop-shaped window, even though a naive 'as if object-fit: contain always scales to fill' calculation would have shrunk it", async ({
+  page,
+}) => {
+  // The window shape that exposed this on the real deployed docs site —
+  // wide and comparatively short, unlike the narrow/tall viewport the
+  // other tests here use.
+  await page.setViewportSize({ width: 1920, height: 950 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openLightbox(page);
+  // No setActiveItemNaturalSize call — item.width/height stay whatever the
+  // fixture set (800x600), deliberately deleted here so resolveNaturalSize
+  // must fall through to the <img>'s own naturalWidth/naturalHeight, the
+  // exact path the real bug went through.
+  await page.evaluate(() => {
+    const gallery = (
+      window as unknown as {
+        __shojiGallery: { items: Array<{ width?: number; height?: number }>; currentIndex: number };
+      }
+    ).__shojiGallery;
+    const item = gallery.items[gallery.currentIndex]!;
+    delete item.width;
+    delete item.height;
+  });
+
+  const before = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
+
+  const after = await page.evaluate(() =>
+    (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery
+      .getActiveMedia()!
+      .querySelector('img')!
+      .getBoundingClientRect(),
+  );
+
+  expect(after.height).toBeCloseTo(before.width, 0);
+  expect(after.width).toBeCloseTo(before.height, 0);
+});
+
 test('navigating to the next slide resets rotation/flip to neutral', async ({ page }) => {
   await openLightbox(page);
 

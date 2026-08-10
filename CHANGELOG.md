@@ -28,7 +28,11 @@ still include breaking changes).
   rotation — but never past its own native resolution, so a genuinely
   low-resolution photo doesn't visibly blur from being upscaled larger than
   its real pixel size, while a high-resolution one grows to fill the screen
-  the way it should.
+  the way it should. Also fixes a related bug in that same fix: a photo
+  smaller than the dialog renders at its own native size rather than being
+  stretched to fill it (by design — see `shoji.css`), which an earlier
+  version of this didn't account for, shrinking such photos on rotation
+  even though they should have stayed exactly the same size.
 
 ## [0.1.0-alpha.6] - 2026-08-09
 
