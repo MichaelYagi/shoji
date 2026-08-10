@@ -45,17 +45,17 @@
     </p>
 
     <h3>npm / ESM</h3>
-    <pre><code>npm install shoji</code></pre>
-    <pre><code>import Shoji from 'shoji';
-import 'shoji/style.css';
+    <pre><code>npm install @michaelyagi/shoji@alpha</code></pre>
+    <pre><code>import Shoji from '@michaelyagi/shoji';
+import '@michaelyagi/shoji/style.css';
 
 new Shoji('#gallery', { plugins: [Shoji.Zoom] });</code></pre>
     <p>
       Bundler users who want to tree-shake away plugins they don't use can import the class and
       plugins separately instead of pulling in the default export's static properties:
     </p>
-    <pre><code>import { Gallery } from 'shoji/core';
-import { Zoom } from 'shoji/plugins/zoom';
+    <pre><code>import { Gallery } from '@michaelyagi/shoji/core';
+import { Zoom } from '@michaelyagi/shoji/plugins/zoom';
 
 new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
 
