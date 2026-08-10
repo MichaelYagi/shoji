@@ -1,6 +1,7 @@
 # Shoji
 
 [![CI](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml)
+[![npm (alpha)](https://img.shields.io/npm/v/%40michaelyagi%2Fshoji/alpha.svg)](https://www.npmjs.com/package/@michaelyagi/shoji)
 
 A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<script>`/`<link>` tags, or install from npm — everything beyond the minimal lightbox, including every official plugin, is opt-in.
 
@@ -27,12 +28,12 @@ A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<scrip
 ```
 
 ```bash
-npm install shoji
+npm install @michaelyagi/shoji@alpha
 ```
 
 ```js
-import Shoji from 'shoji';
-import 'shoji/style.css';
+import Shoji from '@michaelyagi/shoji';
+import '@michaelyagi/shoji/style.css';
 
 new Shoji('#gallery', { plugins: [Shoji.Zoom] });
 ```
@@ -55,6 +56,7 @@ No items array, no options object, no plugins — every default is chosen so thi
 ## Docs
 
 - **[michaelyagi.github.io/shoji](https://michaelyagi.github.io/shoji)** — the published docs site, auto-deployed from `main` (see `.github/workflows/ci.yml`'s `publish-docs` job).
+- **[npmjs.com/package/@michaelyagi/shoji](https://www.npmjs.com/package/@michaelyagi/shoji)** — the published package, auto-published on tagged releases (see `.github/workflows/ci.yml`'s `publish-npm` job).
 - [`docs/index.html`](docs/index.html) — the same guides/examples/API reference, as local static HTML (open directly, or run `npm run docs` first to regenerate the API reference from source).
 - [`docs/examples/`](docs/examples/) — real, runnable, self-contained example pages (copy one wholesale into your own project).
 - [`DESIGN.md`](DESIGN.md) — the living architecture/spec document this project is built from.

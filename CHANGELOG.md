@@ -7,6 +7,16 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- Published to npm as [`@michaelyagi/shoji`](https://www.npmjs.com/package/@michaelyagi/shoji)
+  (the unscoped `shoji` name was already taken by an unrelated package).
+  Tagged releases (`vX.Y.Z...`) now auto-publish via a new `publish-npm` CI
+  job, which derives the npm dist-tag from the version's prerelease
+  identifier (e.g. `0.1.0-alpha.6` → the `alpha` tag) so prerelease builds
+  never become `latest`. A `prepublishOnly` script guarantees `dist/` is
+  rebuilt fresh at publish time.
+
 ### Fixed
 
 - Rotating or flipping a photo on a narrow (mobile) viewport could grow the

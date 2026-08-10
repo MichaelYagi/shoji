@@ -1,5 +1,5 @@
 {
-  "name": "shoji",
+  "name": "@michaelyagi/shoji",
   "version": "0.1.0-alpha.6",
   "description": "Zero-dependency TypeScript lightbox/gallery library.",
   "type": "module",
@@ -39,8 +39,12 @@
   "sideEffects": [
     "*.css"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
+    "prepublishOnly": "npm run build",
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

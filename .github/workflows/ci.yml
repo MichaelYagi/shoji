@@ -100,3 +100,46 @@ jobs:
           fi
           git commit -m "Update shoji docs (MichaelYagi/shoji@${{ github.sha }})"
           git push
+
+  publish-npm:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      # A prerelease version (e.g. 0.1.0-alpha.6) publishes under its own
+      # dist-tag (the identifier before the first '.' in the prerelease
+      # part, e.g. "alpha") so it never becomes `latest` and isn't installed
+      # by default — only `npm install @michaelyagi/shoji@alpha` opts in. A
+      # plain version (e.g. 1.0.0) publishes as `latest`, same as a normal
+      # `npm publish` with no --tag.
+      - name: Determine dist-tag from package.json version
+        id: tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE="${VERSION#*-}"
+            echo "tag=${PRERELEASE%%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      # NPM_TOKEN: a granular access token (Read and write, scoped to this
+      # package, "Bypass 2FA" enabled) — CI can't answer an interactive OTP
+      # prompt. Add it under this repo's Settings → Secrets and variables →
+      # Actions. npm publish's own prepublishOnly script (package.json)
+      # rebuilds dist/ fresh here, so this never ships stale output even
+      # though `verify` already built it once earlier in this same run.
+      - name: Publish to npm
+        run: npm publish --tag ${{ steps.tag.outputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
