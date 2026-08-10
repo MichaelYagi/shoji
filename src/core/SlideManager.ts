@@ -283,7 +283,7 @@ export class SlideManager {
     }
   }
 
-  /** DESIGN.md §2.3 — swaps the spinner for the open() placeholder only once *it* decodes, never immediately: `item.thumb` is often just `item.src` again (no real thumbnail step), so an undecoded placeholder could leave a blank gap as long as that "thumbnail" took to decode — worse than the spinner it replaced. */
+  /** DESIGN.md §2.3 — swaps the spinner for the placeholder once *it* decodes, not immediately: `item.thumb` is often just `item.src` again, so an undecoded placeholder can leave as long a blank gap as the spinner it replaces. */
   private revealOpenPlaceholder(src: string, slot: Slot, index: number): void {
     const img = createOpenPlaceholder(src);
     const reveal = (): void => {

@@ -78,6 +78,7 @@ describe('Gallery lifecycle', () => {
 describe('Gallery — body scroll lock', () => {
   afterEach(() => {
     document.body.style.overflow = '';
+    document.documentElement.style.overflowX = '';
   });
 
   it('locks document.body scrolling while open, restores it on close', () => {
@@ -130,6 +131,31 @@ describe('Gallery — body scroll lock', () => {
 
     gallery.destroy();
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it("regression: also locks <html>'s own overflow-x, not just body's — reported from real usage: rotating a photo on a narrow mobile viewport grew window.innerWidth itself (a rotated slide's ink overflow reaching the real viewport, since mobile browsers decide whether to widen the layout viewport past device-width by looking at <html>'s own overflow-x, not at what's already clipped further down the tree), pushing the toolbar off-screen until the page was scrolled right to reach it", () => {
+    const gallery = new Gallery(document.createElement('div'));
+
+    gallery.open();
+    expect(document.documentElement.style.overflowX).toBe('hidden');
+
+    gallery.close();
+    expect(document.documentElement.style.overflowX).toBe('');
+
+    gallery.destroy();
+  });
+
+  it("restores <html>'s exact prior overflow-x value, not just clears it", () => {
+    document.documentElement.style.overflowX = 'scroll';
+    const gallery = new Gallery(document.createElement('div'));
+
+    gallery.open();
+    expect(document.documentElement.style.overflowX).toBe('hidden');
+
+    gallery.close();
+    expect(document.documentElement.style.overflowX).toBe('scroll');
+
+    gallery.destroy();
   });
 });
 

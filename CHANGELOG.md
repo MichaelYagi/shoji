@@ -7,6 +7,18 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Rotating or flipping a photo on a narrow (mobile) viewport could grow the
+  page itself wider than the screen, pushing the toolbar off-screen until
+  the whole page was scrolled right to reach it. The rotated/flipped slide
+  painting outside its own box was already clipped correctly within the
+  lightbox, but some mobile browsers decide whether to widen the page's own
+  layout viewport by checking `<html>`'s own horizontal overflow, not
+  what's already clipped further down the tree. The scroll lock already
+  applied while the lightbox is open now also locks `<html>`'s
+  `overflow-x` for the same duration, not just `document.body`'s.
+
 ## [0.1.0-alpha.6] - 2026-08-09
 
 ### Added
