@@ -94,6 +94,21 @@ test('aria-pressed canonicalizes flipping both axes to no flip (DESIGN.md §8.1 
     .toMatch(/scaleX\(-1\) scaleY\(-1\) rotate\(0deg\)/);
 });
 
+test('regression: "Rotate right" while flipped horizontally still spins clockwise — applies a negative raw rotate() delta, since a single-axis mirror reverses a plain +90 delta\'s visual handedness', async ({
+  page,
+}) => {
+  await openLightbox(page);
+  const flipHBtn = page.locator('.shoji-toolbar-button[aria-label="Flip horizontal"]');
+  const rotateRightBtn = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
+
+  await flipHBtn.click();
+  await rotateRightBtn.click();
+
+  await expect
+    .poll(() => activeMediaTransform(page))
+    .toMatch(/scaleX\(-1\) scaleY\(1\) rotate\(-90deg\)/);
+});
+
 test('navigating to the next slide resets rotation/flip to neutral', async ({ page }) => {
   await openLightbox(page);
 

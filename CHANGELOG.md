@@ -47,6 +47,11 @@ still include breaking changes).
   `contain: layout style`, so opening/closing (which has to measure layout)
   no longer forces the browser to needlessly recompute that container's
   own — often large — set of individually positioned tiles.
+- RotateFlip plugin: "Rotate right" visibly spun the image counter-clockwise
+  instead, whenever exactly one flip axis (horizontal or vertical, not both)
+  was active — a single-axis mirror reverses a rotation's visual handedness.
+  The rotate buttons now invert their delta in that case, so they always
+  spin the image the way they're labeled, regardless of flip state.
 
 ## [0.1.0-alpha.5] - 2026-08-09
 

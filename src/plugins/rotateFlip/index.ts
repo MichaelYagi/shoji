@@ -141,8 +141,36 @@ export const RotateFlip: ShojiPlugin = {
       ctx.emit('rotateFlipChange', { index: gallery.currentIndex, ...state });
     }
 
-    rotateLeftBtn.addEventListener('click', () => update({ rotation: state.rotation - 90 }, -90));
-    rotateRightBtn.addEventListener('click', () => update({ rotation: state.rotation + 90 }, 90));
+    /**
+     * A real bug, reported from real usage: with exactly one flip axis
+     * active, "Rotate right" visually spun the image counter-clockwise
+     * instead — a `+90` raw `rotate()` delta composed with a single
+     * `scaleX(-1)`/`scaleY(-1)` mirror reverses the rotation's visual
+     * handedness (a mirror is a reflection — determinant -1 — so a
+     * clockwise turn *inside* it reads as counter-clockwise once mirrored
+     * back onto the screen). Flipping *both* axes doesn't have this problem
+     * — two reflections compose back into a rotation (determinant +1, same
+     * as no flip at all), which is exactly why `normalizeRotateFlip`
+     * already collapses that combination into a plain 180° rotation.
+     * Inverting the raw delta whenever `visualFlipH !== visualFlipV` (XOR —
+     * "exactly one axis flipped") makes the buttons always spin the image
+     * the way they're visually labeled, regardless of flip state; `state`
+     * (the canonicalized, emitted value) gets the same inverted delta, so
+     * it stays an accurate description of what's actually on screen.
+     */
+    function rotateDelta(clockwise: boolean): number {
+      const flippedOnOneAxis = visualFlipH !== visualFlipV;
+      return clockwise !== flippedOnOneAxis ? 90 : -90;
+    }
+
+    rotateLeftBtn.addEventListener('click', () => {
+      const delta = rotateDelta(false);
+      update({ rotation: state.rotation + delta }, delta);
+    });
+    rotateRightBtn.addEventListener('click', () => {
+      const delta = rotateDelta(true);
+      update({ rotation: state.rotation + delta }, delta);
+    });
     flipHBtn.addEventListener('click', () => {
       visualFlipH = !visualFlipH;
       update({ flipH: !state.flipH });

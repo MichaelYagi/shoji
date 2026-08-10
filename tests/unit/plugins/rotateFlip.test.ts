@@ -112,6 +112,69 @@ describe('RotateFlip — rotation', () => {
   });
 });
 
+describe('RotateFlip — rotate direction while flipped', () => {
+  it('regression: with exactly one flip axis active, "Rotate right" must apply a negative raw delta so the image still spins clockwise visually — scaleX(-1)/scaleY(-1) mirrors the coordinate system, reversing a plain +90 delta\'s visual handedness', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Flip horizontal'));
+    click(button('Rotate right'));
+
+    expect(activeMedia().style.transform).toBe('scaleX(-1) scaleY(1) rotate(-90deg)');
+    gallery.destroy();
+  });
+
+  it('regression: "Rotate left" while flipped on one axis inverts the same way, applying a positive raw delta', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Flip horizontal'));
+    click(button('Rotate left'));
+
+    expect(activeMedia().style.transform).toBe('scaleX(-1) scaleY(1) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('the inversion applies the same way for a vertical-only flip, not just horizontal', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Flip vertical'));
+    click(button('Rotate right'));
+
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(-1) rotate(-90deg)');
+    gallery.destroy();
+  });
+
+  it('flipping BOTH axes cancels the inversion back out — two reflections compose into a plain rotation, so "Rotate right" goes back to a normal +90 delta', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    click(button('Flip horizontal'));
+    click(button('Flip vertical'));
+    click(button('Rotate right'));
+
+    expect(activeMedia().style.transform).toBe('scaleX(-1) scaleY(-1) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('the canonicalized emitted state reflects the inverted (negative) delta too, not just the raw animated transform', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    const onChange = vi.fn();
+    gallery.on('rotateFlipChange', onChange);
+
+    click(button('Flip horizontal'));
+    click(button('Rotate right'));
+
+    // -90 normalized into [0, 360) is 270.
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ flipH: true, rotation: 270 }),
+    );
+    gallery.destroy();
+  });
+});
+
 describe('RotateFlip — flipping', () => {
   it('flip horizontal applies scaleX(-1) and sets aria-pressed', () => {
     const gallery = makeGallery();
