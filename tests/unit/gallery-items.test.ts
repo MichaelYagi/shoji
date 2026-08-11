@@ -191,6 +191,117 @@ describe('Gallery — dynamic mode', () => {
   });
 });
 
+describe('Gallery — dynamic mode: YouTube video.id auto-fill from src', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('leaves an explicit video.id untouched, even if src would parse to a different id', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        {
+          id: 'a',
+          src: 'https://youtu.be/wrong-id',
+          video: { provider: 'youtube', id: 'right-id' },
+        },
+      ],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'right-id' });
+  });
+
+  it('fills in video.id from src when missing and the URL is a recognized YouTube link', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'https://youtu.be/dQw4w9WgXcQ', video: { provider: 'youtube' } }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'dQw4w9WgXcQ' });
+  });
+
+  it('warns and leaves video.id unset when missing and src is not a recognized YouTube link', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'not-a-youtube-url.mp4', video: { provider: 'youtube' } }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/item "a".*no id.*not-a-youtube-url\.mp4/);
+  });
+
+  it('does not touch html5 or plain photo items', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'clip.mp4', video: { provider: 'html5' } },
+        { id: 'b', src: 'photo.jpg' },
+      ],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'html5' });
+    expect(gallery.items[1]?.video).toBeUndefined();
+  });
+
+  it('also fills in on updateSlides(), not just construction', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items: [] });
+
+    gallery.updateSlides([
+      { id: 'a', src: 'https://youtu.be/dQw4w9WgXcQ', video: { provider: 'youtube' } },
+    ]);
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'dQw4w9WgXcQ' });
+  });
+});
+
+describe('Gallery — dynamic mode: video: true (full inference from src)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('resolves to a youtube descriptor when src is a recognized YouTube URL', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'https://youtu.be/dQw4w9WgXcQ', video: true }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'dQw4w9WgXcQ' });
+  });
+
+  it('resolves to html5 when src is not a recognized YouTube URL', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'clips/sunset.mp4', video: true }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'html5' });
+  });
+
+  it('warns when src is a YouTube host but no id could be parsed out of it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'https://youtube.com/attribution_link?u=weird', video: true }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: undefined });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/item "a".*video: true.*attribution_link/);
+  });
+
+  it('also resolves on updateSlides(), not just construction', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items: [] });
+
+    gallery.updateSlides([{ id: 'a', src: 'https://youtu.be/dQw4w9WgXcQ', video: true }]);
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'dQw4w9WgXcQ' });
+  });
+});
+
 describe('Gallery — addSlides/removeSlides (sugar over updateSlides)', () => {
   it('addSlides appends at the end by default', () => {
     const el = document.createElement('div');

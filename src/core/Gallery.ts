@@ -5,14 +5,20 @@ import { FocusTrap } from './FocusTrap';
 import { GestureController, INTERACTIVE_CONTROL_SELECTOR } from './GestureController';
 import { LiveRegion } from './LiveRegion';
 import type { ButtonSpec, PluginContext, VideoProviderRenderer } from './plugin';
-import { DEFAULT_SELECTOR, scanContainer } from './scan';
+import { DEFAULT_SELECTOR, resolveDynamicVideoItems, scanContainer } from './scan';
 import { SlideManager } from './SlideManager';
-import type { DangerousHtmlCaption, GalleryEvents, GalleryItem, GalleryOptions } from './types';
+import type {
+  DangerousHtmlCaption,
+  GalleryEvents,
+  GalleryItem,
+  GalleryItemInput,
+  GalleryOptions,
+} from './types';
 import { TRANSITION_PRESETS } from '../transitions/presets';
 import { SlideTransition } from '../transitions/SlideTransition';
 import { zoomIn, zoomOut } from './zoomTransition';
 
-function itemKey(item: GalleryItem): string {
+function itemKey(item: GalleryItem | GalleryItemInput): string {
   return item.id ?? item.src;
 }
 
@@ -222,7 +228,7 @@ export class Gallery {
     this.scannedElements = [];
 
     if (this.isDynamicMode) {
-      this.itemList = options.items ?? [];
+      this.itemList = resolveDynamicVideoItems(options.items ?? []);
     } else {
       const scanned = scanContainer(this.element, this.selector);
       this.itemList = scanned.map((s) => s.item);
@@ -874,12 +880,12 @@ export class Gallery {
   }
 
   /** DESIGN.md §2.1 — diffs by id (fallback src), preserving the active slide. */
-  updateSlides(items: GalleryItem[], currentIndex?: number): void {
+  updateSlides(items: GalleryItemInput[], currentIndex?: number): void {
     if (this.destroyed) return;
 
     const activeItem = this.itemList[this.activeIndex];
     const activeKey = activeItem ? itemKey(activeItem) : undefined;
-    this.itemList = items;
+    this.itemList = resolveDynamicVideoItems(items);
 
     let nextIndex = currentIndex;
     if (nextIndex === undefined && activeKey !== undefined) {
@@ -904,9 +910,9 @@ export class Gallery {
    * own semantics (negative counts from the end, out-of-range clamps) —
    * no extra validation on top of that.
    */
-  addSlides(items: GalleryItem[], atIndex?: number): void {
+  addSlides(items: GalleryItemInput[], atIndex?: number): void {
     if (this.destroyed) return;
-    const next = [...this.itemList];
+    const next: GalleryItemInput[] = [...this.itemList];
     next.splice(atIndex ?? next.length, 0, ...items);
     this.updateSlides(next);
   }

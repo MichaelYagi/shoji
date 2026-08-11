@@ -55,9 +55,23 @@
           // flips the default; see the Settings guide).
           caption: 'Sample video — replace clip.mp4 with a real file',
         },
+        {
+          // video: true (dynamic-mode-only shorthand): infers the whole
+          // descriptor from src — a recognized YouTube host resolves to
+          // { provider: 'youtube', id }, same as a bare
+          // data-shoji-video="<url>" attribute with no explicit id would in
+          // selector mode. A real, working YouTube link, so this one
+          // actually embeds — unlike the html5 item above, no placeholder
+          // file needed.
+          id: 'v2',
+          src: 'https://youtu.be/dQw4w9WgXcQ',
+          video: true,
+          poster: svgDataUri('YouTube (video: true)', '#c0392b'),
+          caption: 'YouTube via video: true — id inferred from src',
+        },
       ];
 
-      const gallery = new Shoji('#gallery', { items });
+      const gallery = new Shoji('#gallery', { items, plugins: [Shoji.Video] });
 
       // Dynamic mode has no scanned DOM to wire clicks from automatically —
       // the host owns this markup, so the host wires it. Click order
@@ -126,7 +140,7 @@
     </script>
 
     <h2>Code</h2>
-    <p>The items array — three plain image items, then one video item:</p>
+    <p>The items array — three plain image items, then two video items:</p>
     <pre><code>const gallery = new Shoji('#gallery', {
   items: [
     { id: 'p1', src: 'photo-1.jpg', caption: 'Sunset over the bay' },
@@ -140,7 +154,18 @@
       poster: 'clip-poster.jpg',
       caption: 'Sample video',
     },
+    {
+      // video: true — dynamic-mode-only shorthand, infers the whole
+      // descriptor from src (youtube if the host matches, html5
+      // otherwise). No provider, no id to type by hand.
+      id: 'v2',
+      src: 'https://youtu.be/dQw4w9WgXcQ',
+      video: true,
+      poster: 'yt-poster.jpg',
+      caption: 'YouTube via video: true',
+    },
   ],
+  plugins: [Shoji.Video], // required to actually render the youtube item
 });
 
 // Dynamic mode has no scanned DOM to wire clicks from — the host owns
@@ -148,6 +173,13 @@
 document.querySelectorAll('#gallery > a').forEach((el, i) => {
   el.addEventListener('click', () => gallery.open(i));
 });</code></pre>
+    <p>
+      Prefer to be explicit about the provider but still skip typing the id by hand? Same result,
+      just spelled out — and this form also works in selector mode via
+      <code>data-shoji-video</code> alone:
+    </p>
+    <pre><code>{ id: 'v2', src: 'https://youtu.be/dQw4w9WgXcQ', video: { provider: 'youtube' } }
+// → resolved to { provider: 'youtube', id: 'dQw4w9WgXcQ' } automatically, same as video: true above</code></pre>
     <p>Every core lifecycle event, logged as it fires:</p>
     <pre><code>[
   'beforeOpen', 'open', 'afterOpen',

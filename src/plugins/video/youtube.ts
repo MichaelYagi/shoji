@@ -143,6 +143,19 @@ function handleStateChange(
 export const renderYouTube: VideoProviderRenderer = (container, item, onReady, signal) => {
   if (item.video?.provider !== 'youtube') return;
   const videoId = item.video.id;
+  if (!videoId) {
+    // A misconfigured item — scan.ts (data-shoji-video-id / video: true /
+    // video.id auto-fill) already warned about this at normalization time.
+    // Same placeholder SlideManager itself uses for "no source"/"provider
+    // not registered", so the spinner doesn't hang forever waiting for an
+    // onReady that would never fire otherwise.
+    const placeholder = document.createElement('div');
+    placeholder.className = 'shoji-slide-placeholder';
+    placeholder.textContent = 'Video';
+    container.appendChild(placeholder);
+    onReady();
+    return;
+  }
 
   const mount = document.createElement('div');
   container.appendChild(mount);

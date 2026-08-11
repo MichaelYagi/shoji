@@ -16,9 +16,31 @@ still include breaking changes).
   identifier (e.g. `0.1.0-alpha.6` → the `alpha` tag) so prerelease builds
   never become `latest`. A `prepublishOnly` script guarantees `dist/` is
   rebuilt fresh at publish time.
+- YouTube video id detection is more thorough (`/live/`, `/v/` legacy links,
+  `youtube-nocookie.com`, `music.youtube.com`) and no longer the only way to
+  supply an id. A new `data-shoji-video-id` attribute (selector mode)
+  overrides the id parsed out of `data-shoji-video`'s URL — useful to rescue
+  a URL shape detection doesn't recognize, or skip parsing entirely; it's
+  ignored (with a console warning) if set without a matching
+  `data-shoji-video` URL, on a URL that clearly isn't YouTube, or on a real
+  `<video>` element. Dynamic mode gets the same capability two ways: a
+  `video.id` field can now be left out of a `{ provider: 'youtube' }`
+  descriptor and gets filled in from `src`, or `video: true` can replace the
+  whole descriptor — infers provider _and_ id from `src` in one step,
+  mirroring a bare `data-shoji-video="<url>"` attribute. Either path warns
+  (never throws) if no id can be found, and the YouTube renderer now shows a
+  placeholder instead of hanging on a broken embed when that happens.
 
 ### Fixed
 
+- `isBackdropClick` (the "did the viewer click outside the lightbox" check)
+  had its own hand-written interactive-control selector, narrower than
+  `GestureController`'s equivalent — missing `select`/`input`/`textarea`/
+  `a[href]`/`[data-shoji-no-drag]`. A plugin mounting anything other than a
+  `<button>` into the toolbar/overlay (e.g. a `<select>` theme picker) had
+  every click on it misread as a backdrop click, closing the gallery instead
+  of letting the control work. Both checks now share one
+  `INTERACTIVE_CONTROL_SELECTOR` constant.
 - Rotating or flipping a photo on a narrow (mobile) viewport could grow the
   page itself wider than the screen, pushing the toolbar off-screen until
   the whole page was scrolled right to reach it. The rotated/flipped slide

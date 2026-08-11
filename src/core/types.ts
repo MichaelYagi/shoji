@@ -21,6 +21,20 @@ export interface GalleryItem {
 }
 
 /**
+ * Dynamic-mode-only input shape, widening `video` to also accept `true` —
+ * shorthand for "figure it out from `src`," mirroring a bare
+ * `data-shoji-video="<url>"` attribute with no explicit provider/id. Always
+ * resolved into a real `VideoDescriptor` (or left `undefined`) before an
+ * item ever reaches `gallery.items`/rendering — `scan.ts`'s
+ * `resolveDynamicVideoItems`, run by `applyOptions()`/`updateSlides()`. Not
+ * usable in selector mode: DOM attributes have no boolean shorthand of their
+ * own, and `scanContainer()` always returns real `GalleryItem`s already
+ * resolved to a concrete descriptor (see `data-shoji-video`/
+ * `data-shoji-video-id` in `scan.ts`).
+ */
+export type GalleryItemInput = Omit<GalleryItem, 'video'> & { video?: VideoDescriptor | true };
+
+/**
  * Explicit, self-documenting opt-in for raw HTML in a caption — named after
  * React's identical escape hatch on purpose, so it can't be triggered by
  * accident and anyone who's seen that convention knows what it means. Shoji
@@ -41,10 +55,17 @@ export interface MediaSource {
  * dependency-free URL parsing, not the provider's SDK. *Rendering* any
  * non-`'html5'` provider is a plugin's job (§4-video), via
  * `ctx.ui.registerVideoProvider()` or `'custom'`'s own `render`.
+ *
+ * `id` is optional on the youtube/vimeo/wistia variant so dynamic-mode
+ * hosts can write `video: { provider: 'youtube' }` and let `id` be filled
+ * in from `src` (`scan.ts`'s `resolveDynamicVideoItems`) — same reasoning
+ * as `video: true` above, just with the provider spelled out explicitly. A
+ * rendered item with no `id` (src wasn't a recognized YouTube URL either)
+ * shows a placeholder instead of a broken embed — see `youtube.ts`.
  */
 export type VideoDescriptor =
   | { provider: 'html5' }
-  | { provider: 'youtube' | 'vimeo' | 'wistia'; id: string; url?: string }
+  | { provider: 'youtube' | 'vimeo' | 'wistia'; id?: string; url?: string }
   | {
       provider: 'custom';
       /** Same contract as `plugin.ts`'s `VideoProviderRenderer` — see its doc comment. */
@@ -60,7 +81,7 @@ export interface GalleryOptions {
   /** DOM selector for gallery items when not using dynamic mode. */
   selector?: string;
   /** Dynamic-mode item list; mutate live via gallery.updateSlides(). */
-  items?: GalleryItem[];
+  items?: GalleryItemInput[];
   /** Index to open on — used both as `open()`'s default argument and, with `openOnInit`, as the index opened automatically at construction. */
   index?: number;
   /**

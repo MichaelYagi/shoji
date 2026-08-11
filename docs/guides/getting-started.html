@@ -155,6 +155,40 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
       plain HTML5 source. Rendering it needs the <a href="./plugins.html">Video plugin</a>
       (<code>Shoji.Video</code>) — core only detects the provider, it doesn't embed one.
     </p>
+    <p>
+      Detection covers <code>youtu.be/&lt;id&gt;</code>, <code>watch?v=</code>,
+      <code>/embed/</code>, <code>/shorts/</code>, <code>/live/</code> (streams/premieres),
+      <code>/v/</code> (legacy), and <code>youtube-nocookie.com</code> — but it's still just pattern
+      matching against known URL shapes, not a guarantee. An optional
+      <code>data-shoji-video-id</code> attribute overrides the id that would otherwise be parsed out
+      of the URL — useful either to rescue a URL shape detection doesn't recognize, or to skip
+      parsing entirely:
+    </p>
+    <pre><code>&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-video-id="dQw4w9WgXcQ"&gt;</code></pre>
+    <p>
+      The link (<code>data-shoji-video</code>) is still required either way — the id attribute only
+      ever overrides the <em>id</em>, never the URL itself. If it's set but
+      <code>data-shoji-video</code> clearly isn't a YouTube host, it's ignored (falls back to html5)
+      with a console warning — same if it's set without any <code>data-shoji-video</code> at all, or
+      on a real <code>&lt;video&gt;</code> element (always html5, regardless).
+    </p>
+    <p>
+      A third attribute, <code>data-shoji-video-provider</code>, declares the provider outright —
+      the DOM-mode equivalent of dynamic mode's explicit <code>video.provider</code>. It's what lets
+      a <code>data-shoji-video-id</code> be trusted even on a URL whose host isn't recognized as
+      YouTube (e.g. an internal proxy link), and it's the only way to build a
+      <code>vimeo</code>/<code>wistia</code> item in selector mode — neither has URL-based
+      detection, so an id has to be supplied explicitly alongside it:
+    </p>
+    <pre><code>&lt;a
+  data-shoji-video="https://youtu.be/dQw4w9WgXcQ"
+  data-shoji-video-provider="youtube"
+  data-shoji-video-id="dQw4w9WgXcQ"
+&gt;</code></pre>
+    <p>
+      No renderer exists for <code>vimeo</code>/<code>wistia</code> yet — those items scan correctly
+      but show the same placeholder as any provider without a registered renderer, until one exists.
+    </p>
 
     <h2>GalleryItem fields</h2>
     <p>
@@ -242,7 +276,14 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
           <td>—</td>
           <td>
             Makes it a video slide instead of an image; <code>sources</code> is one entry per
-            <code>&lt;source src type&gt;</code>.
+            <code>&lt;source src type&gt;</code>. In dynamic mode only, <code>video</code> also
+            accepts the shorthand <code>true</code> — infers the whole descriptor from
+            <code>src</code>, the dynamic-mode equivalent of a bare
+            <code>data-shoji-video="&lt;url&gt;"</code> with no explicit id. A youtube descriptor's
+            own <code>id</code> is likewise optional in dynamic mode: omit it and it's filled in
+            from <code>src</code> the same way. Either way, a real <code>id</code> you do supply
+            always wins and is never touched; if none can be filled in, a console warning explains
+            why and the slide shows a placeholder instead of a broken embed.
           </td>
         </tr>
         <tr>

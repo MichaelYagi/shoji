@@ -1,4 +1,4 @@
-import type { GalleryItem, MediaSource } from './types';
+import type { GalleryItem, GalleryItemInput, MediaSource, VideoDescriptor } from './types';
 
 /** DESIGN.md §2.1 zero-config quickstart. */
 export const DEFAULT_SELECTOR =
@@ -38,9 +38,15 @@ function numAttr(el: Element, name: string): number | undefined {
  * matching `GalleryItem` field lands in `item.data`, keyed verbatim (not
  * camelCased) — DESIGN.md §2.1. By this point every named field above is
  * already set, so `key in item` alone tells known suffixes (src/thumb/
- * alt/.../poster) apart from custom ones; `no-drag` (GestureController's
- * drag-opt-out) is the one exception with no field of its own.
+ * alt/.../poster) apart from custom ones — except attributes that fold into
+ * a *nested* field (`video-id`/`video-provider` → `item.video.id`/
+ * `.provider`, both already applied in `scanVideo` by the time this runs)
+ * or have no field of their own at all (`no-drag`, GestureController's
+ * drag-opt-out); `key in item` can't see either case, so both are excluded
+ * by name instead.
  */
+const NO_OWN_DATA_FIELD = new Set(['no-drag', 'video-id', 'video-provider']);
+
 function applyCommon(element: HTMLElement, item: GalleryItem, src: string): void {
   const caption = attr(element, 'data-shoji-caption');
   if (caption) item.caption = caption;
@@ -50,7 +56,7 @@ function applyCommon(element: HTMLElement, item: GalleryItem, src: string): void
   for (const a of element.attributes) {
     if (!a.name.startsWith('data-shoji-')) continue;
     const key = a.name.slice(11);
-    if (key !== 'no-drag' && !(key in item)) (data ??= {})[key] = a.value;
+    if (!NO_OWN_DATA_FIELD.has(key) && !(key in item)) (data ??= {})[key] = a.value;
   }
   if (data) item.data = data;
 }
@@ -79,10 +85,21 @@ function scanImage(element: HTMLElement): GalleryItem | undefined {
   return item;
 }
 
-/** DESIGN.md §2.1 — a nested `<video>` is always html5; `data-shoji-video` checks known provider hosts first. */
+/**
+ * DESIGN.md §2.1 — a nested `<video>` is always html5; `data-shoji-video`
+ * checks known provider hosts first. `data-shoji-video-id`/
+ * `data-shoji-video-provider` (both optional) can override what would
+ * otherwise be parsed out of that URL — see `resolveExplicitVideo`.
+ */
 function scanVideo(element: HTMLElement): GalleryItem | undefined {
+  const videoIdAttr = attr(element, 'data-shoji-video-id');
   const videoEl = element.querySelector('video');
   if (videoEl) {
+    if (videoIdAttr) {
+      console.warn(
+        `Shoji: data-shoji-video-id="${videoIdAttr}" ignored — no effect on a nested <video> (always html5).`,
+      );
+    }
     const sources: MediaSource[] = Array.from(videoEl.querySelectorAll('source'))
       .map((s) => ({ src: s.getAttribute('src') ?? '', type: s.getAttribute('type') ?? '' }))
       .filter((s) => s.src);
@@ -99,24 +116,109 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
 
   const videoUrl = attr(element, 'data-shoji-video');
   if (videoUrl) {
-    const youtubeId = detectYouTubeId(videoUrl);
-    const item: GalleryItem = youtubeId
-      ? { src: videoUrl, video: { provider: 'youtube', id: youtubeId, url: videoUrl } }
-      : {
-          src: videoUrl,
-          video: { provider: 'html5' },
-          sources: [{ src: videoUrl, type: guessVideoType(videoUrl) }],
-        };
+    const providerAttr = attr(element, 'data-shoji-video-provider');
+    const resolved = resolveExplicitVideo(videoUrl, providerAttr, videoIdAttr);
+    const item: GalleryItem = { src: videoUrl, video: resolved.video };
+    if (resolved.sources) item.sources = resolved.sources;
     const poster = attr(element, 'data-shoji-poster');
     if (poster) item.poster = poster;
     applyCommon(element, item, videoUrl);
     return item;
   }
 
+  if (videoIdAttr) {
+    console.warn(
+      `Shoji: data-shoji-video-id="${videoIdAttr}" ignored — requires a data-shoji-video URL.`,
+    );
+  }
   return undefined;
 }
 
-/** `youtu.be/{id}`, `watch?v=`, `/embed/`, `/shorts/` — `undefined` otherwise. */
+const KNOWN_VIDEO_PROVIDERS = new Set(['youtube', 'vimeo', 'wistia', 'html5']);
+
+function html5Fallback(url: string): { video: VideoDescriptor; sources: MediaSource[] } {
+  return { video: { provider: 'html5' }, sources: [{ src: url, type: guessVideoType(url) }] };
+}
+
+/**
+ * `data-shoji-video-provider` declares the provider outright — trusts an id
+ * even off a non-YouTube host (e.g. an internal proxy URL), and lets
+ * `vimeo`/`wistia` items be built at all (neither has URL-based detection or
+ * a renderer yet — DESIGN.md: deliberately deferred). Mirrors dynamic
+ * mode's `video: { provider: '...' }`.
+ */
+function resolveExplicitVideo(
+  url: string,
+  providerAttr: string | undefined,
+  idAttr: string | undefined,
+): { video: VideoDescriptor; sources?: MediaSource[] } {
+  if (providerAttr && !KNOWN_VIDEO_PROVIDERS.has(providerAttr)) {
+    console.warn(`Shoji: data-shoji-video-provider="${providerAttr}" isn't recognized — ignored.`);
+    providerAttr = undefined;
+  }
+
+  if (providerAttr === 'html5') {
+    if (idAttr)
+      console.warn(`Shoji: data-shoji-video-id="${idAttr}" ignored — provider html5 has no id.`);
+    return html5Fallback(url);
+  }
+
+  if (providerAttr === 'vimeo' || providerAttr === 'wistia') {
+    if (!idAttr) {
+      console.warn(
+        `Shoji: data-shoji-video-provider="${providerAttr}" needs a data-shoji-video-id — falling back to html5.`,
+      );
+      return html5Fallback(url);
+    }
+    return { video: { provider: providerAttr, id: idAttr, url } };
+  }
+
+  // 'youtube' explicit, or unset (host-detected). Explicit trusts idAttr
+  // even off a non-YouTube host; unset falls back to html5 quietly on a
+  // youtube.com URL with no parseable id (e.g. "youtube.com/about") rather
+  // than building a youtube item nothing can render.
+  const explicitYouTube = providerAttr === 'youtube';
+  const isYouTube = explicitYouTube || isYouTubeUrl(url);
+  if (!isYouTube) {
+    if (idAttr) {
+      console.warn(
+        `Shoji: data-shoji-video-id="${idAttr}" ignored — data-shoji-video="${url}" isn't a recognized YouTube URL; falling back to html5.`,
+      );
+    }
+    return html5Fallback(url);
+  }
+  const id = idAttr ?? detectYouTubeId(url);
+  if (!id) {
+    if (!explicitYouTube) return html5Fallback(url);
+    console.warn(
+      `Shoji: data-shoji-video-provider="youtube" but no id could be parsed from "${url}".`,
+    );
+  }
+  return { video: { provider: 'youtube', id, url } };
+}
+
+const YOUTUBE_HOSTS = new Set(['youtu.be', 'youtube.com', 'youtube-nocookie.com']);
+
+/** Strips the `www.`/`m.`/`music.` subdomain YouTube serves the same content under either way. */
+function normalizeVideoHost(hostname: string): string {
+  return hostname.replace(/^(www|m|music)\./, '');
+}
+
+/** Host-only, weaker than `detectYouTubeId` on purpose — tells "wrong site" (a real misconfig with an explicit id set) apart from "right site, unparsed path" (what an explicit id is for). */
+function isYouTubeUrl(url: string): boolean {
+  try {
+    return YOUTUBE_HOSTS.has(normalizeVideoHost(new URL(url, window.location.href).hostname));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `youtu.be/{id}`, `watch?v=`, `/embed/`, `/shorts/`, `/live/` (streams/
+ * premieres), `/v/` (legacy), on `youtube.com` or `youtube-nocookie.com`
+ * (the privacy-enhanced embed domain) — `www.`/`m.`/`music.` subdomains all
+ * normalize the same way. `undefined` otherwise.
+ */
 function detectYouTubeId(url: string): string | undefined {
   let parsed: URL;
   try {
@@ -124,12 +226,50 @@ function detectYouTubeId(url: string): string | undefined {
   } catch {
     return undefined;
   }
-  const host = parsed.hostname.replace(/^(www|m)\./, '');
+  const host = normalizeVideoHost(parsed.hostname);
   if (host === 'youtu.be') return parsed.pathname.slice(1).split('/')[0] || undefined;
-  if (host !== 'youtube.com') return undefined;
+  if (!YOUTUBE_HOSTS.has(host)) return undefined;
   if (parsed.pathname === '/watch') return parsed.searchParams.get('v') ?? undefined;
-  const match = parsed.pathname.match(/^\/(?:embed|shorts)\/([^/?]+)/);
+  const match = parsed.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?]+)/);
   return match?.[1];
+}
+
+/**
+ * Dynamic mode skips `scanContainer()` entirely, so it never gets the same
+ * src-based detection `data-shoji-video`/`data-shoji-video-id` have.
+ * Mirrors it here: `video: true` infers the whole descriptor from `src`
+ * (youtube if the host matches, else html5); `{provider:'youtube'}` with no
+ * `id` fills in just the id. An explicit `id` always wins. Warns (doesn't
+ * throw) when a youtube item ends up with no id — `youtube.ts` guards this
+ * at render time too, showing a placeholder instead of a broken embed.
+ */
+export function resolveDynamicVideoItems(items: GalleryItemInput[]): GalleryItem[] {
+  return items.map((item): GalleryItem => {
+    if (item.video === true) {
+      const video: VideoDescriptor = isYouTubeUrl(item.src)
+        ? { provider: 'youtube', id: detectYouTubeId(item.src) }
+        : { provider: 'html5' };
+      if (video.provider === 'youtube' && !video.id) {
+        console.warn(
+          `Shoji: item "${item.id ?? item.src}" has video: true, but no id could be parsed from src ("${item.src}") — the embed won't load. Use an explicit video.id instead.`,
+        );
+      }
+      return { ...item, video };
+    }
+    // TS narrows `item.video` past this point, but not `item`'s own type —
+    // hence the cast (the map's `: GalleryItem` annotation is what actually
+    // catches a mistake here).
+    const resolved = item as GalleryItem;
+    if (resolved.video?.provider !== 'youtube' || resolved.video.id) return resolved;
+    const id = detectYouTubeId(resolved.src);
+    if (!id) {
+      console.warn(
+        `Shoji: item "${resolved.id ?? resolved.src}" has video.provider: 'youtube' with no id, and src ("${resolved.src}") isn't a recognized YouTube URL — the embed won't load. Set video.id explicitly.`,
+      );
+      return resolved;
+    }
+    return { ...resolved, video: { ...resolved.video, id } };
+  });
 }
 
 function guessVideoType(url: string): string {

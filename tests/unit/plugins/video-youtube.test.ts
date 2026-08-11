@@ -90,6 +90,28 @@ const ytItem: GalleryItem = {
   video: { provider: 'youtube', id: 'dQw4w9WgXcQ' },
 };
 
+describe('renderYouTube — missing video.id (a misconfigured item scan.ts already warned about)', () => {
+  it('shows the same placeholder SlideManager uses for "no source", and calls onReady immediately instead of hanging', async () => {
+    const { YT, instances } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const container = document.createElement('div');
+    const onReady = vi.fn();
+    const noIdItem: GalleryItem = {
+      id: 'yt',
+      src: 'https://youtube.com/attribution_link?u=weird',
+      video: { provider: 'youtube' },
+    };
+
+    renderYouTube(container, noIdItem, onReady, new AbortController().signal);
+
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.shoji-slide-placeholder')).not.toBeNull();
+    expect(instances).toHaveLength(0); // never attempted to construct a player at all
+  });
+});
+
 describe('renderYouTube — API already loaded (window.YT.Player present)', () => {
   it("builds a YT.Player with the item's video id, and calls onReady once the player reports ready", async () => {
     const { YT, instances } = makeYTPlayerMock();
