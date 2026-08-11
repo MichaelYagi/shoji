@@ -41,14 +41,20 @@
         { id: 'p3', src: svgDataUri('Photo 3', '#27ae60'), caption: 'City lights' },
         {
           // Item shape for a video — provider: 'html5' plus one entry in
-          // `sources` per <source src type>. `clip.mp4` here is a
-          // placeholder path (there's no real video file to embed inline in
-          // a documentation example) — point this at your own file; the
-          // poster below is real, so the tile/slide still shows something.
+          // `sources` per <source src type>, same as native <video><source>
+          // markup: multiple *format* alternatives for the same content, so
+          // a browser that can't decode one tries the next. clip.webm/
+          // clip.mp4 here are placeholder paths (there's no real video file
+          // to embed inline in a documentation example) — point these at
+          // your own files; the poster below is real, so the tile/slide
+          // still shows something.
           id: 'v1',
           src: 'clip.mp4',
           video: { provider: 'html5' },
-          sources: [{ src: 'clip.mp4', type: 'video/mp4' }],
+          sources: [
+            { src: 'clip.webm', type: 'video/webm' },
+            { src: 'clip.mp4', type: 'video/mp4' },
+          ],
           poster: svgDataUri('Video (replace src)', '#8e44ad'),
           // Hidden by default on a video slide — click the toolbar's
           // caption-toggle button to reveal it (GalleryOptions.showVideoCaption
@@ -150,7 +156,12 @@
       id: 'v1',
       src: 'clip.mp4',
       video: { provider: 'html5' },
-      sources: [{ src: 'clip.mp4', type: 'video/mp4' }],
+      // One entry per format alternative — the browser plays the first it
+      // can decode, same as native &lt;video&gt;&lt;source&gt; markup.
+      sources: [
+        { src: 'clip.webm', type: 'video/webm' },
+        { src: 'clip.mp4', type: 'video/mp4' },
+      ],
       poster: 'clip-poster.jpg',
       caption: 'Sample video',
     },
