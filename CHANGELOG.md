@@ -51,6 +51,18 @@ still include breaking changes).
   ancestor by default. Now passes `{ preventScroll: true }`, keeping the
   accessibility behavior (focus correctly returns to where you opened from)
   without the side effect.
+- `ActiveThumbnail`'s auto-scroll fired `scrollIntoView({ behavior: 'smooth' })`
+  synchronously on every single navigation, with no coordination between
+  calls. Navigating faster than one smooth-scroll animation can finish
+  (autoplay ticking, or just clicking quickly) issued a new call per step,
+  each interrupting the last — overlapping, unsettled scroll animations that
+  don't get superseded outright, and can visibly resolve later, at some
+  unrelated point (observed specifically as a small scroll shift exactly
+  when the gallery closed, even after the `FocusTrap` fix above). The scroll
+  is now debounced 80ms, reset on every navigation and canceled on close, so
+  a rapid burst issues exactly one real `scrollIntoView` call for wherever
+  the viewer actually lands, instead of one per step. The highlight itself
+  (the active class) is unaffected — only the scroll is debounced.
 - `isBackdropClick` (the "did the viewer click outside the lightbox" check)
   had its own hand-written interactive-control selector, narrower than
   `GestureController`'s equivalent — missing `select`/`input`/`textarea`/

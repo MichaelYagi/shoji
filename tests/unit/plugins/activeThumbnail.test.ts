@@ -72,21 +72,69 @@ describe('ActiveThumbnail plugin', () => {
     gallery.destroy();
   });
 
-  it('scrolls the active thumbnail into view by default', () => {
+  it('scrolls the active thumbnail into view by default, debounced by 80ms', () => {
+    vi.useFakeTimers();
     const { gallery, thumbs } = makeSelectorGallery();
     const spy = vi.spyOn(thumbs[1]!, 'scrollIntoView');
     gallery.open(1);
+    expect(spy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(80);
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }));
     gallery.destroy();
+    vi.useRealTimers();
   });
 
   it('scrollIntoView: false disables the auto-scroll but still highlights', () => {
+    vi.useFakeTimers();
     const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { scrollIntoView: false } });
     const spy = vi.spyOn(thumbs[1]!, 'scrollIntoView');
     gallery.open(1);
+    vi.advanceTimersByTime(80);
     expect(spy).not.toHaveBeenCalled();
     expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(true);
     gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('rapid-fire navigation coalesces into a single scrollIntoView call, for the final index only — regression: firing scrollIntoView synchronously on every step left overlapping/interrupted smooth-scroll animations that could visibly resolve later (e.g. on close), producing an unexplained scroll shift', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery();
+    gallery.open(0);
+    const spy0 = vi.spyOn(thumbs[0]!, 'scrollIntoView');
+    const spy1 = vi.spyOn(thumbs[1]!, 'scrollIntoView');
+    const spy2 = vi.spyOn(thumbs[2]!, 'scrollIntoView');
+    vi.advanceTimersByTime(80);
+    spy0.mockClear();
+
+    // navigate faster than the 80ms debounce window can settle
+    gallery.goTo(1, { animate: false });
+    vi.advanceTimersByTime(30);
+    gallery.goTo(2, { animate: false });
+    vi.advanceTimersByTime(80);
+
+    expect(spy0).not.toHaveBeenCalled();
+    expect(spy1).not.toHaveBeenCalled();
+    expect(spy2).toHaveBeenCalledTimes(1);
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('close() cancels a still-pending debounced scroll — nothing fires after close for a navigation that happened just before it', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery();
+    gallery.open(1);
+    const spy = vi.spyOn(thumbs[1]!, 'scrollIntoView');
+    vi.advanceTimersByTime(80);
+    spy.mockClear();
+
+    gallery.goTo(2, { animate: false });
+    const spy2 = vi.spyOn(thumbs[2]!, 'scrollIntoView');
+    gallery.close();
+    vi.advanceTimersByTime(200);
+
+    expect(spy2).not.toHaveBeenCalled();
+    gallery.destroy();
+    vi.useRealTimers();
   });
 
   it('a custom activeClass is used instead of the default', () => {

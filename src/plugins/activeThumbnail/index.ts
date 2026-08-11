@@ -45,26 +45,50 @@ export const ActiveThumbnail: ShojiPlugin = {
     const scrollIntoView = ctx.options.scrollIntoView !== false;
 
     let current: HTMLElement | null = null;
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function cancelPendingScroll(): void {
+      if (scrollTimer !== null) {
+        clearTimeout(scrollTimer);
+        scrollTimer = null;
+      }
+    }
 
     function apply(index: number): void {
       const el = gallery.getOriginElement(index);
       if (current && current !== el) current.classList.remove(activeClass);
+      cancelPendingScroll();
       if (el) {
         el.classList.add(activeClass);
         if (scrollIntoView) {
-          // Scrolling is best-effort — whatever goes wrong with it must
-          // never take the highlight down with it. classList.add() above
-          // already ran and is unaffected either way; this only guards
-          // against scrollIntoView itself throwing.
-          try {
-            el.scrollIntoView({
-              block: 'nearest',
-              inline: 'nearest',
-              behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-            });
-          } catch {
-            // no-op — see comment above
-          }
+          // Debounced, not fired on every single navigation directly: a
+          // real bug, reported from real usage and confirmed via direct
+          // testing — navigating faster than a single smooth scroll can
+          // finish (autoplay ticking, or just clicking quickly) leaves the
+          // browser with an interrupted, not-yet-settled scroll animation,
+          // which can visibly resolve later, at some unrelated later point
+          // (e.g. exactly when the gallery closes) rather than simply being
+          // superseded. Waiting a short beat before actually scrolling — and
+          // restarting that wait on every subsequent navigation — means a
+          // rapid burst only ever issues one real scrollIntoView call, for
+          // wherever the viewer actually lands, instead of one *per step*
+          // that can never keep up and pile up interrupted animations.
+          // classList.add() above is unaffected either way — the highlight
+          // itself is never debounced, only the scroll.
+          scrollTimer = setTimeout(() => {
+            scrollTimer = null;
+            // Scrolling is best-effort — whatever goes wrong with it must
+            // never take the highlight down with it (already applied above).
+            try {
+              el.scrollIntoView({
+                block: 'nearest',
+                inline: 'nearest',
+                behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+              });
+            } catch {
+              // no-op — see comment above
+            }
+          }, 80);
         }
       }
       current = el;
@@ -72,8 +96,13 @@ export const ActiveThumbnail: ShojiPlugin = {
 
     // Cleared on close (not left highlighting a thumbnail the viewer isn't
     // looking at anymore) — reopening re-applies it from whatever index
-    // open() lands on, via the 'afterOpen' listener below.
+    // open() lands on, via the 'afterOpen' listener below. Also cancels any
+    // still-pending debounced scroll — nothing left to usefully scroll
+    // toward once the highlight itself is about to be cleared, and this is
+    // exactly what stops a debounced-but-not-yet-fired scroll from
+    // surfacing later as an unexplained shift after the gallery is closed.
     function clear(): void {
+      cancelPendingScroll();
       current?.classList.remove(activeClass);
       current = null;
     }
