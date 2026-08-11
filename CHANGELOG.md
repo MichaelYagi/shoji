@@ -42,6 +42,23 @@ still include breaking changes).
 
 ### Fixed
 
+- Bouncing back and forth across a YouTube (or any registered provider)
+  slide's neighbor boundary — clicking through a thumbnail strip, or
+  autoplay ticking past it and back — rebuilt the video's `<iframe>` embed
+  from scratch on every single crossing, not just once: a real network
+  round-trip and a new player instance competing with the slide transition
+  for the same frame budget, visibly jerky every time. Root cause:
+  `SlideManager`'s slide pool could only keep already-loaded content at a
+  _different_ pool position by physically moving its DOM node into a
+  different slot, which reloads a live iframe in most browsers (the reason
+  an earlier fix excluded provider video from reuse entirely, always
+  rebuilding fresh instead — that avoided the reload but made the rebuild
+  itself the new cost). Fixed at the root: `render()` no longer moves
+  content between slots for any type — a slot that already holds the right,
+  ready content just has its own position relabeled, so the DOM node never
+  moves and a live embed can be reused exactly like a plain image always
+  could. Ordinary photo-to-photo navigation is unaffected (already reused
+  via a cheap, harmless reparent before; now via the same relabel).
 - Closing the lightbox could drag a host's own thumbnail strip back to
   wherever the gallery was originally opened from, discarding wherever it
   had since scrolled to (most visible with `ActiveThumbnail`, but not

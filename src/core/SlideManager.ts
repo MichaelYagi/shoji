@@ -8,6 +8,7 @@ const PAUSE_OVERLAY_DELAY_MS = 200;
 interface Slot {
   root: HTMLElement;
   media: HTMLElement;
+  /** Which pool position (`-preload…+preload`) this slot represents — reassigned by `render()`, not fixed at construction (see the class comment below). */
   offset: number;
   /** The index this slot currently wants to show, whether or not content has arrived — also how a later-resolving decode (`pending` below) finds the right slot. */
   assignedIndex: number | null;
@@ -31,11 +32,14 @@ export interface SlideManagerOptions {
 }
 
 /**
- * DESIGN.md §2.3 — only `currentIndex ± preload` exist in the DOM. Rather
- * than diffing which physical node maps to which item, each pool slot has a
- * fixed structural offset (-preload…+preload) and its *content* is what gets
- * reassigned on navigation — same pattern most virtualized carousels use,
- * and it keeps re-render cost O(preload), never O(item count).
+ * DESIGN.md §2.3 — only `currentIndex ± preload` exist in the DOM. Content
+ * already resident and ready is never moved between slots — the slot that
+ * already holds it just gets its own `offset` relabeled to its new pool
+ * position; only content resident nowhere yet gets built fresh into
+ * whatever's left over. O(preload) re-render cost either way, but never a
+ * DOM reparent — which matters for a provider video's `<iframe>` (§4.3):
+ * most browsers reload an iframe moved to a new parent, so a live embed can
+ * only safely change position by relabeling, never by being moved.
  */
 export class SlideManager {
   readonly element: HTMLElement;
@@ -45,15 +49,7 @@ export class SlideManager {
   private readonly videoProviders: Map<string, VideoProviderRenderer>;
   private dragOffsetPx = 0;
 
-  /**
-   * Ready nodes keyed by item index, not slot offset — a `Slot` only
-   * remembers its *own* previous index, so it can't tell that some *other*
-   * slot already decoded the exact index it's now asked to show (the
-   * routine case: stepping forward moves the +1 slot's content into the 0
-   * slot). Without this, already-decoded content is thrown away and
-   * redecoded on every step. Trimmed to `centerIndex ± preload` each
-   * `render()`, same window the slots cover.
-   */
+  /** Ready nodes keyed by item index — trimmed to `centerIndex ± preload` each `render()`, same window the slots cover, so an evicted entry's video/iframe resources get released even if no slot ever reclaims it. */
   private readonly cache = new Map<number, CacheEntry>();
 
   /**
@@ -143,41 +139,52 @@ export class SlideManager {
       }
     }
 
-    const targets = this.slots.map((slot) => {
-      const index = centerIndex + slot.offset;
+    const targets = this.slots.map((_, i) => {
+      const offset = i - this.preload;
+      const index = centerIndex + offset;
       const item = index >= 0 && index < items.length ? items[index] : undefined;
-      return { slot, index, item };
+      return { offset, index, item };
     });
 
-    // Phase 1 — claim every cache hit first, before anything gets
-    // destructively released. Stepping backward can need slot A's current
-    // content to become slot B's new content in this same call — releasing
-    // it (pausing a <video>) before B reclaims it would destroy content
-    // still needed a few lines later.
-    for (const { slot, index, item } of targets) {
-      if (!item || slot.assignedIndex === index) continue;
-      const cached = this.cache.get(index);
-      if (!cached) continue;
-      // Reparenting a live <iframe> resets it, breaking a provider video's
-      // player API — never moved via the cache; DESIGN.md §2.3 real-bug entry.
-      if (cached.node.classList.contains('shoji-slide-provider-video')) continue;
-      slot.assignedIndex = index;
-      this.moveIn(slot, cached, index);
-      onLoad(index);
+    // Phase 1 — claim in place, before anything gets destructively
+    // released. A target already resident and ready in *some* slot (not
+    // necessarily the one whose own offset happens to match) stays exactly
+    // where it is — only that slot's `offset` moves (see the class comment
+    // above). Still mid-decode elsewhere isn't claimed here (no `ready`
+    // slot yet) — falls through to phase 2, where `ensureImageDecoding`'s
+    // in-flight guard reconciles it once the one real decode resolves.
+    const claimedIndices = new Set<number>();
+    const claimedSlots = new Set<Slot>();
+    for (const target of targets) {
+      if (!target.item) continue;
+      const owner = this.slots.find((s) => s.assignedIndex === target.index && s.ready);
+      if (!owner) continue;
+      claimedIndices.add(target.index);
+      claimedSlots.add(owner);
+      if (owner.offset === target.offset) continue; // already exactly right, nothing to do
+      owner.offset = target.offset;
+      onLoad(target.index);
     }
 
-    // Phase 2 — whatever's left: clear out-of-range slots, start/await a
-    // decode behind a spinner for the rest. Anything still here is
-    // confirmed stale — phase 1 already reclaimed what's reusable.
-    for (const { slot, index, item } of targets) {
+    // Phase 2 — whatever's left: slots phase 1 didn't claim are free to
+    // clear (out-of-range target) or take on fresh content (a genuinely
+    // new index, or one already mid-decode elsewhere).
+    const freeSlots = this.slots.filter((s) => !claimedSlots.has(s));
+    const freeTargets = targets.filter((t) => !t.item || !claimedIndices.has(t.index));
+
+    freeTargets.forEach((target, i) => {
+      const slot = freeSlots[i]!;
+      slot.offset = target.offset;
+      const { index, item } = target;
+
       if (!item) {
         slot.assignedIndex = null;
         slot.ready = false;
         releaseVideo(slot.media);
         slot.media.replaceChildren();
-        continue;
+        return;
       }
-      if (slot.assignedIndex === index) continue; // unchanged, or already resolved by phase 1
+      if (slot.assignedIndex === index) return; // unchanged — a decode already in flight here
 
       slot.assignedIndex = index;
       slot.ready = false;
@@ -194,7 +201,13 @@ export class SlideManager {
       } else {
         this.ensureImageDecoding(item, index, onLoad); // no-ops if index is already being decoded elsewhere
       }
-    }
+    });
+
+    // Reflect any relabeling above immediately, never animated — masked
+    // either by SlideTransition's own ghost-clone crossfade, or by landing
+    // exactly on a completed drag's already-settled position (§2.4);
+    // animating this too would fight both.
+    this.applyTransforms(null);
   }
 
   private applyAspect(slot: Slot, item: GalleryItem): void {
@@ -222,10 +235,10 @@ export class SlideManager {
   }
 
   /**
-   * Moves an already-cached, ready node into `slot` — skips `releaseVideo`,
-   * unlike `swapIn`: what `slot` holds might be a live cache entry another
-   * slot reclaims this same `render()` pass (Phase 1). Reparenting is
-   * always safe; only the later fresh/clear pass releases stale content.
+   * Inserts a just-decoded node into the slot waiting on it — skips
+   * `releaseVideo`, unlike `swapIn`: this is its first insertion anywhere,
+   * nothing outgoing to release. `render()`'s claim pass (Phase 1) never
+   * calls this — it reuses `ready` content in place, no DOM touch at all.
    */
   private moveIn(slot: Slot, entry: CacheEntry, index: number): void {
     this.applyAspect(slot, entry.item);

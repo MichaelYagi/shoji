@@ -374,7 +374,10 @@ describe('SlideManager', () => {
     expect(manager.element.querySelector('.shoji-slide-spinner')).not.toBeNull();
     resolveDecode();
     await flush();
-    expect(manager.element.querySelector('img')?.getAttribute('src')).toContain('z0.jpg');
+    // getActiveMedia() (offset-aware), not a raw DOM-order querySelector —
+    // z1 (the +1 neighbor, relabeled rather than moved, §2.3) is *also* a
+    // real <img> in the pool at this point, just not the active one.
+    expect(manager.getActiveMedia()?.querySelector('img')?.getAttribute('src')).toContain('z0.jpg');
   });
 
   it('isActiveReady() is false while the active slide is still loading and true once it settles', async () => {
@@ -735,21 +738,20 @@ describe('SlideManager', () => {
       expect(registryRender).not.toHaveBeenCalled();
     });
 
-    it('regression: a preloaded neighbor is never reused by reparenting into its new slot — moving a live embed (e.g. an <iframe>) resets it in real browsers, silently breaking its already-wired player API', () => {
-      // A real bug: stepping onto a preloaded provider-video neighbor went
-      // through the same cache-reuse path images/native <video> use — moving
-      // the existing node into its new slot via replaceChildren(). That's
-      // safe for an <img>/<video> (browsers preserve their loaded state
-      // across a same-document reparent) but not for a provider's <iframe>:
-      // most browsers reload an iframe's content when it's moved to a new
-      // parent, even within the same document. The already-wired player
-      // (DESIGN.md §4.3) kept looking playable on our side, but commands
-      // sent to it never reached the now-defunct, reloaded iframe. Confirmed
-      // in a real browser: identical code plays fine when landed on
-      // directly (never reparented) but not when reached via the ordinary
-      // "preload the +1 neighbor, then step onto it" flow this test
-      // exercises. Fixed by never reusing a provider-video node this way —
-      // it's always rebuilt fresh in its new slot instead.
+    it("regression: stepping onto a preloaded provider-video neighbor reuses it in place (relabels the slot that already holds it) instead of tearing it down and rebuilding it fresh — a real bug, reported from real usage: bouncing back and forth across a YouTube slide's neighbor boundary rebuilt the iframe embed from scratch on every single crossing, competing with the slide transition for the same frame budget and reading as jerky every time, not just once", () => {
+      // History: an *earlier* fix (still correct, still true) found that
+      // reparenting a live <iframe> into a different slot resets it in most
+      // browsers, silently breaking its already-wired player API — see the
+      // eviction test below, which still covers that exact hazard. The fix
+      // at the time was to never reuse a provider-video node across a slot
+      // move at all, always rebuilding it fresh instead. That avoided the
+      // reparent, but the rebuild itself turned out to be its own real
+      // cost — this test is the follow-up: a slot that already holds ready
+      // content is never reparented into a *different* slot at all anymore
+      // (render()'s Phase 1 relabels the slot's own `offset` in place,
+      // §2.3) so a provider video can now be reused across an offset change
+      // exactly like an <img>/<video> always could, without the reparent
+      // that broke it before.
       const renderCalls: HTMLElement[] = [];
       const aborts: HTMLElement[] = [];
       const render = vi.fn(
@@ -772,16 +774,18 @@ describe('SlideManager', () => {
 
       manager.render(mixed, 1, vi.fn()); // step onto it, same as an autoplay-driven advance would
 
-      // A fresh render happened — not a reparent of the preloaded node.
-      expect(renderCalls).toHaveLength(2);
-      expect(renderCalls[1]).not.toBe(preloadedContainer);
+      // The exact same node, reused — no rebuild, no abort.
+      expect(renderCalls).toHaveLength(1);
       const activeContainer = manager
         .getActiveMedia()
         ?.querySelector('.shoji-slide-provider-video');
-      expect(activeContainer).toBe(renderCalls[1]);
-      // The orphaned old node is torn down, not silently leaked or left
-      // running detached (CLAUDE.md: "every plugin must be destroyable").
-      expect(aborts).toEqual([preloadedContainer]);
+      expect(activeContainer).toBe(preloadedContainer);
+      expect(aborts).toEqual([]);
+
+      manager.render(mixed, 0, vi.fn()); // and back again — still the same node, still no rebuild
+      manager.render(mixed, 1, vi.fn());
+      expect(renderCalls).toHaveLength(1);
+      expect(aborts).toEqual([]);
     });
 
     it('aborts the signal once evicted from the preload window', () => {
