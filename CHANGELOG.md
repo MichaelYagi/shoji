@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-08-11
+
 ### Added
 
 - Published to npm as [`@michaelyagi/shoji`](https://www.npmjs.com/package/@michaelyagi/shoji)
