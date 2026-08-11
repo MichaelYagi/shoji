@@ -42,6 +42,15 @@ still include breaking changes).
 
 ### Fixed
 
+- Closing the lightbox could drag a host's own thumbnail strip back to
+  wherever the gallery was originally opened from, discarding wherever it
+  had since scrolled to (most visible with `ActiveThumbnail`, but not
+  specific to it) — focus restoration on close (`FocusTrap.deactivate()`)
+  called a bare `focus()` on the element that triggered the open, and a
+  bare `focus()` auto-scrolls its target into view within any scrollable
+  ancestor by default. Now passes `{ preventScroll: true }`, keeping the
+  accessibility behavior (focus correctly returns to where you opened from)
+  without the side effect.
 - `isBackdropClick` (the "did the viewer click outside the lightbox" check)
   had its own hand-written interactive-control selector, narrower than
   `GestureController`'s equivalent — missing `select`/`input`/`textarea`/

@@ -47,7 +47,16 @@ export class FocusTrap {
   deactivate(): void {
     document.removeEventListener('keydown', this.onKeydown, true);
     this.container = null;
-    this.previouslyFocused?.focus();
+    // preventScroll: true — a bare focus() call auto-scrolls the target
+    // into view within any scrollable ancestor by default. A real bug:
+    // previouslyFocused is captured once at activate() time and never
+    // updated afterward (nothing re-focuses the current thumbnail as the
+    // viewer navigates), so restoring it on close can drag a host's own
+    // scrollable thumbnail strip all the way back to wherever the gallery
+    // was originally opened from, discarding whatever it had scrolled to
+    // since — e.g. ActiveThumbnail's auto-scroll, entirely undone by a
+    // focus restoration that has nothing to do with it.
+    this.previouslyFocused?.focus({ preventScroll: true });
     this.previouslyFocused = null;
   }
 }

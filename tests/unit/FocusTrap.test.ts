@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FocusTrap } from '../../src/core/FocusTrap';
 
 function pressTab(opts: { shiftKey?: boolean } = {}): void {
@@ -85,6 +85,24 @@ describe('FocusTrap', () => {
 
     trap.deactivate();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('restores focus with preventScroll: true — regression: a bare focus() call auto-scrolls the target into view within any scrollable ancestor by default, which could drag a host thumbnail strip (e.g. ActiveThumbnail) all the way back to wherever the gallery was originally opened from, discarding wherever it had since scrolled to', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    const focusSpy = vi.spyOn(trigger, 'focus');
+    trigger.focus();
+    focusSpy.mockClear(); // only care about the restore-on-deactivate call below
+
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    document.body.appendChild(container);
+
+    const trap = new FocusTrap();
+    trap.activate(container);
+    trap.deactivate();
+
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it('stops trapping Tab after deactivate', () => {

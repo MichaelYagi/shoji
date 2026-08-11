@@ -240,7 +240,7 @@ new Shoji(el, { mode: 'shoji-flip', mobileSettings: { mode: 'fade', controls: fa
 ### 2.6 Accessibility (core, non-optional)
 
 - Dialog semantics: `role="dialog"`, `aria-modal`, labelled by caption/counter.
-- Focus trap on open; focus restore on close; `Escape` closes; arrows (or `a`/`d`, either letter case) navigate; `Home/End` jump; `Tab` cycles toolbar.
+- Focus trap on open; focus restore on close; `Escape` closes; arrows (or `a`/`d`, either letter case) navigate; `Home/End` jump; `Tab` cycles toolbar. Focus restore (`FocusTrap.deactivate()`) passes `{ preventScroll: true }` to that `focus()` call — a real bug: a bare `focus()` auto-scrolls the target into view within any scrollable ancestor by default, and the restored element (`previouslyFocused`) is captured once at `activate()` time and never updated afterward, so restoring it on close could drag a host's own scrollable thumbnail strip (e.g. `ActiveThumbnail`, §4.2) all the way back to wherever the gallery was originally opened from — undoing whatever it had legitimately scrolled to since, via a focus restoration that has nothing to do with it. Reported as "ActiveThumbnail loses track of the active slide," but only actually observable once real navigation had scrolled the strip away from its starting position (small photo counts never trigger it — nothing to scroll back from).
 - Live region announces "Image 12 of 480: {alt}".
 - All toolbar buttons real `<button>`s with labels; visible focus rings via `--shoji-focus-ring`.
 - Reduced-motion: honors `prefers-reduced-motion` (fades instead of slides).
