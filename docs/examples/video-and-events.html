@@ -40,26 +40,22 @@
         { id: 'p2', src: svgDataUri('Photo 2', '#2980b9'), caption: 'Mountain trail' },
         { id: 'p3', src: svgDataUri('Photo 3', '#27ae60'), caption: 'City lights' },
         {
-          // Item shape for a video — provider: 'html5' plus one entry in
-          // `sources` per <source src type>, same as native <video><source>
-          // markup: multiple *format* alternatives for the same content, so
-          // a browser that can't decode one tries the next. clip.webm/
-          // clip.mp4 here are placeholder paths (there's no real video file
-          // to embed inline in a documentation example) — point these at
-          // your own files; the poster below is real, so the tile/slide
-          // still shows something.
+          // Item shape for a video — provider: 'html5', src pointing at a
+          // real file (assets/storm.mp4). No explicit `sources` needed here:
+          // with just one format to offer, Shoji derives a single-entry
+          // sources array from `src` automatically (src/core/scan.ts). See
+          // the Code section below for the multi-format `sources` shape —
+          // one entry per <source src type>, same as native
+          // <video><source> markup — for when you have more than one format
+          // alternative to offer.
           id: 'v1',
-          src: 'clip.mp4',
+          src: 'assets/storm.mp4',
           video: { provider: 'html5' },
-          sources: [
-            { src: 'clip.webm', type: 'video/webm' },
-            { src: 'clip.mp4', type: 'video/mp4' },
-          ],
-          poster: svgDataUri('Video (replace src)', '#8e44ad'),
+          poster: svgDataUri('Storm', '#8e44ad'),
           // Hidden by default on a video slide — click the toolbar's
           // caption-toggle button to reveal it (GalleryOptions.showVideoCaption
           // flips the default; see the Settings guide).
-          caption: 'Sample video — replace clip.mp4 with a real file',
+          caption: 'Sample video',
         },
         {
           // video: true (dynamic-mode-only shorthand): infers the whole
