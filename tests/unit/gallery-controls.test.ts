@@ -447,6 +447,46 @@ describe('Gallery — click-outside-to-close', () => {
     expect(gallery.currentIndex).toBe(2);
     gallery.destroy();
   });
+
+  it('clicking a plugin-mounted <select>/<input>/<textarea>/<a href> control does not trigger a false backdrop-close', () => {
+    // Regression: isBackdropClick() used to have its own, narrower exclusion
+    // list than GestureController's shouldIgnoreGesture() — missing select/
+    // input/textarea/a[href]/[data-shoji-no-drag]. A plugin mounting anything
+    // other than a bare <button> into the toolbar/overlay (e.g. a <select>
+    // theme picker) had every click on it misread as "clicked outside,"
+    // closing the gallery instead of letting the control work.
+    const el = document.createElement('div');
+    const plugin: ShojiPlugin = {
+      name: 'controls',
+      init(ctx) {
+        const select = document.createElement('select');
+        select.className = 'my-select';
+        select.appendChild(new Option('a'));
+        ctx.ui.toolbar('right', select);
+
+        const input = document.createElement('input');
+        input.className = 'my-input';
+        ctx.ui.overlay(input);
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'my-textarea';
+        ctx.ui.overlay(textarea);
+
+        const link = document.createElement('a');
+        link.href = '#';
+        link.className = 'my-link';
+        ctx.ui.overlay(link);
+      },
+    };
+    const gallery = new Gallery(el, { items: [{ id: 'a', src: 'a.jpg' }], plugins: [plugin] });
+    gallery.open(0);
+
+    for (const selector of ['.my-select', '.my-input', '.my-textarea', '.my-link']) {
+      click(document.querySelector(selector)!);
+      expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+    }
+    gallery.destroy();
+  });
 });
 
 describe('Gallery — closable: false', () => {

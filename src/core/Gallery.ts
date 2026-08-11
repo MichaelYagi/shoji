@@ -2,7 +2,7 @@ import { lockBodyScroll, unlockBodyScroll } from './bodyScrollLock';
 import { EventBus, type Unsubscribe } from './EventBus';
 import { buildLightboxDom, type LightboxDom } from './dom';
 import { FocusTrap } from './FocusTrap';
-import { GestureController } from './GestureController';
+import { GestureController, INTERACTIVE_CONTROL_SELECTOR } from './GestureController';
 import { LiveRegion } from './LiveRegion';
 import type { ButtonSpec, PluginContext, VideoProviderRenderer } from './plugin';
 import { DEFAULT_SELECTOR, scanContainer } from './scan';
@@ -66,7 +66,9 @@ function isBackdropClick(event: Event): boolean {
     .some(
       (node) =>
         node instanceof Element &&
-        node.matches('.shoji-slide-img, button, video, .shoji-counter, .shoji-caption'),
+        node.matches(
+          `.shoji-slide-img, .shoji-counter, .shoji-caption, ${INTERACTIVE_CONTROL_SELECTOR}`,
+        ),
     );
 }
 

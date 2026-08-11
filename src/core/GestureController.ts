@@ -13,15 +13,20 @@ const DRAG_FEEDBACK_TRANSITION =
 /** px of vertical drag at which live close-feedback maxes out — independent of `swipeThreshold`, which decides actual completion. */
 const VERTICAL_FEEDBACK_DISTANCE = 160;
 
-/** A click/drag starting on a real control shouldn't also be captured as a gesture — buttons/inputs/links keep their native behavior, `<video>` keeps its own native touch controls, and `data-shoji-no-drag` is an explicit host/plugin escape hatch (CLAUDE.md's `data-shoji-*` prefix). */
+/**
+ * A real interactive control. Also used by `Gallery.ts`'s `isBackdropClick`,
+ * which used to have its own narrower list (missing select/input/textarea/
+ * a[href]) — a plugin-mounted non-button control got misread as a backdrop
+ * click and closed the gallery. One shared selector so that can't recur.
+ */
+export const INTERACTIVE_CONTROL_SELECTOR =
+  'button, video, input, select, textarea, a[href], [data-shoji-no-drag]';
+
+/** A click/drag starting on a real control shouldn't also be captured as a gesture — see `INTERACTIVE_CONTROL_SELECTOR`. */
 function shouldIgnoreGesture(event: PointerEvent): boolean {
   return event
     .composedPath()
-    .some(
-      (node) =>
-        node instanceof Element &&
-        node.matches('button, video, input, select, textarea, a[href], [data-shoji-no-drag]'),
-    );
+    .some((node) => node instanceof Element && node.matches(INTERACTIVE_CONTROL_SELECTOR));
 }
 
 /** What `GestureController` needs from `Gallery` — narrow on purpose, so this module never reaches into Gallery internals beyond this contract. */
