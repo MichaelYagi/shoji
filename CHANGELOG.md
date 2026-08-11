@@ -30,6 +30,15 @@ still include breaking changes).
   mirroring a bare `data-shoji-video="<url>"` attribute. Either path warns
   (never throws) if no id can be found, and the YouTube renderer now shows a
   placeholder instead of hanging on a broken embed when that happens.
+- A new `data-shoji-video-provider` attribute (selector mode) declares the
+  provider outright, mirroring dynamic mode's explicit `video.provider`.
+  It's what lets `data-shoji-video-id` be trusted even on a URL whose host
+  isn't recognized as YouTube (e.g. an internal proxy link), and it's the
+  only way to build `vimeo`/`wistia` items in selector mode — neither has
+  URL-based id detection, so an id has to be supplied explicitly alongside
+  it. No renderer exists for `vimeo`/`wistia` yet; those items scan
+  correctly but show the same placeholder as any provider without a
+  registered renderer, until one exists.
 
 ### Fixed
 

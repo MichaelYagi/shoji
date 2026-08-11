@@ -52,11 +52,19 @@ export const ActiveThumbnail: ShojiPlugin = {
       if (el) {
         el.classList.add(activeClass);
         if (scrollIntoView) {
-          el.scrollIntoView({
-            block: 'nearest',
-            inline: 'nearest',
-            behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-          });
+          // Scrolling is best-effort — whatever goes wrong with it must
+          // never take the highlight down with it. classList.add() above
+          // already ran and is unaffected either way; this only guards
+          // against scrollIntoView itself throwing.
+          try {
+            el.scrollIntoView({
+              block: 'nearest',
+              inline: 'nearest',
+              behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+            });
+          } catch {
+            // no-op — see comment above
+          }
         }
       }
       current = el;
