@@ -36,7 +36,7 @@ still include breaking changes).
   retry-exhaustion path called `stop()` instead of `advance()`,
   inconsistent with how a provider's own error event was already handled;
   and separately, `Gallery.navigate()` paused the outgoing slide's video
-  *before* emitting `beforeSlide`, so Autoplay's still-attached manual-pause
+  _before_ emitting `beforeSlide`, so Autoplay's still-attached manual-pause
   detector misread that programmatic pause as the viewer pausing it by hand
   and stopped the slideshow — sometimes from inside the very `advance()`
   call trying to move past it. Fixed both: exhaustion now advances, and
