@@ -7,6 +7,30 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Mobile: tapping a YouTube slide to bring back auto-hidden controls closed
+  the gallery instead. A provider embed is a `<div>` wrapping a
+  cross-origin `<iframe>`, not a `<video>` element, so it never matched the
+  click-outside-to-close exclusion list the way a native HTML5 video slide
+  already did — a tap on the toolbar's own empty space (which is
+  `pointer-events: none`, so it doesn't block the video underneath) fell
+  through to the provider-video container and read as a backdrop click.
+  Desktop rarely hit this (hovering reveals controls without a `click`);
+  mobile always did, since every reveal attempt is a tap. Fixed by adding
+  `.shoji-slide-provider-video` to the exclusion list.
+- Layout plugin: opening/closing the lightbox on a `type: 'grid'` gallery
+  never got the same `contain: layout style` optimization masonry/justified
+  already had (see the `0.1.0-alpha.6` entry below) — excluded on the
+  assumption that a grid's intrinsic, content-driven height couldn't safely
+  decouple the same way. Re-investigated after being reported again,
+  specifically for grid: that assumption doesn't hold. Layout containment
+  isolates a subtree from _outside_ influence; it doesn't stop the box from
+  sizing itself off its own children's normal layout, intrinsic or not —
+  verified directly that a 300-tile grid's rendered height and every tile's
+  position are identical with and without it applied. Now applies to all
+  three layout types.
+
 ## [0.1.0-alpha.7] - 2026-08-11
 
 ### Added
