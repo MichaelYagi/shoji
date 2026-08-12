@@ -73,7 +73,15 @@
         },
       ];
 
-      const gallery = new Shoji('#gallery', { items, plugins: [Shoji.Video] });
+      const gallery = new Shoji('#gallery', {
+        items,
+        plugins: [Shoji.Video, Shoji.Autoplay],
+        // autoStart: true so opening any slide immediately shows autoplay
+        // running — including against real video: it plays the HTML5/
+        // YouTube slide instead of starting the timer, and advances on the
+        // video's own 'ended' event rather than the fixed interval.
+        autoplay: { autoStart: true, interval: 4000 },
+      });
 
       // Dynamic mode has no scanned DOM to wire clicks from automatically —
       // the host owns this markup, so the host wires it. Click order
@@ -172,7 +180,12 @@
       caption: 'YouTube via video: true',
     },
   ],
-  plugins: [Shoji.Video], // required to actually render the youtube item
+  plugins: [Shoji.Video, Shoji.Autoplay], // Video: renders the youtube item; Autoplay: the slideshow
+  // autoStart: true begins the slideshow the moment the gallery opens,
+  // instead of waiting for a click on the toolbar button/Space. Arriving
+  // at a video slide plays it and advances on 'ended' instead of the
+  // fixed interval — see the Settings guide's Autoplay section.
+  autoplay: { autoStart: true, interval: 4000 },
 });
 
 // Dynamic mode has no scanned DOM to wire clicks from — the host owns

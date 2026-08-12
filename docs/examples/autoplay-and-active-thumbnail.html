@@ -28,7 +28,8 @@
       .thumb-strip a {
         flex: 0 0 140px;
       }
-      .thumb-strip img {
+      .thumb-strip img,
+      .thumb-strip video {
         width: 140px;
         aspect-ratio: 4 / 3;
         object-fit: cover;
@@ -58,6 +59,12 @@
       moves and scrolls into view on every advance, twelve items being more than fit on screen at
       once. Closing the lightbox stops the slideshow too, not just the visual.
     </p>
+    <p>
+      Two video items are mixed in at the end (HTML5, then YouTube) — reaching one shows how
+      Autoplay treats video differently from a timed photo: it plays the video instead of starting
+      the interval timer, and only advances once that video's own <code>ended</code> event fires,
+      however long that actually takes.
+    </p>
 
     <div id="gallery" class="thumb-strip"></div>
     <p class="status-line" id="status">Shoji not yet initialized.</p>
@@ -83,19 +90,36 @@
         '#d35400',
         '#16a085',
       ];
-      document.querySelector('#gallery').innerHTML = COLORS.map(
+      const photoTiles = COLORS.map(
         (color, i) => `
           <a href="${svgDataUri(`Photo ${i + 1}`, color)}">
             <img src="${svgDataUri(`Photo ${i + 1}`, color)}" alt="Photo ${i + 1}">
           </a>`,
       ).join('');
 
+      // Same two video items as the video-and-events.html example — plain
+      // HTML5 markup (auto-detected, no attribute needed) and a
+      // data-shoji-video URL for YouTube. Selector mode, so these are real
+      // markup the gallery scans, not an items array.
+      const videoTiles = `
+        <a href="assets/storm.mp4">
+          <video poster="${svgDataUri('Storm', '#8e44ad')}">
+            <source src="assets/storm.mp4" type="video/mp4" />
+          </video>
+        </a>
+        <a data-shoji-video="https://youtu.be/dQw4w9WgXcQ">
+          <img src="${svgDataUri('YouTube', '#c0392b')}" alt="YouTube video" />
+        </a>`;
+
+      document.querySelector('#gallery').innerHTML = photoTiles + videoTiles;
+
       const status = document.querySelector('#status');
       const gallery = new Shoji('#gallery', {
-        plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail],
+        plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail, Shoji.Video],
         // Shortened from the 5000ms default so the strip's highlight/scroll
         // is easy to watch move on a documentation page — a real gallery
         // would likely leave this at the default, or tune it to the photos.
+        // Doesn't apply to the two video slides at the end (see below).
         autoplay: { interval: 1500 },
       });
 
@@ -110,12 +134,22 @@
 
     <h2>Code</h2>
     <p>
-      The whole integration — two plugins, a shortened interval, and the CSS that defines "active":
+      The whole integration — three plugins, a shortened interval, and the CSS that defines
+      "active":
     </p>
     <pre><code>const gallery = new Shoji('#gallery', {
-  plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail],
-  autoplay: { interval: 1500 }, // default is 5000ms
+  plugins: [Shoji.Autoplay, Shoji.ActiveThumbnail, Shoji.Video], // Video: renders the youtube item
+  autoplay: { interval: 1500 }, // default is 5000ms; doesn't apply to video slides
 });</code></pre>
+    <p>The two video items at the end of the strip — plain HTML5 markup, then a YouTube link:</p>
+    <pre><code>&lt;a href="clip.mp4"&gt;
+  &lt;video poster="clip-poster.jpg"&gt;
+    &lt;source src="clip.mp4" type="video/mp4" /&gt;
+  &lt;/video&gt;
+&lt;/a&gt;
+&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ"&gt;
+  &lt;img src="yt-poster.jpg" alt="YouTube video" /&gt;
+&lt;/a&gt;</code></pre>
     <pre><code>/* Shoji only toggles the class — you decide what "active" looks like. */
 .shoji-thumb-active img {
   outline: 3px solid #4da3ff;

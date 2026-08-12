@@ -36,13 +36,7 @@ function makeGallery(options: Record<string, unknown> = {}) {
 }
 
 function toggleButton(): HTMLButtonElement {
-  // 'right' — clusters immediately before the close button (DESIGN.md §3.1).
-  // :not(.shoji-caption-toggle) excludes core's own video-caption toggle
-  // button, which now also lives in this slot (hidden outside a captioned
-  // video slide, but still a real .shoji-toolbar-button in the DOM).
-  return document.querySelector(
-    '.shoji-toolbar-right .shoji-toolbar-button:not(.shoji-caption-toggle)',
-  ) as HTMLButtonElement;
+  return document.querySelector('.shoji-autoplay-toggle') as HTMLButtonElement;
 }
 
 function click(el: Element): void {
@@ -694,5 +688,48 @@ describe('Autoplay — cleanup', () => {
 
     expect(document.querySelector('.shoji-toolbar-button')).toBeNull();
     expect(document.querySelector('.shoji-autoplay-progress')).toBeNull();
+  });
+});
+
+describe('Autoplay — autoStart', () => {
+  it('off by default — opening does not start the slideshow on its own', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
+    gallery.destroy();
+  });
+
+  it('starts the slideshow automatically as soon as the gallery opens', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { autoStart: true } });
+
+    gallery.open(0);
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+    vi.advanceTimersByTime(5000); // default interval
+    expect(gallery.currentIndex).toBe(1);
+
+    gallery.destroy();
+  });
+
+  it('starts again on a second open() — not only the first', () => {
+    const gallery = makeGallery({ autoplay: { autoStart: true } });
+    gallery.open(0);
+    gallery.close();
+    expect(toggleButton()?.getAttribute('aria-label')).toBe('Play slideshow'); // stopped on close
+
+    gallery.open(0);
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+    gallery.destroy();
+  });
+
+  it('the toggle button carries a stable class (shoji-autoplay-toggle) host code can rely on instead of matching translatable label/title text', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    expect(document.querySelector('.shoji-autoplay-toggle')).toBe(toggleButton());
+    gallery.destroy();
   });
 });

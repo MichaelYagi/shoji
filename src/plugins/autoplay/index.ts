@@ -47,6 +47,8 @@ export interface AutoplayOptions {
   interval?: number;
   /** Shows the thin progress bar (`--shoji-progress`) tracking time-to-next-advance along the dialog's bottom edge, for timed slides only — never shown during video slides, whose own runtime drives advancement instead. Default `true`. Purely presentational: turning it off doesn't change any timing, only whether it's drawn. */
   showProgress?: boolean;
+  /** Starts the slideshow automatically as soon as the gallery opens — every `open()`, not just the first — instead of waiting for the toolbar button/`Space`. Default `false`. */
+  autoStart?: boolean;
 }
 
 /**
@@ -66,6 +68,7 @@ export const Autoplay: ShojiPlugin = {
     const { gallery } = ctx;
     const interval = Number(ctx.options.interval ?? 5000);
     const showProgress = ctx.options.showProgress !== false;
+    const autoStart = ctx.options.autoStart === true;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -92,7 +95,11 @@ export const Autoplay: ShojiPlugin = {
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'shoji-toolbar-button';
+    // shoji-autoplay-toggle: a stable hook for host code that needs to find
+    // this button from outside (e.g. to pause the slideshow before opening
+    // its own UI on top) — `title`/`aria-label` swap with `locale`, so
+    // matching on those breaks silently the moment a host customizes it.
+    button.className = 'shoji-toolbar-button shoji-autoplay-toggle';
     button.setAttribute('aria-label', playLabel);
     button.title = playLabel;
     button.innerHTML = PLAY_ICON;
@@ -266,6 +273,9 @@ export const Autoplay: ShojiPlugin = {
       if (playing && awaitingProviderVideo && index === gallery.currentIndex) enterSlide();
     });
     const offClose = ctx.on('close', () => stop());
+    const offOpen = ctx.on('afterOpen', () => {
+      if (autoStart) start();
+    });
 
     return () => {
       stop();
@@ -275,6 +285,7 @@ export const Autoplay: ShojiPlugin = {
       removeShortcut();
       offSlide();
       offSlideItemLoad();
+      offOpen();
       offClose();
     };
   },

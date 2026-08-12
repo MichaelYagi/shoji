@@ -7,6 +7,17 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- Autoplay: `autoStart: boolean` (default `false`) starts the slideshow
+  automatically as soon as the gallery opens, every `open()` not just the
+  first, instead of requiring a click on the toolbar button or `Space`.
+- Autoplay's play/pause toolbar button now carries a stable
+  `shoji-autoplay-toggle` class, for host code that needs to find/control it
+  from outside (e.g. pausing the slideshow before opening a modal). Its
+  `title`/`aria-label` swap with `locale`, so matching on that text instead
+  breaks silently the moment the locale changes — the class doesn't.
+
 ### Fixed
 
 - A video the viewer started playing (HTML5 or a provider like YouTube)
