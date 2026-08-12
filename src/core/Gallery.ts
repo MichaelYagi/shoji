@@ -6,7 +6,7 @@ import { GestureController, INTERACTIVE_CONTROL_SELECTOR } from './GestureContro
 import { LiveRegion } from './LiveRegion';
 import type { ButtonSpec, PluginContext, VideoProviderRenderer } from './plugin';
 import { DEFAULT_SELECTOR, resolveDynamicVideoItems, scanContainer } from './scan';
-import { SlideManager } from './SlideManager';
+import { pauseMedia, SlideManager } from './SlideManager';
 import type {
   DangerousHtmlCaption,
   GalleryEvents,
@@ -787,6 +787,10 @@ export class Gallery {
     const clamped = this.clampToRange(target);
     if (clamped === this.activeIndex) return;
     const from = this.activeIndex;
+    // A video started by the viewer keeps playing otherwise — this slide
+    // stays cached (still within `preload`), and only pausing (not
+    // releasing) lets it resume right where it left off if revisited.
+    pauseMedia(this.slides?.getActiveMedia() ?? null);
     this.bus.emit('beforeSlide', { from, to: clamped });
     this.activeIndex = clamped;
 
@@ -846,6 +850,10 @@ export class Gallery {
     this.isClosing = true;
 
     const media = this.slides?.getActiveMedia();
+    // close() never tears down the slide pool (reopening should be
+    // instant), so nothing else stops a viewer-started video just because
+    // the lightbox is now hidden.
+    pauseMedia(media ?? null);
     const origin = this.getOriginElement(this.activeIndex);
     if (media && origin) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);

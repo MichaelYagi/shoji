@@ -7,6 +7,20 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- A video the viewer started playing (HTML5 or a provider like YouTube)
+  kept playing — audibly, invisibly — after closing the lightbox, or after
+  navigating to a different slide entirely. Neither ever touched it:
+  `close()` doesn't tear down the slide pool (reopening is meant to be
+  instant), and a slide within the `preload` window stays cached on
+  navigation for the same reason — only genuinely evicting a slide from
+  that window released anything. `SlideManager.pauseMedia()` pauses
+  whichever slide is being left, on `close()` and before every navigation,
+  without releasing it — the video resumes right where it left off if
+  navigated back to, it just stops making noise the moment it's no longer
+  the one on screen.
+
 ## [0.1.0-alpha.8] - 2026-08-11
 
 ### Fixed

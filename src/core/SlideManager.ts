@@ -488,6 +488,24 @@ function releaseVideo(media: HTMLElement): void {
   if (provider) releaseProviderNode(provider);
 }
 
+/**
+ * Pauses whatever's playing in `media` — native `<video>`, or a provider
+ * embed wired via `wirePlayableContract` (§4-video) — without
+ * releasing/destroying it, unlike `releaseVideo` above. `Gallery` calls
+ * this on `close()` and before every navigation, on the outgoing slide.
+ */
+export function pauseMedia(media: HTMLElement | null): void {
+  const video = media?.querySelector('video');
+  if (video) {
+    video.pause();
+    return;
+  }
+  const provider = media?.querySelector<HTMLElement & { pause?: () => void }>(
+    '.shoji-slide-provider-video',
+  );
+  if (provider && typeof provider.pause === 'function') provider.pause();
+}
+
 /** Cache-eviction counterpart — the node itself might *be* the content. */
 function releaseVideoNode(node: HTMLElement): void {
   if (node.tagName !== 'VIDEO') {

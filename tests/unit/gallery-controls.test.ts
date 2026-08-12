@@ -685,3 +685,82 @@ describe('Gallery — loading state while the active slide loads', () => {
     gallery.destroy();
   });
 });
+
+describe('Gallery — pausing a playing video on close/navigate', () => {
+  // A real bug, reported from real usage: neither closing the lightbox nor
+  // navigating to another slide ever touched a still-playing video — a
+  // slide within the preload window stays cached on purpose (closing
+  // doesn't tear down the pool; reopening should be instant), and only
+  // genuine eviction from that window released anything. A video the
+  // viewer started manually kept playing — audibly, invisibly — after
+  // close() or after moving on to a different slide entirely.
+
+  it('close() pauses a playing HTML5 video', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'v', src: 'clip.mp4', video: { provider: 'html5' } }],
+    });
+    gallery.open(0);
+    const video = document.querySelector('video')!;
+    const pauseSpy = vi.spyOn(video, 'pause').mockImplementation(() => {});
+    vi.spyOn(video, 'load').mockImplementation(() => {}); // silences destroy()'s own teardown below
+
+    gallery.close();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    gallery.destroy();
+  });
+
+  it("navigating away pauses the outgoing slide's playing HTML5 video, without releasing/evicting it — still cached, ready to resume if navigated back to", () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'v', src: 'clip.mp4', video: { provider: 'html5' } },
+        { id: 'b', src: 'b.jpg' },
+      ],
+      preload: 1, // 'v' stays cached as the -1 neighbor after stepping to 'b'
+    });
+    gallery.open(0);
+    const video = document.querySelector('video')!;
+    const pauseSpy = vi.spyOn(video, 'pause').mockImplementation(() => {});
+    const loadSpy = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    gallery.next();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(loadSpy).not.toHaveBeenCalled(); // pause, not release — src is untouched
+    expect(document.querySelector('video')).toBe(video); // same node, still in the pool
+    gallery.destroy();
+  });
+
+  it('close() pauses a playing provider (e.g. YouTube) video via its wired .pause(), without aborting/destroying the embed', () => {
+    const el = document.createElement('div');
+    const abortSpy = vi.fn();
+    const pauseSpy = vi.fn();
+    const gallery = new Gallery(el, {
+      items: [
+        {
+          id: 'yt',
+          src: 'x',
+          video: {
+            provider: 'custom',
+            render: (container, _item, onReady, signal) => {
+              signal.addEventListener('abort', abortSpy);
+              const providerEl = container as HTMLElement & { pause: () => void };
+              providerEl.pause = pauseSpy;
+              container.appendChild(document.createElement('iframe'));
+              onReady();
+            },
+          },
+        },
+      ],
+    });
+    gallery.open(0);
+
+    gallery.close();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(abortSpy).not.toHaveBeenCalled(); // still cached, not torn down
+    gallery.destroy();
+  });
+});
