@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-08-11
+
 ### Fixed
 
 - Mobile: tapping a YouTube slide to bring back auto-hidden controls closed
