@@ -318,9 +318,11 @@ describe('Autoplay — video-aware behavior', () => {
     gallery.destroy();
   });
 
-  it('a blocked (rejected) autoplay attempt gracefully stops the slideshow instead of hanging', async () => {
+  it("a play() blocked by browser autoplay policy (NotAllowedError) gracefully stops the slideshow instead of hanging — the video is fine, it just needs the viewer's own click", async () => {
     vi.useFakeTimers();
-    HTMLVideoElement.prototype.play = vi.fn().mockRejectedValue(new Error('NotAllowedError'));
+    HTMLVideoElement.prototype.play = vi
+      .fn()
+      .mockRejectedValue(new DOMException('blocked', 'NotAllowedError'));
     const gallery = makeGallery();
     gallery.open(2);
 
@@ -329,6 +331,43 @@ describe('Autoplay — video-aware behavior', () => {
 
     expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // auto-stopped
     expect(gallery.currentIndex).toBe(2); // never advanced
+
+    gallery.destroy();
+  });
+
+  it("a genuinely unplayable video (NotSupportedError — broken/missing source) skips ahead instead of stopping the slideshow — regression: previously any rejection reason stopped it the same way, indistinguishable from a merely autoplay-blocked video that's actually fine", async () => {
+    vi.useFakeTimers();
+    HTMLVideoElement.prototype.play = vi
+      .fn()
+      .mockRejectedValue(new DOMException('no supported source', 'NotSupportedError'));
+    const gallery = makeGallery();
+    gallery.open(2);
+
+    click(toggleButton());
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // kept playing
+    expect(gallery.currentIndex).toBe(3); // skipped past the broken video
+
+    gallery.destroy();
+  });
+
+  it('a stale rejection (viewer already navigated away, or stopped the slideshow, before it resolved) is a no-op — does not advance or stop based on a video that is no longer the active one', async () => {
+    vi.useFakeTimers();
+    let reject!: (error: unknown) => void;
+    HTMLVideoElement.prototype.play = vi.fn(
+      () => new Promise((_resolve, r) => (reject = r)),
+    ) as unknown as typeof HTMLVideoElement.prototype.play;
+    const gallery = makeGallery();
+    gallery.open(2);
+    click(toggleButton());
+
+    gallery.next(); // viewer navigates away before the play() promise ever settles
+    const indexAfterNavigate = gallery.currentIndex;
+    reject(new DOMException('no supported source', 'NotSupportedError'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(gallery.currentIndex).toBe(indexAfterNavigate); // the stale rejection didn't also advance
 
     gallery.destroy();
   });
@@ -512,6 +551,32 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     gallery.destroy();
   });
 
+  it("regression: still catches the provider's error event after navigating there (not opened directly on it) — a preloaded slot's own offset is relabeled as navigation happens (SlideManager, §2.3), so a listener attached to whichever node happened to be the active one at plugin init can end up listening to a neighbor instead of the actual active slide", () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'b', src: 'b.jpg' },
+        { id: 'yt', src: 'https://youtu.be/x', video: { provider: 'youtube' as const, id: 'x' } },
+        { id: 'd', src: 'd.jpg' },
+      ],
+      plugins: [Autoplay, fakeVideoProviderPlugin()],
+      preload: 1, // >0 is what makes offset-relabeling (vs. a single always-offset-0 slot) possible at all
+    });
+    gallery.open(0);
+    click(toggleButton());
+    gallery.next(); // 'a' -> 'b' — a real navigation, not opening directly on the video slide
+    gallery.next(); // 'b' -> 'yt' — reaches the video slide the same way autoplay's own advance() would
+    expect(gallery.currentIndex).toBe(2);
+
+    const container = providerContainer()!;
+    container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 153 } }));
+
+    expect(gallery.currentIndex).toBe(3); // skipped ahead, not stuck
+    gallery.destroy();
+  });
+
   it('an error event while the slideshow is paused does not navigate', () => {
     const gallery = makeProviderGallery();
     gallery.open(1); // not playing — never clicked the toggle
@@ -569,7 +634,7 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     gallery.destroy();
   });
 
-  it('regression: gives up and stops the slideshow if every retry attempt is exhausted, instead of leaving it silently stuck forever', () => {
+  it("regression: skips ahead if every retry attempt is exhausted, instead of leaving the slideshow silently stuck forever — reported from real usage: a slow/late error report (e.g. YouTube's own Error 153) can arrive well after this retry window closes, so exhaustion needs to reach the same 'skip it' outcome on its own rather than depend on winning a race against the error event", () => {
     vi.useFakeTimers();
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
@@ -583,7 +648,36 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
 
     vi.advanceTimersByTime(400 * 9); // initial attempt + MAX_PROVIDER_PLAY_ATTEMPTS retries, all exhausted
-    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // stop() was called
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // kept playing
+    expect(gallery.currentIndex).toBe(2); // skipped past the unplayable video
+
+    gallery.destroy();
+  });
+
+  it('a slow-to-arrive error event, landing after retry-exhaustion already skipped past the video, does not also double-advance — reported from real usage: this is the exact race that left the slideshow stuck before both fixes above, and both reaching the same outcome independently must not compound into skipping twice', () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'yt', src: 'https://youtu.be/x', video: { provider: 'youtube' as const, id: 'x' } },
+        { id: 'c', src: 'c.jpg' },
+        { id: 'd', src: 'd.jpg' },
+      ],
+      plugins: [Autoplay, flakyVideoProviderPlugin(999)], // never actually takes
+      preload: 1, // keeps the errored container cached as a neighbor, not evicted, once skipped past
+    });
+    gallery.open(1); // the youtube slide directly
+    click(toggleButton());
+
+    const container = providerContainer()!; // capture before advancing past it
+    vi.advanceTimersByTime(400 * 9); // exhausts retries — advance() already fired once
+    expect(gallery.currentIndex).toBe(2);
+
+    // YouTube's own error report, arriving late — after the slide it's about is no longer active.
+    container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 153 } }));
+
+    expect(gallery.currentIndex).toBe(2); // unchanged — did not also advance a second time
 
     gallery.destroy();
   });

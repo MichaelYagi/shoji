@@ -7,6 +7,41 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Autoplay: a provider video's (e.g. YouTube) error event could go unheard
+  after navigating to it — a regression from the `SlideManager` pool-slot
+  relabeling change (see the `0.1.0-alpha.8` entry below). Autoplay used to
+  capture `gallery.getActiveMedia()` once, at plugin init, and listen for
+  `error` on that specific node — safe when a slot's own offset never
+  changed after construction, no longer safe now that a slot's offset is
+  relabeled as navigation happens. The node that was offset 0 at init can
+  become a neighbor after a single navigation, going unheard while a
+  different node becomes the actually-active one. Fixed by listening on the
+  whole lightbox instead (never relabeled) and checking, fresh on every
+  error, whether it came from whatever `getActiveMedia()` currently is.
+- Autoplay: a native `<video>`'s rejected `play()` always stopped the
+  slideshow, whether the video was genuinely broken or merely blocked by
+  the browser's autoplay policy — indistinguishable by symptom alone, but
+  needing opposite responses (asked directly: "a broken video should skip
+  to the next slide," not stop the slideshow). Now branches on the
+  rejection's `error.name`: `NotAllowedError` (blocked, video is fine)
+  still stops and waits for the viewer; anything else (e.g.
+  `NotSupportedError` — a broken/missing source) advances instead, matching
+  how a provider video's own error event has always been handled.
+- Autoplay: a provider video (e.g. YouTube) that never became playable
+  could strand the slideshow even with the two fixes above in place —
+  reported from real usage as a YouTube Error 153 sometimes never
+  advancing. Two bugs, not one: `ensureProviderPlaying()`'s own
+  retry-exhaustion path called `stop()` instead of `advance()`,
+  inconsistent with how a provider's own error event was already handled;
+  and separately, `Gallery.navigate()` paused the outgoing slide's video
+  *before* emitting `beforeSlide`, so Autoplay's still-attached manual-pause
+  detector misread that programmatic pause as the viewer pausing it by hand
+  and stopped the slideshow — sometimes from inside the very `advance()`
+  call trying to move past it. Fixed both: exhaustion now advances, and
+  `beforeSlide` fires before the pause so Autoplay can detach first.
+
 ### Added
 
 - Autoplay: `autoStart: boolean` (default `false`) starts the slideshow

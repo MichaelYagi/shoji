@@ -787,11 +787,22 @@ export class Gallery {
     const clamped = this.clampToRange(target);
     if (clamped === this.activeIndex) return;
     const from = this.activeIndex;
+    // beforeSlide fires first so a listener (e.g. Autoplay) can detach its
+    // own 'pause' listener from the outgoing video before pauseMedia() below
+    // triggers a native 'pause' event on it — otherwise that listener is
+    // still attached and misreads this programmatic pause as the viewer
+    // manually pausing the video, a real regression this caused once
+    // (advancing past a stuck video called next(), which paused it here,
+    // which the still-attached listener treated as a manual pause and
+    // stopped the whole slideshow before the new slide's afterSlide handler
+    // ever got a chance to run). activeIndex hasn't changed yet at this
+    // point, so getActiveMedia() still resolves to the outgoing slide either
+    // way — only the listener-detach ordering relative to pauseMedia matters.
+    this.bus.emit('beforeSlide', { from, to: clamped });
     // A video started by the viewer keeps playing otherwise — this slide
     // stays cached (still within `preload`), and only pausing (not
     // releasing) lets it resume right where it left off if revisited.
     pauseMedia(this.slides?.getActiveMedia() ?? null);
-    this.bus.emit('beforeSlide', { from, to: clamped });
     this.activeIndex = clamped;
 
     const swap = (): void => this.renderCurrentSlide();

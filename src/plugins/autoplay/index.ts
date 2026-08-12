@@ -78,20 +78,28 @@ export const Autoplay: ShojiPlugin = {
     let currentVideo: PlayableMedia | null = null;
     let awaitingProviderVideo = false;
 
-    // .shoji-slide-media (offset 0) is a stable node for the gallery's whole
-    // lifetime (SlideManager's pool, DESIGN.md §2.3) — registered once here,
-    // not per enterSlide(), rather than tracked/detached alongside
-    // currentVideo. A provider's own error event (§4-video, e.g. YouTube's
-    // onError) bubbles up to it regardless of which slide is currently
-    // showing there, or whether findPlayable() would even consider it
-    // "ready" yet — a video that errors out before ever becoming playable
-    // would otherwise just sit through the full `interval` fallback timer
-    // instead of skipping ahead immediately.
-    const media = gallery.getActiveMedia();
-    function onVideoError(): void {
-      if (playing) advance();
+    // A real bug, regression: this used to capture gallery.getActiveMedia()
+    // once here and listen on that node directly, back when a pool slot's
+    // own offset never changed after construction (only its *content*
+    // moved between slots) — so "whichever slot has offset 0" was always
+    // the same physical node, safe to capture once. SlideManager's pool now
+    // relabels a slot's offset in place instead (§2.3) — the node that
+    // happened to be offset 0 when this plugin initialized can become a
+    // neighbor after even one navigation, while a *different* node becomes
+    // the active one, silently going unheard by this listener. Listening on
+    // `ctx.ui.outer()` instead (the whole lightbox, never relabeled) still
+    // catches a provider's own error event (§4-video's `onError`, dispatched
+    // with `bubbles: true`) regardless of which slide it came from — the
+    // `contains()` check below is what actually scopes it to the currently
+    // active slide, re-resolved fresh on every error rather than trusting a
+    // stale reference.
+    const outer = ctx.ui.outer();
+    function onVideoError(event: Event): void {
+      if (!playing) return;
+      const active = gallery.getActiveMedia();
+      if (active && event.target instanceof Node && active.contains(event.target)) advance();
     }
-    media?.addEventListener('error', onVideoError);
+    outer.addEventListener('error', onVideoError);
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -174,7 +182,14 @@ export const Autoplay: ShojiPlugin = {
         if (currentVideo !== video || !playing) return; // stale — slide changed, or already stopped
         if (!video.paused) return; // took effect
         if (attemptsLeft > 0) ensureProviderPlaying(video, attemptsLeft - 1);
-        else stop(); // exhausted retries — don't leave the slideshow silently stuck
+        // Exhausted every retry after already muting first — muted
+        // autoplay is essentially never blocked by policy, so this means
+        // something is genuinely wrong with the embed, not that it's
+        // waiting on a gesture. advance() (not stop()) so a slow/late
+        // error report (real usage: YouTube's own error can arrive slower
+        // than this retry window, e.g. Error 153) can't leave the
+        // slideshow stuck if this fires first.
+        else advance();
       }, PROVIDER_PLAY_RETRY_MS);
     }
 
@@ -193,13 +208,20 @@ export const Autoplay: ShojiPlugin = {
         video.addEventListener('pause', onVideoPause);
         if (video instanceof HTMLVideoElement) {
           const playResult = video.play();
-          // Browsers can block an unmuted native <video> play() that isn't a
-          // direct continuation of a user gesture (e.g. one arriving via this
-          // setTimeout/'ended' chain rather than the toggle button's click) —
-          // pause the slideshow and wait for the viewer rather than getting
-          // stuck with a video that silently never plays or advances.
+          // A rejected play() has two different causes that look identical
+          // here: the browser blocking an unmuted play() that isn't a direct
+          // continuation of a user gesture (NotAllowedError — the video is
+          // fine, it just needs the viewer's own click) or the video
+          // genuinely being unplayable (NotSupportedError — a broken/missing
+          // source, an unsupported format). Only the first pauses the
+          // slideshow for the viewer to resolve by hand; anything else means
+          // there's nothing to wait for, so it skips ahead instead.
           if (playResult && typeof playResult.catch === 'function') {
-            playResult.catch(() => stop());
+            playResult.catch((error: unknown) => {
+              if (currentVideo !== video || !playing) return; // stale
+              if (error instanceof DOMException && error.name === 'NotAllowedError') stop();
+              else advance();
+            });
           }
         } else {
           ensureProviderPlaying(video, MAX_PROVIDER_PLAY_ATTEMPTS);
@@ -254,6 +276,14 @@ export const Autoplay: ShojiPlugin = {
     const removeButton = ctx.ui.toolbar('right', button);
     const removeProgress = showProgress ? ctx.ui.overlay(progress) : null;
     const removeShortcut = ctx.ui.registerShortcut(' ', toggle);
+    // Detaches this plugin's own 'pause'/'ended' listeners from the outgoing
+    // video before Gallery.navigate() pauses it (see Gallery.ts's comment on
+    // this same event) — otherwise that pause is misread as the viewer
+    // manually pausing, which stops the slideshow before the new slide's
+    // afterSlide handler below ever runs. enterSlide() below also calls
+    // detachVideo(), but by then it's too late for *this* transition; that
+    // call is what handles the slide *after* this one instead.
+    const offBeforeSlide = ctx.on('beforeSlide', () => detachVideo());
     // Any slide change — autoplay's own next(), or the viewer manually
     // navigating mid-slideshow via arrows/buttons/goTo() — re-enters here,
     // tearing down the previous slide's timer/video listeners and setting
@@ -279,10 +309,11 @@ export const Autoplay: ShojiPlugin = {
 
     return () => {
       stop();
-      media?.removeEventListener('error', onVideoError);
+      outer.removeEventListener('error', onVideoError);
       removeButton();
       removeProgress?.();
       removeShortcut();
+      offBeforeSlide();
       offSlide();
       offSlideItemLoad();
       offOpen();
