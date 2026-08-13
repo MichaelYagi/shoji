@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-08-12
+
 ### Fixed
 
 - Layout: rotating certain photos (via RotateFlip) never resized to fit the
