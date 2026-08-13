@@ -100,9 +100,14 @@
           <td>
             Toolbar play/pause + <kbd>Space</kbd>. Video slides play through to their own
             <code>ended</code> event instead of using the fixed interval; a manual pause on a video
-            pauses the whole slideshow.
+            pauses the whole slideshow. Tapping/clicking a photo slide (not video) toggles it too,
+            same as the button — held briefly so a double-tap to zoom (Zoom plugin) never also
+            triggers it, and toggles the auto-hide controls overlay on the same tap.
           </td>
-          <td><code>interval</code> (5000ms), <code>showProgress</code> (true)</td>
+          <td>
+            <code>interval</code> (5000ms), <code>showProgress</code> (true),
+            <code>autoStart</code> (false)
+          </td>
         </tr>
         <tr>
           <td>ActiveThumbnail</td>

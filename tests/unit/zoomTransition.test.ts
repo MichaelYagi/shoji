@@ -237,6 +237,56 @@ describe('zoomTransition', () => {
       expect(scale).not.toBeCloseTo(140 / 1200, 3);
     });
 
+    it("regression: caps the letterboxed box at the real photo's own native size (naturalSize) instead of always growing to fill the container — reported from real usage: a genuinely small photo visibly ballooned to fill the dialog on open, then snapped back down to its true size the instant it finished loading, even with aspectRatio correctly known", () => {
+      const originRect = { top: 500, left: 500, width: 140, height: 105 }; // 4:3 thumb
+      const containerRect = { top: 0, left: 0, width: 1200, height: 400 }; // very wide (3:1) container
+      mockRect(origin, originRect);
+      mockRect(target, containerRect);
+
+      // Same 3:2 aspectRatio as the test above (would otherwise compute the
+      // exact same 600x400 contained box, scale 140/600) — the only
+      // difference here is a genuinely small real photo's true pixel size.
+      zoomOut(
+        { origin, target, aspectRatio: 3 / 2, naturalSize: { width: 300, height: 200 } },
+        () => {},
+      );
+
+      const match = target.style.transform.match(
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, , , scale] = match!.map(Number);
+
+      // Contained box capped at 300x200 (cap = min(1, 300/600, 200/400) =
+      // 0.5): scale = min(140/300, 105/200) = min(0.4667, 0.525) = 140/300.
+      expect(scale).toBeCloseTo(140 / 300, 3);
+      // The uncapped computation (previous test) would have used 140/600 —
+      // half this value, exactly the "grows too far, snaps down hard" bug.
+      expect(scale).not.toBeCloseTo(140 / 600, 3);
+    });
+
+    it('naturalSize is a no-op for a genuinely large photo — never grows the target box past what aspectRatio alone already computed', () => {
+      const originRect = { top: 500, left: 500, width: 140, height: 105 };
+      const containerRect = { top: 0, left: 0, width: 1200, height: 400 };
+      mockRect(origin, originRect);
+      mockRect(target, containerRect);
+
+      // A real 4000x2667 photo — far larger than the 600x400 contained box
+      // this would compute either way; the cap (min(1, ...)) must never
+      // exceed 1 and grow the box, only ever shrink it.
+      zoomOut(
+        { origin, target, aspectRatio: 3 / 2, naturalSize: { width: 4000, height: 2667 } },
+        () => {},
+      );
+
+      const match = target.style.transform.match(
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, , , scale] = match!.map(Number);
+      expect(scale).toBeCloseTo(140 / 600, 3); // identical to the uncapped case
+    });
+
     it('prefers the real rendered media child over both the container and aspectRatio, when one is already attached', () => {
       const img = document.createElement('img');
       target.appendChild(img);

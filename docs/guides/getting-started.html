@@ -112,6 +112,13 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
       </tbody>
     </table>
     <p>
+      <code>data-shoji-width</code>/<code>data-shoji-height</code> are optional, but worth supplying
+      whenever you know the full image's real pixel size: they make the open animation grow the
+      thumbnail toward the image's actual size instead of guessing (and possibly overshooting, for a
+      genuinely small image, before snapping back down once it loads) — see
+      <a href="./transitions.html#open-transition-sizing">Transitions</a>.
+    </p>
+    <p>
       Any <code>data-shoji-*</code> attribute that isn't one of the named mappings above lands in
       <code>item.data</code> instead, keyed by the attribute name with the
       <code>data-shoji-</code> prefix stripped verbatim (not camelCased) — the same free-form bucket
@@ -245,9 +252,10 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
           <td><code>width</code> / <code>height</code></td>
           <td>—</td>
           <td>
-            Aspect-ratio placeholder before the image loads, accurate zoom-transition sizing, and
-            measure-free Layout plugin positioning. Should be the <em>original</em>'s dimensions,
-            not the thumbnail's.
+            Aspect-ratio placeholder before the image loads, measure-free Layout plugin positioning,
+            and the open animation's target shape <em>and</em> size — see
+            <a href="./transitions.html#open-transition-sizing">Transitions</a>. Should be the
+            <em>original</em>'s dimensions, not the thumbnail's.
           </td>
         </tr>
         <tr>

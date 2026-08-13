@@ -7,6 +7,19 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- A genuinely small photo visibly grew to fill the dialog on open, then
+  snapped back down to its true small size the instant the real image
+  finished loading — even with `item.width`/`item.height` supplied. The
+  open-transition animation knew the photo's correct _shape_ from those
+  dimensions but had no way to cap its _size_, so it always grew toward
+  filling the dialog. Now caps the animation at the photo's real pixel
+  size when known (`item.width`/`item.height`), same rule the image's own
+  CSS already enforces once loaded. Photos without explicit dimensions are
+  unaffected — there's no way to know a small photo's true size before its
+  file starts loading.
+
 ### Added
 
 - Autoplay: tapping/clicking a photo slide (not video — its own controls

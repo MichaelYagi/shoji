@@ -94,6 +94,38 @@
       the first tier above already covers it.
     </p>
 
+    <h2 id="open-transition-sizing">Sizing the open animation</h2>
+    <p>
+      The zoom-in animation has to pick a size to grow the thumbnail toward before the real image
+      has loaded — it doesn't yet know how big that image actually is. Two different pieces of
+      information feed into that guess, and they answer two different questions:
+    </p>
+    <ul>
+      <li>
+        <strong>Shape</strong> (aspect ratio) — from <code>item.width</code>/<code>height</code> if
+        supplied, else the thumbnail's own rendered aspect ratio. Without this, a square thumbnail
+        opening into a differently-shaped photo could grow toward the wrong proportions for a moment
+        before correcting.
+      </li>
+      <li>
+        <strong>Size</strong> (real pixel dimensions) — <code>item.width</code>/<code>height</code>
+        only. There's no fallback for this one: a thumbnail's own dimensions say nothing reliable
+        about how big the real photo is, so without explicit dimensions Shoji has no way to know
+        whether it should cap the growth at all.
+      </li>
+    </ul>
+    <p>
+      Without <code>width</code>/<code>height</code>, the animation assumes the photo is at least as
+      big as the dialog — true most of the time, since real photos are usually bigger than the
+      viewport they open into. For a genuinely small photo, that assumption is wrong: it grows to
+      fill the dialog, then visibly snaps back down to its true size the instant the real image
+      finishes loading and its own CSS sizing (which never grows an image past its native
+      resolution) takes over. Supplying <code>width</code>/<code>height</code> avoids this entirely
+      — the animation grows toward the photo's actual size from the start, nothing to correct once
+      it loads. See <a href="../examples/thumbnails-and-originals.html">Thumbnails + originals</a>
+      for a working example.
+    </p>
+
     <h2>Built-in presets</h2>
     <table>
       <thead>

@@ -3,8 +3,10 @@ export interface ZoomTransitionTarget {
   origin: HTMLElement;
   /** The `.shoji-slide-media` element being animated — not `.shoji-slide` itself, whose transform is already owned by pool-offset positioning. */
   target: HTMLElement;
-  /** `item.width / item.height`, when known — `target` is always its full flex-box size, never the (usually smaller, letterboxed) rendered photo inside it; see `effectiveTargetBox`. */
+  /** `item.width / item.height`, when known, else the origin thumbnail's own `naturalWidth`/`naturalHeight` ratio — just a *shape* guess; see `effectiveTargetBox`. */
   aspectRatio?: number;
+  /** The real photo's true pixel size — `item.width`/`item.height` only, never the thumbnail's own natural size (would under-cap a large photo). Caps `containedBox` below at native resolution, mirroring `.shoji-slide-img`'s own `max-width/max-height: 100%`, instead of always growing toward filling the dialog. */
+  naturalSize?: { width: number; height: number };
 }
 
 function prefersReducedMotion(): boolean {
@@ -29,11 +31,20 @@ interface Box {
   height: number;
 }
 
-/** The `object-fit: contain` box for `aspectRatio` within `container` — computed analytically since the real image may not be loaded/attached yet. */
-function containedBox(container: Box, aspectRatio: number): Box {
+/** The `object-fit: contain` box for `aspectRatio` within `container`, computed analytically since the real image may not be loaded yet. `naturalSize`, when known, caps the result at the photo's own true pixel size — never stretches past native resolution, same rule `.shoji-slide-img`'s CSS already enforces on the loaded image. */
+function containedBox(
+  container: Box,
+  aspectRatio: number,
+  naturalSize?: { width: number; height: number },
+): Box {
   const containerRatio = container.width / container.height;
-  const width = aspectRatio > containerRatio ? container.width : container.height * aspectRatio;
-  const height = aspectRatio > containerRatio ? container.width / aspectRatio : container.height;
+  let width = aspectRatio > containerRatio ? container.width : container.height * aspectRatio;
+  let height = aspectRatio > containerRatio ? container.width / aspectRatio : container.height;
+  if (naturalSize && naturalSize.width > 0 && naturalSize.height > 0) {
+    const cap = Math.min(1, naturalSize.width / width, naturalSize.height / height);
+    width *= cap;
+    height *= cap;
+  }
   return {
     left: container.left + (container.width - width) / 2,
     top: container.top + (container.height - height) / 2,
@@ -71,7 +82,11 @@ function containedBox(container: Box, aspectRatio: number): Box {
  * the analytical `aspectRatio`-based box below, sized for the real photo
  * regardless of what shape the placeholder happens to be.
  */
-function effectiveTargetBox(target: HTMLElement, aspectRatio?: number): Box {
+function effectiveTargetBox(
+  target: HTMLElement,
+  aspectRatio?: number,
+  naturalSize?: { width: number; height: number },
+): Box {
   const child = target.firstElementChild;
   const isPlaceholder =
     child instanceof HTMLElement &&
@@ -83,7 +98,7 @@ function effectiveTargetBox(target: HTMLElement, aspectRatio?: number): Box {
   }
   const containerRect = target.getBoundingClientRect();
   if (aspectRatio && containerRect.width > 0 && containerRect.height > 0) {
-    return containedBox(containerRect, aspectRatio);
+    return containedBox(containerRect, aspectRatio, naturalSize);
   }
   return containerRect;
 }
@@ -103,9 +118,10 @@ function computeTransform(
   origin: HTMLElement,
   target: HTMLElement,
   aspectRatio?: number,
+  naturalSize?: { width: number; height: number },
 ): string | null {
   const originRect = origin.getBoundingClientRect();
-  const targetRect = effectiveTargetBox(target, aspectRatio);
+  const targetRect = effectiveTargetBox(target, aspectRatio, naturalSize);
   if (
     targetRect.width === 0 ||
     targetRect.height === 0 ||
@@ -200,9 +216,9 @@ function clearInlineTransform(target: HTMLElement, expectedTransform: string): v
  * reads as "growing out of the thumbnail." Fire-and-forget: cleans up its
  * own inline styles once the transition ends, nothing to await.
  */
-export function zoomIn({ origin, target, aspectRatio }: ZoomTransitionTarget): void {
+export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransitionTarget): void {
   if (prefersReducedMotion()) return;
-  const transform = computeTransform(origin, target, aspectRatio);
+  const transform = computeTransform(origin, target, aspectRatio, naturalSize);
   if (!transform) return;
 
   target.style.transition = 'none';
@@ -234,14 +250,14 @@ export function zoomIn({ origin, target, aspectRatio }: ZoomTransitionTarget): v
  * callers use this to know when it's safe to actually hide/finalize.
  */
 export function zoomOut(
-  { origin, target, aspectRatio }: ZoomTransitionTarget,
+  { origin, target, aspectRatio, naturalSize }: ZoomTransitionTarget,
   onComplete: () => void,
 ): void {
   if (prefersReducedMotion()) {
     onComplete();
     return;
   }
-  const transform = computeTransform(origin, target, aspectRatio);
+  const transform = computeTransform(origin, target, aspectRatio, naturalSize);
   if (!transform) {
     onComplete();
     return;

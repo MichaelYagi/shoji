@@ -191,6 +191,15 @@
           </td>
         </tr>
         <tr>
+          <td><code>gallery.hideControls()</code></td>
+          <td>
+            Forces the same fade the idle auto-hide timer would eventually trigger on its own — for
+            a plugin or host that wants to hide controls immediately on its own trigger, without
+            waiting out <code>autoHideDelay</code>. A no-op while a control is genuinely
+            hovered/focused, same as the timer itself.
+          </td>
+        </tr>
+        <tr>
           <td><code>gallery.getActiveMedia()</code></td>
           <td>
             The active slide's <code>.shoji-slide-media</code> container element, or

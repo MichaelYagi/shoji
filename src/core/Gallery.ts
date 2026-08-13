@@ -734,7 +734,12 @@ export class Gallery {
 
     const media = this.slides?.getActiveMedia();
     if (media && origin) {
-      zoomIn({ origin, target: media, aspectRatio: this.resolveAspectRatio(index, origin) });
+      zoomIn({
+        origin,
+        target: media,
+        aspectRatio: this.resolveAspectRatio(index, origin),
+        naturalSize: this.resolveNaturalSize(index),
+      });
     }
 
     this.bus.emit('open', { index });
@@ -882,7 +887,8 @@ export class Gallery {
     const origin = this.getOriginElement(this.activeIndex);
     if (media && origin) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
-      zoomOut({ origin, target: media, aspectRatio }, () => this.finishClose());
+      const naturalSize = this.resolveNaturalSize(this.activeIndex);
+      zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
     } else {
       this.finishClose();
     }
@@ -897,6 +903,20 @@ export class Gallery {
       return thumbImg.naturalWidth / thumbImg.naturalHeight;
     }
     return undefined;
+  }
+
+  /**
+   * `item.width`/`height` only — deliberately never a thumbnail's own
+   * `naturalWidth`/`naturalHeight` the way `resolveAspectRatio` above will:
+   * that's a fine stand-in for *shape*, but using it as the real photo's
+   * true pixel size would under-cap a genuinely large photo down to
+   * thumbnail resolution. `undefined` here just means "genuinely unknown,"
+   * not "assume small" — `zoomTransition.ts`'s `containedBox` already
+   * treats it that way (no cap applied at all).
+   */
+  private resolveNaturalSize(index: number): { width: number; height: number } | undefined {
+    const item = this.itemList[index];
+    return item?.width && item.height ? { width: item.width, height: item.height } : undefined;
   }
 
   /**
