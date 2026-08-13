@@ -113,10 +113,11 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
     </table>
     <p>
       <code>data-shoji-width</code>/<code>data-shoji-height</code> are optional, but worth supplying
-      whenever you know the full image's real pixel size: they make the open animation and the
-      open-transition placeholder both size against the image's actual dimensions instead of
-      guessing (and possibly overshooting, for a genuinely small image, before snapping back down
-      once it loads) — see <a href="./transitions.html#open-transition-sizing">Transitions</a>.
+      whenever you know the full image's real pixel size: without them, Shoji no longer guesses at a
+      size for the open animation or the open-transition placeholder — both are skipped entirely
+      (plain spinner instead) rather than risk getting it visibly wrong. Supplying them is what gets
+      you the "grows out of the thumbnail you clicked" open animation at all — see
+      <a href="./transitions.html#open-transition-sizing">Transitions</a>.
     </p>
     <p>
       Any <code>data-shoji-*</code> attribute that isn't one of the named mappings above lands in
@@ -253,8 +254,9 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
           <td>—</td>
           <td>
             Aspect-ratio placeholder before the image loads, measure-free Layout plugin positioning,
-            and the open animation's/open-transition placeholder's target shape <em>and</em> size —
-            see <a href="./transitions.html#open-transition-sizing">Transitions</a>. Should be the
+            and — required, not just preferred — for the open animation and open-transition
+            placeholder to show at all (both are skipped, plain spinner instead, without this) — see
+            <a href="./transitions.html#open-transition-sizing">Transitions</a>. Should be the
             <em>original</em>'s dimensions, not the thumbnail's.
           </td>
         </tr>

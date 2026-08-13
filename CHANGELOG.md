@@ -16,9 +16,9 @@ still include breaking changes).
   dimensions but had no way to cap its _size_, so it always grew toward
   filling the dialog. Now caps the animation at the photo's real pixel
   size when known (`item.width`/`item.height`), same rule the image's own
-  CSS already enforces once loaded. Photos without explicit dimensions are
-  unaffected — there's no way to know a small photo's true size before its
-  file starts loading.
+  CSS already enforces once loaded. See the "Changed" entry below for
+  photos without explicit dimensions, which no longer get a guessed size
+  either.
 - The fix above wasn't actually sufficient on its own: the open-transition
   placeholder (the low-res stand-in shown while the real photo loads) has
   its own separate CSS forcing it to fill the entire dialog, unrelated to
@@ -26,6 +26,25 @@ still include breaking changes).
   while the placeholder was showing, even after that fix. Now sized
   explicitly from `item.width`/`item.height` too, when known, instead of
   always force-filling.
+- The fix above had its own bug: it measured the wrong element for "how
+  much space is available," landing on whatever the zoom-in animation's
+  own in-progress scale happened to be at that instant rather than the
+  real dialog size — since the placeholder typically appears before that
+  animation has painted even one frame, this usually meant the placeholder
+  rendered at roughly the size of the thumbnail you clicked, not scaled up
+  at all. Now measures a stable, never-animated element instead.
+
+### Changed
+
+- Following directly from the two fixes above: opening an item with no
+  `item.width`/`item.height` at all no longer shows a guessed-size
+  placeholder or plays the zoom-in-from-thumbnail animation — both relied
+  on assuming "probably fills the dialog," which was the whole problem for
+  a genuinely small photo. Now shows the ordinary loading spinner and
+  reveals the real image the instant it's ready, with no animation of its
+  own (nothing left to animate toward, once it's already loaded). Supply
+  `item.width`/`item.height` to keep the full grow-from-thumbnail
+  experience — see the Transitions guide.
 
 ### Added
 

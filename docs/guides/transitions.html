@@ -72,15 +72,15 @@
     <p>
       On a fresh <code>open()</code>, if the real content isn't decoded yet (a slow connection, a
       large photo), a spinner shows by default — same as navigating to any other undecoded slide. If
-      a low-res thumbnail is available for that item, Shoji shows <em>that</em> instead, growing
-      into place alongside the zoom-in animation, then swaps to the real image the instant it
-      finishes decoding (mid-animation if it lands there). This only ever applies to
-      <code>open()</code> — ordinary slide-to-slide navigation always uses the spinner, since
-      there's no low-res version of a slide you haven't opened yet to reuse the same way. How big it
-      renders while showing is its own separate concern — see
-      <a href="#open-transition-sizing">Sizing the open animation and placeholder</a> below.
+      a low-res thumbnail is available for that item <em>and</em> you've supplied
+      <code>item.width</code>/<code>height</code> (see
+      <a href="#open-transition-sizing">below</a> for why both are required), Shoji shows
+      <em>that</em> instead, growing into place alongside the zoom-in animation, then swaps to the
+      real image the instant it finishes decoding (mid-animation if it lands there). This only ever
+      applies to <code>open()</code> — ordinary slide-to-slide navigation always uses the spinner,
+      since there's no low-res version of a slide you haven't opened yet to reuse the same way.
     </p>
-    <p>Checked in this order, first match wins:</p>
+    <p>Thumbnail source, checked in this order, first match wins:</p>
     <ol>
       <li><code>item.thumb</code>, if set.</li>
       <li>
@@ -89,49 +89,48 @@
       </li>
       <li>Whatever <code>&lt;img&gt;</code> is already rendered inside the origin element.</li>
     </ol>
-    <p>If none apply, it's the ordinary spinner — never a broken/blank state.</p>
     <p>
-      Selector mode gets this for free too: <code>thumb</code> auto-populates from the scanned
-      <code>&lt;img src&gt;</code> (or a <code>data-shoji-thumb</code> override) at scan time, so
-      the first tier above already covers it.
+      If none apply — or dimensions aren't known — it's the ordinary spinner, never a broken/blank
+      state.
+    </p>
+    <p>
+      Selector mode gets the thumbnail source for free too: <code>thumb</code> auto-populates from
+      the scanned <code>&lt;img src&gt;</code> (or a <code>data-shoji-thumb</code> override) at scan
+      time, so the first tier above already covers it. You'll still need to supply
+      <code>data-shoji-width</code>/<code>data-shoji-height</code> yourself, though — there's no way
+      to scan those from a thumbnail image alone.
     </p>
 
     <h2 id="open-transition-sizing">Sizing the open animation and placeholder</h2>
     <p>
-      Two separate things have to pick a size before the real image has loaded and Shoji actually
-      knows how big it is: the zoom-in animation itself (the thumbnail growing into place), and —
-      independently — the <a href="#open-placeholder">open placeholder</a> shown while the real
-      image is still decoding. Both make the same guess for the same reason, but neither knows about
-      the other, so both need the same information to get it right.
+      Two separate things need a size to show/grow toward before the real image has loaded and Shoji
+      actually knows how big it is: the zoom-in animation itself (the thumbnail growing into place),
+      and — independently — the <a href="#open-placeholder">open placeholder</a> shown while the
+      real image is still decoding.
     </p>
     <p>
-      Two different pieces of information feed into that guess, answering two different questions:
-    </p>
-    <ul>
-      <li>
-        <strong>Shape</strong> (aspect ratio) — from <code>item.width</code>/<code>height</code> if
-        supplied, else the thumbnail's own rendered aspect ratio. Without this, a square thumbnail
-        opening into a differently-shaped photo could grow toward the wrong proportions for a moment
-        before correcting.
-      </li>
-      <li>
-        <strong>Size</strong> (real pixel dimensions) — <code>item.width</code>/<code>height</code>
-        only. There's no fallback for this one: a thumbnail's own dimensions say nothing reliable
-        about how big the real photo is, so without explicit dimensions Shoji has no way to know
-        whether it should cap the growth at all.
-      </li>
-    </ul>
-    <p>
-      Without <code>width</code>/<code>height</code>, both the animation and the placeholder assume
-      the photo is at least as big as the dialog — true most of the time, since real photos are
-      usually bigger than the viewport they open into — and grow/stretch to fill it. For a genuinely
-      small photo, that assumption is wrong: it visibly fills the dialog, then snaps back down to
-      its true size the instant the real image finishes loading and its own CSS sizing (which never
-      grows an image past its native resolution) takes over. Supplying <code>width</code>/<code
-        >height</code
+      <strong
+        >Both require <code>item.width</code>/<code>height</code> — there's no fallback, and no
+        guessing.</strong
       >
-      avoids this entirely for both — the animation grows toward, and the placeholder renders at,
-      the photo's actual size from the start, nothing to correct once it loads. See
+      A thumbnail's own dimensions say nothing reliable about how big the real photo actually is, so
+      without explicit dimensions Shoji has no way to size either one accurately. Earlier versions
+      guessed instead — assuming the photo was probably big enough to fill the dialog, true most of
+      the time, but visibly wrong for a genuinely small photo (it would grow/stretch to fill the
+      dialog, then snap back down to its true size once the real image loaded and its own CSS
+      sizing, which never grows an image past its native resolution, took over). That guessing was
+      removed rather than fixed further: without known dimensions, <code>open()</code> now shows the
+      ordinary spinner and skips the zoom-in animation entirely, revealing the real photo the moment
+      it's ready with no animation of its own — nothing left to grow toward once it's already
+      loaded, so there's nothing lost by not guessing.
+    </p>
+    <p>
+      Supplying <code>item.width</code>/<code>height</code> (or <code>data-shoji-width</code>/<code
+        >data-shoji-height</code
+      >
+      in selector mode) is what gets you the full experience: the placeholder renders at, and the
+      animation grows toward, the photo's actual size from the very first frame — no guessing, no
+      correction needed, and the "grows out of the thumbnail you clicked" motion on open. See
       <a href="../examples/thumbnails-and-originals.html">Thumbnails + originals</a> for a working
       example.
     </p>

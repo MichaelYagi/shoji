@@ -228,8 +228,90 @@ test("the open placeholder is capped at the real photo's own small native size t
   );
 
   expect(result.found).toBe(true);
-  // Capped at the real 100x80 — not anywhere near the dialog's own much
-  // larger size (hundreds of px on any real viewport this runs at).
+  // Capped at the real 100x80 — not the dialog's own much larger size
+  // (hundreds of px on any real viewport this runs at), and *not* the 50x40
+  // origin marker either (a real bug: measuring the container mid-zoom-in-
+  // animation, before it settles, computed against that tiny starting
+  // point instead — a lower bound catches that a plain upper-bound check
+  // alone would miss, since 50x40 also satisfies "not too big").
+  expect(result.width).toBeGreaterThan(90);
+  expect(result.width).toBeLessThanOrEqual(101);
+  expect(result.height).toBeGreaterThan(70);
+  expect(result.height).toBeLessThanOrEqual(81);
+});
+
+/**
+ * DESIGN.md §2.3 — a real bug in the previous test's own fix: it measured
+ * `.shoji-slide-media`'s `getBoundingClientRect()` as "the container" —
+ * but that's the exact element the zoom-in transition (§2.3b) animates a
+ * `scale()` transform on, growing it from the origin thumbnail's tiny
+ * on-screen size up to full over `--shoji-duration` (~300ms default).
+ * `getBoundingClientRect()` reflects whatever transform is *currently*
+ * applied — if the placeholder's own decode resolves before that animation
+ * settles (it usually does; a genuinely broken/missing image's decode()
+ * rejects almost immediately, far faster than 300ms), this measured a
+ * still-small, mid-animation rect instead of the real dialog size,
+ * computing a contained box roughly thumbnail-sized instead of properly
+ * scaled up — reads as "only the thumbnail shows, not scaled to the real
+ * photo's size at all." The previous test didn't catch this: waiting a
+ * fixed 300ms before measuring happened to also outlast the animation,
+ * masking the bug even when it was present (confirmed directly — reverting
+ * the fix still passed that test). This one measures as soon as the
+ * placeholder appears instead, deliberately racing the still-in-flight
+ * animation the same way the real bug report did.
+ */
+test('the open placeholder is sized correctly immediately, not just after the zoom-in animation has had time to settle — the two are unrelated timelines', async ({
+  page,
+}) => {
+  await page.route('**/full-photo.jpg', () => {});
+  await page.goto('/pages/e2e-plugins.html');
+
+  const result = await page.evaluate(
+    async ({ corePath }) => {
+      const { Gallery } = await import(/* @vite-ignore */ corePath);
+
+      const marker = document.createElement('div');
+      marker.setAttribute('data-shoji-id', 'p');
+      Object.assign(marker.style, {
+        position: 'fixed',
+        top: '10px',
+        left: '10px',
+        width: '50px',
+        height: '40px',
+      });
+      document.body.appendChild(marker);
+
+      const mount = document.createElement('div');
+      document.body.appendChild(mount);
+      const gallery = new Gallery(mount, {
+        items: [{ id: 'p', src: 'full-photo.jpg', thumb: 'thumb.jpg', width: 100, height: 80 }],
+        preload: 0,
+      });
+
+      const outers = document.querySelectorAll('.shoji-outer');
+      const myOuter = outers[outers.length - 1] as HTMLElement;
+
+      gallery.open(0);
+      // Poll for the placeholder itself rather than waiting a fixed delay —
+      // measures the instant it's actually there, whatever that takes, so
+      // this can't accidentally race past it the way a fixed wait could.
+      let placeholder: HTMLElement | null = null;
+      const deadline = Date.now() + 2000;
+      while (!placeholder && Date.now() < deadline) {
+        placeholder = myOuter.querySelector('.shoji-slide-open-placeholder');
+        if (!placeholder) await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      const rect = placeholder?.getBoundingClientRect();
+
+      gallery.destroy();
+      marker.remove();
+
+      return { found: !!placeholder, width: rect?.width, height: rect?.height };
+    },
+    { corePath: corePath() },
+  );
+
+  expect(result.found).toBe(true);
   expect(result.width).toBeLessThanOrEqual(101);
   expect(result.height).toBeLessThanOrEqual(81);
 });

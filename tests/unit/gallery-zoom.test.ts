@@ -9,9 +9,16 @@ import type * as ZoomTransitionModule from '../../src/core/zoomTransition';
 // on the call args (while still calling through to the real implementation,
 // so its side effects and the deferred-close tests below stay real) lets us
 // assert on origin identity directly instead of reverse-engineering it from CSS.
+// containedBox passes through real (SlideManager.ts's open-placeholder
+// sizing imports it from this same module too — not just Gallery.ts's own
+// zoomIn/zoomOut calls this file cares about spying on).
 vi.mock('../../src/core/zoomTransition', async (importOriginal) => {
   const actual = await importOriginal<typeof ZoomTransitionModule>();
-  return { zoomIn: vi.fn(actual.zoomIn), zoomOut: vi.fn(actual.zoomOut) };
+  return {
+    zoomIn: vi.fn(actual.zoomIn),
+    zoomOut: vi.fn(actual.zoomOut),
+    containedBox: actual.containedBox,
+  };
 });
 
 const DEFAULT_RECT: DOMRect = {
@@ -76,7 +83,7 @@ function activeMedia(): HTMLElement {
 describe('Gallery — zoom transition origin lookup', () => {
   it('uses the scanned element in selector mode with no markup needed', () => {
     const el = document.createElement('div');
-    el.innerHTML = `<a href="a.jpg"><img src="thumb-a.jpg"></a><a href="b.jpg"><img src="thumb-b.jpg"></a>`;
+    el.innerHTML = `<a href="a.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-a.jpg"></a><a href="b.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-b.jpg"></a>`;
     document.body.appendChild(el);
 
     const gallery = new Gallery(el, { preload: 0 });
@@ -92,7 +99,7 @@ describe('Gallery — zoom transition origin lookup', () => {
     // only element tagged data-shoji-id="a.jpg", so a match there is
     // unambiguous proof the marker was preferred, not the scanned anchor.
     const el = document.createElement('div');
-    el.innerHTML = `<a href="a.jpg"><img src="thumb-a.jpg"></a>`;
+    el.innerHTML = `<a href="a.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-a.jpg"></a>`;
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', 'a.jpg');
     document.body.append(el, marker);
@@ -122,7 +129,10 @@ describe('Gallery — zoom transition origin lookup', () => {
     document.body.append(mount, marker);
     mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
 
-    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', width: 800, height: 600 }],
+      preload: 0,
+    });
     gallery.open(0);
 
     expect(activeMedia().style.transform).not.toBe('');
@@ -138,7 +148,10 @@ describe('Gallery — zoom transition origin lookup', () => {
     document.body.append(mount, marker);
     mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
 
-    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', width: 800, height: 600 }],
+      preload: 0,
+    });
     gallery.open(0);
     expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
 
@@ -194,7 +207,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
     document.body.append(mount, marker);
 
     const gallery = new Gallery(mount, {
-      items: [{ id: 'x', src: 'x.jpg', thumb: 'from-item.jpg' }],
+      items: [{ id: 'x', src: 'x.jpg', thumb: 'from-item.jpg', width: 800, height: 600 }],
       preload: 0,
     });
     gallery.open(0);
@@ -216,7 +229,10 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
     marker.setAttribute('data-shoji-thumb', 'from-attr.jpg');
     document.body.append(mount, marker);
 
-    const gallery = new Gallery(mount, { items: [{ id: 'x', src: 'x.jpg' }], preload: 0 });
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', width: 800, height: 600 }],
+      preload: 0,
+    });
     gallery.open(0);
     await flush();
 
@@ -231,7 +247,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
 
   it("falls back to the origin element's own rendered <img> when neither item.thumb nor data-shoji-thumb is set", async () => {
     const el = document.createElement('div');
-    el.innerHTML = `<a href="a.jpg"><img src="thumb-a.jpg"></a>`;
+    el.innerHTML = `<a href="a.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-a.jpg"></a>`;
     document.body.appendChild(el);
 
     const gallery = new Gallery(el, { preload: 0 });
@@ -263,12 +279,120 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
   });
 });
 
+describe('Gallery — no known dimensions means no guessing (open placeholder AND zoom-in animation both skipped, not just sized differently)', () => {
+  it('shows the plain spinner, not the thumbnail placeholder, when item.width/height are unknown — even though a thumb source (item.thumb) is available', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', thumb: 'thumb.jpg' }], // no width/height
+      preload: 0,
+    });
+    gallery.open(0);
+
+    expect(activeMedia().querySelector('.shoji-slide-open-placeholder')).toBeNull();
+    expect(activeMedia().querySelector('.shoji-slide-spinner')).not.toBeNull();
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('does not run the zoom-in animation on open() when item.width/height are unknown, even with a valid origin found', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+    mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg' }], // no width/height
+      preload: 0,
+    });
+    gallery.open(0);
+
+    expect(zoomTransition.zoomIn).not.toHaveBeenCalled();
+    expect(activeMedia().style.transform).toBe('');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('still runs the zoom-in animation normally once item.width/height ARE known — the skip is scoped to unknown dimensions only, not a general regression', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+    mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg', width: 800, height: 600 }],
+      preload: 0,
+    });
+    gallery.open(0);
+
+    expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('closing before the real image has ever loaded, with no known dimensions, skips the zoom-out animation too and closes immediately — nothing to shrink toward without guessing', () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+    mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
+    // Never resolves — the real image (and thus isActiveReady()) never
+    // becomes ready before close() runs, the exact scenario this covers.
+    HTMLImageElement.prototype.decode = vi.fn(() => new Promise<void>(() => {}));
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg' }], // no width/height
+      preload: 0,
+    });
+    gallery.open(0);
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).not.toHaveBeenCalled();
+    // finishClose() ran synchronously, not deferred waiting on a transition.
+    expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('closing still runs the zoom-out animation with no known dimensions, as long as the real content already finished loading — effectiveTargetBox() measures it directly, nothing to guess', async () => {
+    const mount = document.createElement('div');
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', 'x');
+    document.body.append(mount, marker);
+    mockRect(marker, { top: 5, left: 5, width: 20, height: 20, right: 25, bottom: 25 });
+
+    const gallery = new Gallery(mount, {
+      items: [{ id: 'x', src: 'x.jpg' }], // no width/height
+      preload: 0,
+    });
+    gallery.open(0);
+    await flush(); // the real image finishes decoding — isActiveReady() becomes true
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
+
+    marker.remove();
+    gallery.destroy();
+  });
+});
+
 describe('Gallery — deferred close animation', () => {
   function openGallery(count = 3) {
     const el = document.createElement('div');
     el.innerHTML = Array.from(
       { length: count },
-      (_, i) => `<a href="${i}.jpg" data-shoji-id="item-${i}"><img src="thumb-${i}.jpg"></a>`,
+      (_, i) =>
+        `<a href="${i}.jpg" data-shoji-id="item-${i}" data-shoji-width="800" data-shoji-height="600"><img src="thumb-${i}.jpg"></a>`,
     ).join('');
     document.body.appendChild(el);
 

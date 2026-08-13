@@ -314,6 +314,17 @@ export class SlideManager {
    * once it settles. When `naturalSize` is known, sizes the placeholder
    * explicitly instead, reusing `containedBox` (`zoomTransition.ts`) —
    * unknown-size items keep the original force-fill guess.
+   *
+   * A second real bug in that same fix: measured `slot.media`'s own rect as
+   * "the container" — but `slot.media` is the exact element the zoom-in
+   * transition (§2.3b) animates a `scale()` transform on. `getBoundingClientRect()`
+   * reflects whatever transform is *currently* applied, and the placeholder's
+   * own decode typically resolves before that ~300ms animation settles — so
+   * this measured a still-small, mid-animation rect (often the origin
+   * thumbnail's own tiny size) instead of the real dialog size. `slot.root`
+   * (`.shoji-slide`) fixes it: same box, only ever `translateX`'d for
+   * pool-offset positioning, never scaled — a stable read regardless of
+   * what its child is mid-animation through.
    */
   private revealOpenPlaceholder(
     src: string,
@@ -329,7 +340,7 @@ export class SlideManager {
       slot.media.querySelector('.shoji-slide-spinner')?.remove();
       slot.media.appendChild(img);
       if (naturalSize) {
-        const containerRect = slot.media.getBoundingClientRect();
+        const containerRect = slot.root.getBoundingClientRect();
         const box = containedBox(
           { left: 0, top: 0, width: containerRect.width, height: containerRect.height },
           naturalSize.width / naturalSize.height,

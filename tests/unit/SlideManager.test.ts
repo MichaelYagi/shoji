@@ -255,14 +255,35 @@ describe('SlideManager', () => {
       };
 
       manager.render(smallItems, 0, vi.fn(), 'thumb.jpg');
+      // Mocks .shoji-slide (root) and .shoji-slide-media (the zoom-in
+      // transition's own animated target, §2.3b) with deliberately
+      // *different* rects — root at the real, stable 1200x800 dialog size;
+      // media at a much smaller rect, standing in for a mid-flight zoom-in
+      // animation frame (media.root's own translateX-only positioning is
+      // never scaled the way media's transform is, so it stays the one
+      // reliable read of the real size regardless of what media is
+      // mid-animation through). If sizing ever reads media's rect instead
+      // of root's again, this test would compute against the small one.
+      const root = manager.element.querySelector('.shoji-slide') as HTMLElement;
       const media = manager.element.querySelector('.shoji-slide-media') as HTMLElement;
-      vi.spyOn(media, 'getBoundingClientRect').mockReturnValue({
+      vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
         top: 0,
         left: 0,
         right: 1200,
         bottom: 800,
         width: 1200,
         height: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      vi.spyOn(media, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        left: 0,
+        right: 60,
+        bottom: 40,
+        width: 60,
+        height: 40,
         x: 0,
         y: 0,
         toJSON: () => ({}),

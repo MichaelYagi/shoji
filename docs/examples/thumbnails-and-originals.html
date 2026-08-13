@@ -29,10 +29,10 @@
       <code>width</code>/<code>height</code> below are the <strong>original's</strong> true pixel
       dimensions, not the thumbnail's. Supplying them isn't just for the Layout plugin's layout math
       — the open animation and the open-transition placeholder (the low-res stand-in shown while the
-      original decodes) both use them to size against the original's own real size, capped there
-      instead of always growing/stretching to fill the dialog. Without them, a genuinely small
-      original can visibly overshoot on open and then snap back down to its true size the instant it
-      finishes loading — see
+      original decodes) both require them to show at all. Without them, Shoji doesn't guess a size
+      for either one anymore — it shows the ordinary spinner and skips the "grows out of the
+      thumbnail" animation entirely, revealing the real photo the instant it's ready instead of
+      risking an inaccurate guess — see
       <a href="../guides/transitions.html#open-transition-sizing">Transitions</a> for the full
       explanation.
     </p>

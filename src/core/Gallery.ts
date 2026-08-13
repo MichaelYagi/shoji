@@ -725,7 +725,20 @@ export class Gallery {
     this.captionVisibleOnVideo = !!this.options.showVideoCaption;
     lockBodyScroll();
     const origin = this.getOriginElement(index);
-    this.renderCurrentSlide(this.resolveOpenPlaceholderSrc(this.itemList[index], origin));
+    // Both the open placeholder and the zoom-in animation below need a size
+    // to show/grow toward before the real image has loaded — without
+    // item.width/height, that size can only ever be guessed ("probably
+    // fills the dialog"), which is exactly what visibly overshoots for a
+    // genuinely small photo (§2.3/§2.3b's own real-bug history). Rather
+    // than guess, skip both entirely when naturalSize is unknown: the
+    // ordinary spinner shows, and the real image just appears once it's
+    // ready — no animation of its own, deliberately (same "no second,
+    // disconnected transition" reasoning the placeholder-to-real-image
+    // handoff already uses elsewhere).
+    const naturalSize = this.resolveNaturalSize(index);
+    this.renderCurrentSlide(
+      naturalSize ? this.resolveOpenPlaceholderSrc(this.itemList[index], origin) : undefined,
+    );
     this.dom!.outer.classList.add('shoji-open');
     document.addEventListener('keydown', this.onKeydown);
     this.focusTrap.activate(this.dom!.dialog);
@@ -733,12 +746,12 @@ export class Gallery {
     this.applyMobileControlsSetting();
 
     const media = this.slides?.getActiveMedia();
-    if (media && origin) {
+    if (media && origin && naturalSize) {
       zoomIn({
         origin,
         target: media,
         aspectRatio: this.resolveAspectRatio(index, origin),
-        naturalSize: this.resolveNaturalSize(index),
+        naturalSize,
       });
     }
 
@@ -885,9 +898,15 @@ export class Gallery {
     // the lightbox is now hidden.
     pauseMedia(media ?? null);
     const origin = this.getOriginElement(this.activeIndex);
-    if (media && origin) {
+    const naturalSize = this.resolveNaturalSize(this.activeIndex);
+    // Real content already rendered doesn't need naturalSize at all —
+    // effectiveTargetBox() (zoomTransition.ts) measures it directly, no
+    // guessing involved. Only closing before it ever finished loading (no
+    // real content, no naturalSize to fall back on either) would have
+    // nothing but a guessed target to shrink toward — same "don't guess"
+    // reasoning open() above already applies to its own animation.
+    if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
-      const naturalSize = this.resolveNaturalSize(this.activeIndex);
       zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
     } else {
       this.finishClose();
