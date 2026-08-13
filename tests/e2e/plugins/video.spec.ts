@@ -88,22 +88,31 @@ test('Autoplay plays the YouTube embed and waits for its own ended state, not th
         timeout: 10000,
       })
       .toBe(false);
-  }
 
-  // This part holds regardless of whether YouTube actually starts playing:
-  // findPlayable() locating a playable provider container is what stops
-  // enterSlide() from ever arming the fixed-interval timer for this slide
-  // (DESIGN.md §4.1) — confirm the slideshow hasn't advanced this early.
-  // Checked well before the default 5000ms interval could fire it, and
-  // before DESIGN.md §4.1 point 12's retry-exhaustion (~3.6s) could
-  // legitimately advance past a video whose play() never actually took —
-  // that's correct behavior in its own right, just not what this assertion
-  // is about, so it can't be allowed to race this one.
-  await page.waitForTimeout(2000);
-  const counter = await page.locator('.shoji-counter').textContent();
-  expect(counter).toMatch(/^\d+ \/ \d+$/);
-  const [current] = counter!.split(' / ').map(Number);
-  expect(current).toBe(beforeIndex);
+    // This part holds regardless of whether YouTube actually starts
+    // playing: findPlayable() locating a playable provider container is
+    // what stops enterSlide() from ever arming the fixed-interval timer for
+    // this slide (DESIGN.md §4.1) — confirm the slideshow hasn't advanced
+    // this early. Checked well before the default 5000ms interval could
+    // fire it, and before DESIGN.md §4.1 point 12's retry-exhaustion
+    // (~3.6s) could legitimately advance past a video whose play() never
+    // actually took — that's correct behavior in its own right, just not
+    // what this assertion is about, so it can't be allowed to race it.
+    //
+    // CI-only too, same reasoning as the poll above, discovered from a real
+    // CI run: not just "never reaches PLAYING" but an outright YouTube
+    // player error (embedding blocked for the runner's IP, or similar) —
+    // `onVideoError` (autoplay/index.ts) correctly, intentionally calls
+    // advance() the moment that error event arrives, a much faster path
+    // than the ~3.6s retry-exhaustion this assertion was calibrated
+    // against. Advancing early is the *right* behavior for a genuinely
+    // broken embed, not a bug this test should be catching.
+    await page.waitForTimeout(2000);
+    const counter = await page.locator('.shoji-counter').textContent();
+    expect(counter).toMatch(/^\d+ \/ \d+$/);
+    const [current] = counter!.split(' / ').map(Number);
+    expect(current).toBe(beforeIndex);
+  }
 });
 
 test('opens a Vimeo slide and loads a real embed, replacing the spinner', async ({ page }) => {
