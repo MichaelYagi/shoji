@@ -349,6 +349,30 @@ export const Layout: ShojiPlugin = {
     let columnHeights: number[] | undefined;
     let previousItems: readonly GalleryItem[] = [];
     let warnedMissingDims = false;
+    /**
+     * A real bug, reported from real usage: `autoMeasureTiles()` used to
+     * write its measurement straight onto `item.width`/`item.height` —
+     * convenient, since `aspectOf()` already reads those first, but wrong.
+     * That measurement comes from the *tile's* own `<img>`
+     * (`measurableSrc()`: `item.thumb` first, then `poster`, then `src`) —
+     * for layout purposes a thumbnail's aspect ratio is a fine stand-in for
+     * the full photo's, close enough almost always. But `item.width`/
+     * `height` aren't Layout-private state — RotateFlip's own fit-scale
+     * (§4.5) and `SlideManager`'s aspect-ratio loading placeholder both
+     * read the exact same fields, under the contract that they mean the
+     * full photo's *true* pixel dimensions, not a thumbnail's. A thumbnail
+     * genuinely smaller than the lightbox in both orientations always
+     * satisfies `fitScaleFor`'s `Math.min(1, ...)` cap on its own, so
+     * RotateFlip silently computed a no-op 1x scale for every such
+     * item — confirmed directly against a real photo whose thumbnail
+     * happened to be a separate, smaller file (an item whose thumbnail
+     * happens to equal its full `src` never showed this, since then the
+     * "wrong" measurement and the real one are simply the same numbers).
+     * This cache keeps the auto-measurement entirely Layout-private —
+     * `aspectOf()` below still benefits from it, but nothing outside this
+     * plugin ever sees a thumbnail's dimensions mistaken for the photo's.
+     */
+    const measuredAspect = new WeakMap<GalleryItem, MasonryTile>();
 
     /** [startIndex, endExclusive) into `items`/`tiles` per section, split wherever `groupByFn`'s key changes. */
     function computeSections(
@@ -415,6 +439,8 @@ export const Layout: ShojiPlugin = {
 
     function aspectOf(item: GalleryItem | undefined): MasonryTile {
       if (item?.width && item.height) return { width: item.width, height: item.height };
+      const measured = item && measuredAspect.get(item);
+      if (measured) return measured;
       const selfCorrecting = autoMeasureEnabled && !!item && !!measurableSrc(item);
       if (!warnedMissingDims && !selfCorrecting) {
         warnedMissingDims = true;
@@ -972,13 +998,27 @@ export const Layout: ShojiPlugin = {
       if (!autoMeasureEnabled) return;
       for (const tile of newTiles) {
         const item = gallery.items[tile.index];
-        if (!item || (item.width && item.height) || !measurableSrc(item)) continue;
+        // measuredAspect.has(item): skip re-measuring (and re-attaching a
+        // 'load' listener) an item this cache already has an answer for —
+        // item.width/height no longer get set by this function itself
+        // (see measuredAspect's own doc comment above), so that alone
+        // can't short-circuit repeat work across tile rebuilds the way it
+        // used to.
+        if (
+          !item ||
+          (item.width && item.height) ||
+          measuredAspect.has(item) ||
+          !measurableSrc(item)
+        )
+          continue;
 
         const onLoad = (): void => {
           if (destroyed) return;
           if (tile.img.naturalWidth > 0 && tile.img.naturalHeight > 0) {
-            item.width = tile.img.naturalWidth;
-            item.height = tile.img.naturalHeight;
+            measuredAspect.set(item, {
+              width: tile.img.naturalWidth,
+              height: tile.img.naturalHeight,
+            });
             scheduleMeasureRelayout();
           }
         };

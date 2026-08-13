@@ -518,6 +518,59 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     };
   }
 
+  // A provider whose play() genuinely returns a promise (e.g. Vimeo, unlike
+  // youtube's fire-and-forget above) — DESIGN.md §4.1 point 12: that
+  // promise settles almost immediately regardless of whether playback
+  // actually starts, so it's `.paused`/the 'play' event (fired later, on
+  // its own schedule via `resolvePlaying()`) that reflects real state, not
+  // the promise. `calls.play` lets a test assert play() was issued exactly
+  // once across the whole retry window, never reissued.
+  function flakyPromiseVideoProviderPlugin(): {
+    plugin: { name: string; init: (ctx: PluginContext) => () => void };
+    calls: { play: number };
+    resolvePlaying: () => void;
+  } {
+    const calls = { play: 0 };
+    let onPlaying: (() => void) | null = null;
+    const plugin = {
+      name: 'flakyPromiseVideoProvider',
+      init: (ctx: PluginContext) =>
+        ctx.ui.registerVideoProvider(
+          'vimeo',
+          (container: HTMLElement, _item, onReady: () => void) => {
+            const playable = container as HTMLElement & {
+              play: () => Promise<void>;
+              pause: () => void;
+              paused: boolean;
+              ended: boolean;
+              muted: boolean;
+            };
+            playable.paused = true;
+            playable.ended = false;
+            playable.muted = false;
+            playable.play = () => {
+              calls.play++;
+              onPlaying = () => {
+                playable.paused = false;
+                playable.dispatchEvent(new Event('play'));
+              };
+              return Promise.resolve();
+            };
+            playable.pause = () => {
+              playable.paused = true;
+              playable.dispatchEvent(new Event('pause'));
+            };
+            onReady();
+          },
+        ),
+    };
+    return {
+      plugin,
+      calls,
+      resolvePlaying: () => onPlaying?.(),
+    };
+  }
+
   it('arriving at a provider-video slide plays it instead of starting the fixed-interval timer', () => {
     vi.useFakeTimers();
     const gallery = makeProviderGallery();
@@ -678,6 +731,60 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
     container.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { code: 153 } }));
 
     expect(gallery.currentIndex).toBe(2); // unchanged — did not also advance a second time
+
+    gallery.destroy();
+  });
+
+  it("regression: a promise-returning play() (e.g. Vimeo) is issued exactly once across the whole retry window, never reissued — reported from real usage: reissuing it (as the fire-and-forget-provider path above correctly does for YouTube) resets the provider's own in-progress start every 400ms, so it never gets an uninterrupted run long enough to actually begin — confirmed directly, isolated from Shoji entirely, that a single uninterrupted play() call started real Vimeo playback in ~1.6s while reissuing it kept it stuck indefinitely", () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const { plugin, calls } = flakyPromiseVideoProviderPlugin();
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'vimeo', src: 'https://vimeo.com/x', video: { provider: 'vimeo' as const, id: 'x' } },
+        { id: 'c', src: 'c.jpg' },
+      ],
+      plugins: [Autoplay, plugin],
+      preload: 0,
+    });
+    gallery.open(1);
+
+    click(toggleButton());
+    expect(calls.play).toBe(1); // the initial attempt
+
+    vi.advanceTimersByTime(400 * 9); // the same full retry window the fire-and-forget path gets
+    expect(calls.play).toBe(1); // still exactly one call — never reissued
+    expect(gallery.currentIndex).toBe(2); // it never actually started playing, so this exhausted and skipped ahead, same outcome as the fire-and-forget path
+
+    gallery.destroy();
+  });
+
+  it('a promise-returning play() that only actually starts later (its own delayed schedule, not tied to any retry tick) is caught before exhaustion, and the slideshow stays on it', () => {
+    vi.useFakeTimers();
+    const el = document.createElement('div');
+    const { plugin, resolvePlaying } = flakyPromiseVideoProviderPlugin();
+    const gallery = new Gallery(el, {
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'vimeo', src: 'https://vimeo.com/x', video: { provider: 'vimeo' as const, id: 'x' } },
+        { id: 'c', src: 'c.jpg' },
+      ],
+      plugins: [Autoplay, plugin],
+      preload: 0,
+    });
+    gallery.open(1);
+    click(toggleButton());
+
+    vi.advanceTimersByTime(400 * 3); // partway through the retry window, still polling
+    expect(gallery.currentIndex).toBe(1); // hasn't given up yet
+
+    resolvePlaying(); // the provider's own 'play' event finally arrives
+    const container = providerContainer()!;
+    expect(container.paused).toBe(false);
+
+    vi.advanceTimersByTime(400 * 6); // the rest of what would have been the retry window
+    expect(gallery.currentIndex).toBe(1); // stayed — playing, not stuck or skipped
 
     gallery.destroy();
   });

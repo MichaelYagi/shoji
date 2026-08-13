@@ -156,6 +156,9 @@ export const Autoplay: ShojiPlugin = {
 
     // A real user pause, as opposed to the pause some browsers fire
     // immediately alongside 'ended' — `.ended` disambiguates the two.
+    // Provider videos (§4.3's renderers) are responsible for holding their
+    // own 'pause' dispatch back if it might just be a natural end arriving
+    // slightly early — vimeo.ts's `PAUSE_DISPATCH_DELAY_MS` is why.
     function onVideoPause(): void {
       if (currentVideo?.ended) return;
       stop();
@@ -175,9 +178,38 @@ export const Autoplay: ShojiPlugin = {
     // rather than rejecting, so there's nothing to catch. Muting first is
     // what actually gets it to play — the viewer can still unmute via the
     // embed's own controls.
+    //
+    // A real bug, reported from real usage, found only once a second
+    // promise-returning provider (Vimeo) existed to compare against:
+    // re-issuing `play()`/`muted = true` on every retry — needed for
+    // YouTube, whose fire-and-forget `playVideo()` can silently drop a
+    // command issued before its postMessage bridge is fully settled — does
+    // the opposite for a provider whose `play()` genuinely returns a
+    // promise. Confirmed directly, isolated from Shoji entirely: a single,
+    // uninterrupted `play()` call reliably started Vimeo playback in
+    // ~1.6s, while calling it again every 400ms (this loop's original,
+    // unconditional behavior) kept it stuck indefinitely — each new call
+    // resets the progress the previous one had already made, so it never
+    // gets an uninterrupted run long enough to actually start. (This is
+    // also what point 12 below's retry-exhaustion was actually skipping
+    // past: not a broken video, but this loop's own repeated calls
+    // preventing it from ever finishing what the first one started.)
+    // `video.play()`'s return type only *claims* to be a promise for every
+    // provider (see the `PlayableMedia` doc comment above) — branching on
+    // whether it genuinely is one is what lets each provider get the
+    // retry behavior it actually needs from this one shared function.
     function ensureProviderPlaying(video: PlayableMedia, attemptsLeft: number): void {
       video.muted = true;
-      video.play();
+      const playResult = video.play();
+      if (playResult && typeof playResult.then === 'function') {
+        pollWithoutReissuing(video, attemptsLeft, playResult);
+      } else {
+        reissueOnEachRetry(video, attemptsLeft);
+      }
+    }
+
+    /** Fire-and-forget `play()` (YouTube) — re-issues the command itself on every retry, per this function's own doc comment above. */
+    function reissueOnEachRetry(video: PlayableMedia, attemptsLeft: number): void {
       setTimeout(() => {
         if (currentVideo !== video || !playing) return; // stale — slide changed, or already stopped
         if (!video.paused) return; // took effect
@@ -189,6 +221,27 @@ export const Autoplay: ShojiPlugin = {
         // error report (real usage: YouTube's own error can arrive slower
         // than this retry window, e.g. Error 153) can't leave the
         // slideshow stuck if this fires first.
+        else advance();
+      }, PROVIDER_PLAY_RETRY_MS);
+    }
+
+    /** A genuine `play()` promise (e.g. Vimeo) — the command itself is only ever issued once (by the caller); this only re-checks `.paused` on the same schedule, over the same total budget, without ever calling `play()` again. */
+    function pollWithoutReissuing(
+      video: PlayableMedia,
+      attemptsLeft: number,
+      playResult: Promise<void>,
+    ): void {
+      // Swallowed deliberately: a rejection here isn't distinguished from
+      // "still pending" — the .paused poll below is what actually decides
+      // whether this took effect, on the same schedule regardless of how
+      // the promise itself settles. An unhandled-rejection console warning
+      // is the only cost, same tradeoff as the native <video> path below
+      // taking a real .catch() instead when it needs to branch on *why*.
+      playResult.catch(() => {});
+      setTimeout(() => {
+        if (currentVideo !== video || !playing) return;
+        if (!video.paused) return;
+        if (attemptsLeft > 0) pollWithoutReissuing(video, attemptsLeft - 1, playResult);
         else advance();
       }, PROVIDER_PLAY_RETRY_MS);
     }

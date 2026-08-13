@@ -2,7 +2,7 @@
 
 ## Project
 
-**Shoji** (障子 — the translucent sliding screen that diffuses light) is a modern, zero-dependency, TypeScript lightbox/gallery library intended as a full replacement for lightGallery. It reaches feature parity with lightGallery's core, plus a first-class plugin system, slideshow, video (HTML5 + YouTube), and a grid/masonry/justified layout engine — with a smaller, cleaner core. v1 scope is closed: core plus seven official plugins (Zoom, Fullscreen, RotateFlip, Autoplay, ActiveThumbnail, Video, Layout). Multi-select, a WebGL edit mode, bidirectional infinite scroll, Hash/deep-links, Share, Comments, and Pagers were all scoped at one point and later decided **not implementing** — see DESIGN.md §4/§6/§7/§8 for why each was cut. Don't build toward them speculatively; add one back only if an actual use case needs it.
+**Shoji** (障子 — the translucent sliding screen that diffuses light) is a modern, zero-dependency, TypeScript lightbox/gallery library intended as a full replacement for lightGallery. It reaches feature parity with lightGallery's core, plus a first-class plugin system, slideshow, video (HTML5 + YouTube + Vimeo), and a grid/masonry/justified layout engine — with a smaller, cleaner core. v1 scope is closed: core plus seven official plugins (Zoom, Fullscreen, RotateFlip, Autoplay, ActiveThumbnail, Video, Layout). Multi-select, a WebGL edit mode, bidirectional infinite scroll, Hash/deep-links, Share, Comments, and Pagers were all scoped at one point and later decided **not implementing** — see DESIGN.md §4/§6/§7/§8 for why each was cut. Don't build toward them speculatively; add one back only if an actual use case needs it.
 
 Read `DESIGN.md` before writing any code. It is the source of truth for architecture, the plugin API contract, and per-feature specs. If an implementation decision contradicts DESIGN.md, stop and update DESIGN.md first (or flag the conflict) — never let the two drift silently.
 
@@ -11,7 +11,7 @@ Read `DESIGN.md` before writing any code. It is the source of truth for architec
 - **Clean-room only.** lightGallery is GPL-3.0: never read, fetch, or paste its source (minified or not) into this project or into Claude Code sessions. Parity is defined by DESIGN.md's behavior specs and public docs, not their implementation.
 - **Zero runtime dependencies.** No jQuery, no lodash, no framework. Vanilla TS/DOM only. Dev dependencies (build, test, lint) are fine.
 - **TypeScript strict mode.** `strict: true`, no `any` except at documented interop boundaries, explicit public API types.
-- **Core stays small.** Everything that can be a plugin is a plugin. Core budget: ≤ 21 kB min+gzip. Each official plugin: ≤ 8 kB min+gzip. Full bundle: ≤ 90 kB min+gzip. CI fails on budget breach.
+- **Core stays small.** Everything that can be a plugin is a plugin. Core budget: ≤ 22.4 kB min+gzip (see DESIGN.md's running budget-history for why it's grown past its original 20 kB). Each official plugin: ≤ 8 kB min+gzip. Full bundle: ≤ 90 kB min+gzip. CI fails on budget breach.
 - **Single-file distribution is the primary artifact.** `npm run build` must always emit `dist/shoji.js` + `dist/shoji.css` (and `.min` variants): one JS file and one CSS file containing core **and all official plugins**, self-registering, zero setup — drop two `<script>`/`<link>` tags in and everything works. Tree-shakable per-plugin ESM entries are also emitted for bundler users, but the single-file pair is what releases are cut from and what the demo site loads; it must never break or lag behind.
 - **No global namespace pollution.** ESM-first. UMD build exposes exactly one global (`Shoji`).
 - **CSS is theme-able via custom properties.** No hardcoded colors/sizes in JS. All styling through `--shoji-*` custom properties with sane defaults. CSS-only sizing/resizing for media (no JS layout thrash on resize where avoidable).
@@ -32,7 +32,7 @@ Read `DESIGN.md` before writing any code. It is the source of truth for architec
     /rotateFlip    # Rotate/flip view controls (non-destructive)
     /autoplay      # Slideshow
     /activeThumbnail  # Syncs a host's own thumbnail grid to the active slide
-    /video         # HTML5 + YouTube (Vimeo/Wistia typed, unimplemented)
+    /video         # HTML5 + YouTube + Vimeo
     /layout        # Inline gallery layouts: grid, masonry, justified rows
   /styles          # shoji.css + per-plugin css, custom-property driven
 /tests

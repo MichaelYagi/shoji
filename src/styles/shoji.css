@@ -289,26 +289,84 @@
 }
 
 /* DESIGN.md §4-video — a provider's embed (an <iframe>, typically) has no
-   natural size Shoji can measure the way a decoded image/video does, so
-   this just fills whatever box it's given; supply item.width/height for a
-   correctly-shaped box (applyAspect() sets aspect-ratio on the slide-media
-   container itself from those), same as any other slide. */
+   natural size Shoji can measure the way a decoded image/video does. A real
+   bug, reported from real usage, found in two parts:
+   1. Stretching the embed to fill this box regardless of the video's own
+      aspect ratio pushed the bottom of the video (and a provider's own
+      controls, always along that edge) below the visible area whenever the
+      box wasn't already the same shape as the video.
+   2. Fixing that by fitting to the box's actual shape instead exposed a
+      second issue: neither YouTube's nor Vimeo's own player page renders
+      with a background matching Shoji's theme in the letterboxed gap
+      *inside* the iframe (both showed white) — a color this page has no
+      way to reach or override, since that content is cross-origin.
+   Assumes 16:9 (overwhelmingly the common case for both providers, and
+   exactly correct for the video this was diagnosed against) and *contains*
+   within whatever box is actually available — the same shape object-fit
+   already gives an <img>/<video> above, achieved differently here since
+   object-fit doesn't apply to an iframe (or the wrapper div Vimeo's own
+   SDK builds one inside) — so any remaining gap is outside the iframe
+   instead of inside it, showing Shoji's own dark backdrop through this
+   element's own transparent background rather than the provider's white. */
 .shoji-slide-provider-video {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   padding-top: var(--shoji-provider-video-top-inset);
+  /* Establishes `cqw`/`cqh` below as this element's own *content* box
+     (padding already excluded) — safe to size independently of children
+     since its own width/height already come from its parent, not from
+     whatever ends up inside it. */
+  container-type: size;
 }
 
 .shoji-slide-provider-video[hidden] {
   display: none;
 }
 
+/* `.shoji-video-mount` — src/plugins/video/vimeo.ts's own wrapper div,
+   which its SDK would otherwise size itself (a small fixed default
+   normally, or its own `responsive: true` option's aspect-ratio-from-width-
+   alone computation, ignoring how much height is actually available either
+   way) — `!important` discards whatever it tries to set inline. The direct
+   `> iframe` case is YouTube, which has no such wrapper at all.
+   `min(100cqw, 100cqh * 16/9)`/`min(100cqh, 100cqw * 9/16)` is the
+   contain-within-either-axis formula `object-fit: contain` gives an
+   <img>/<video> natively — plain `aspect-ratio` alone can't do this for a
+   non-replaced element like a div/iframe: it only ever derives *one*
+   dimension from the other, so whichever of width/height stays a fixed
+   `100%` never actually shrinks even once the derived dimension gets
+   capped by `max-width`/`max-height`, silently distorting the ratio in
+   whichever direction wasn't the binding constraint. Confirmed directly at
+   both a wide-short viewport (height the binding constraint) and a
+   narrow-tall one (width the binding constraint) — container query units
+   are what actually solve both at once, not `aspect-ratio` by itself. */
+.shoji-slide-provider-video > iframe,
+.shoji-video-mount {
+  width: min(100cqw, calc(100cqh * 16 / 9)) !important;
+  height: min(100cqh, calc(100cqw * 9 / 16)) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 .shoji-slide-provider-video iframe {
   display: block;
-  width: 100%;
-  height: 100%;
   border: 0;
+}
+
+/* Once `.shoji-video-mount` above is already correctly contain-fitted, its
+   own iframe just needs to fill it completely — no `aspect-ratio` of its
+   own to fight the wrapper's. Same `!important`/static-not-absolute
+   reasoning as `.shoji-video-mount` — Vimeo's SDK may set its own inline
+   sizing/position on the iframe too, not just on the wrapper. */
+.shoji-video-mount iframe {
+  position: static !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* A paused video's own play affordance — native browser styling for this

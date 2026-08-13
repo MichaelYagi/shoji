@@ -17,9 +17,10 @@
 
     <h1>Dynamic mode, video, and events</h1>
     <p>
-      A hand-built <code>items</code> array (no DOM scanning at all — dynamic mode), including one
-      video item, with click-to-open wired by hand (dynamic mode has no scanned elements to attach
-      listeners to automatically). Every core lifecycle event is logged live below as it fires.
+      A hand-built <code>items</code> array (no DOM scanning at all — dynamic mode), including three
+      video items (HTML5, YouTube, Vimeo), with click-to-open wired by hand (dynamic mode has no
+      scanned elements to attach listeners to automatically). Every core lifecycle event is logged
+      live below as it fires.
     </p>
 
     <div id="gallery" class="thumb-grid"></div>
@@ -70,6 +71,16 @@
           video: true,
           poster: svgDataUri('YouTube', '#c0392b'),
           caption: 'YouTube via video: true — id inferred from src',
+        },
+        {
+          // Same video: true inference, a recognized Vimeo host this time —
+          // resolves to { provider: 'vimeo', id }. "Short Short: Home", by
+          // The Animation Workshop.
+          id: 'v3',
+          src: 'https://vimeo.com/167254041',
+          video: true,
+          poster: svgDataUri('Vimeo', '#1ab7ea'),
+          caption: 'Vimeo via video: true — id inferred from src',
         },
       ];
 
@@ -150,7 +161,7 @@
     </script>
 
     <h2>Code</h2>
-    <p>The items array — three plain image items, then two video items:</p>
+    <p>The items array — three plain image items, then three video items:</p>
     <pre><code>const gallery = new Shoji('#gallery', {
   items: [
     { id: 'p1', src: 'photo-1.jpg', caption: 'Sunset over the bay' },
@@ -171,13 +182,20 @@
     },
     {
       // video: true — dynamic-mode-only shorthand, infers the whole
-      // descriptor from src (youtube if the host matches, html5
+      // descriptor from src (youtube or vimeo if the host matches, html5
       // otherwise). No provider, no id to type by hand.
       id: 'v2',
       src: 'https://youtu.be/dQw4w9WgXcQ',
       video: true,
       poster: 'yt-poster.jpg',
       caption: 'YouTube via video: true',
+    },
+    {
+      id: 'v3',
+      src: 'https://vimeo.com/167254041',
+      video: true,
+      poster: 'vimeo-poster.jpg',
+      caption: 'Vimeo via video: true',
     },
   ],
   plugins: [Shoji.Video, Shoji.Autoplay], // Video: renders the youtube item; Autoplay: the slideshow

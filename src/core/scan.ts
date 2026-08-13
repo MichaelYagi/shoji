@@ -134,7 +134,7 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
   return undefined;
 }
 
-const KNOWN_VIDEO_PROVIDERS = new Set(['youtube', 'vimeo', 'wistia', 'html5']);
+const KNOWN_VIDEO_PROVIDERS = new Set(['youtube', 'vimeo', 'html5']);
 
 function html5Fallback(url: string): { video: VideoDescriptor; sources: MediaSource[] } {
   return { video: { provider: 'html5' }, sources: [{ src: url, type: guessVideoType(url) }] };
@@ -142,10 +142,8 @@ function html5Fallback(url: string): { video: VideoDescriptor; sources: MediaSou
 
 /**
  * `data-shoji-video-provider` declares the provider outright — trusts an id
- * even off a non-YouTube host (e.g. an internal proxy URL), and lets
- * `vimeo`/`wistia` items be built at all (neither has URL-based detection or
- * a renderer yet — DESIGN.md: deliberately deferred). Mirrors dynamic
- * mode's `video: { provider: '...' }`.
+ * even off a non-YouTube/non-Vimeo host (e.g. an internal proxy URL).
+ * Mirrors dynamic mode's `video: { provider: '...' }`.
  */
 function resolveExplicitVideo(
   url: string,
@@ -163,43 +161,58 @@ function resolveExplicitVideo(
     return html5Fallback(url);
   }
 
-  if (providerAttr === 'vimeo' || providerAttr === 'wistia') {
-    if (!idAttr) {
-      console.warn(
-        `Shoji: data-shoji-video-provider="${providerAttr}" needs a data-shoji-video-id — falling back to html5.`,
-      );
-      return html5Fallback(url);
-    }
-    return { video: { provider: providerAttr, id: idAttr, url } };
-  }
+  const youtube = resolveDetectedProvider(
+    'youtube',
+    url,
+    providerAttr,
+    idAttr,
+    isYouTubeUrl,
+    detectYouTubeId,
+  );
+  if (youtube) return youtube;
+  const vimeo = resolveDetectedProvider(
+    'vimeo',
+    url,
+    providerAttr,
+    idAttr,
+    isVimeoUrl,
+    detectVimeoId,
+  );
+  if (vimeo) return vimeo;
 
-  // 'youtube' explicit, or unset (host-detected). Explicit trusts idAttr
-  // even off a non-YouTube host; unset falls back to html5 quietly on a
-  // youtube.com URL with no parseable id (e.g. "youtube.com/about") rather
-  // than building a youtube item nothing can render.
-  const explicitYouTube = providerAttr === 'youtube';
-  const isYouTube = explicitYouTube || isYouTubeUrl(url);
-  if (!isYouTube) {
-    if (idAttr) {
-      console.warn(
-        `Shoji: data-shoji-video-id="${idAttr}" ignored — data-shoji-video="${url}" isn't a recognized YouTube URL; falling back to html5.`,
-      );
-    }
-    return html5Fallback(url);
-  }
-  const id = idAttr ?? detectYouTubeId(url);
-  if (!id) {
-    if (!explicitYouTube) return html5Fallback(url);
+  if (idAttr) {
     console.warn(
-      `Shoji: data-shoji-video-provider="youtube" but no id could be parsed from "${url}".`,
+      `Shoji: data-shoji-video-id="${idAttr}" ignored — data-shoji-video="${url}" isn't a recognized YouTube/Vimeo URL; falling back to html5.`,
     );
   }
-  return { video: { provider: 'youtube', id, url } };
+  return html5Fallback(url);
+}
+
+/** Shared logic for youtube/vimeo, the only two providers with URL-based host detection. `undefined` means "not this provider, try the next one"; anything else is final, explicit trusting `idAttr` off any host, unset falling back to html5 quietly. */
+function resolveDetectedProvider(
+  provider: 'youtube' | 'vimeo',
+  url: string,
+  providerAttr: string | undefined,
+  idAttr: string | undefined,
+  isHost: (url: string) => boolean,
+  detectId: (url: string) => string | undefined,
+): { video: VideoDescriptor; sources?: MediaSource[] } | undefined {
+  const explicit = providerAttr === provider;
+  if (!explicit && !isHost(url)) return undefined;
+  const id = idAttr ?? detectId(url);
+  if (!id) {
+    if (!explicit) return html5Fallback(url);
+    console.warn(
+      `Shoji: data-shoji-video-provider="${provider}" but no id could be parsed from "${url}".`,
+    );
+  }
+  return { video: { provider, id, url } };
 }
 
 const YOUTUBE_HOSTS = new Set(['youtu.be', 'youtube.com', 'youtube-nocookie.com']);
+const VIMEO_HOSTS = new Set(['vimeo.com', 'player.vimeo.com']);
 
-/** Strips the `www.`/`m.`/`music.` subdomain YouTube serves the same content under either way. */
+/** Strips the `www.`/`m.`/`music.` subdomain YouTube/Vimeo serve the same content under either way. */
 function normalizeVideoHost(hostname: string): string {
   return hostname.replace(/^(www|m|music)\./, '');
 }
@@ -208,6 +221,15 @@ function normalizeVideoHost(hostname: string): string {
 function isYouTubeUrl(url: string): boolean {
   try {
     return YOUTUBE_HOSTS.has(normalizeVideoHost(new URL(url, window.location.href).hostname));
+  } catch {
+    return false;
+  }
+}
+
+/** Same reasoning as `isYouTubeUrl`, for Vimeo's two hosts (`vimeo.com` for an ordinary page link, `player.vimeo.com` for an already-embed-shaped URL). */
+function isVimeoUrl(url: string): boolean {
+  try {
+    return VIMEO_HOSTS.has(normalizeVideoHost(new URL(url, window.location.href).hostname));
   } catch {
     return false;
   }
@@ -234,22 +256,42 @@ function detectYouTubeId(url: string): string | undefined {
   return match?.[1];
 }
 
+/** First numeric path segment on a recognized Vimeo host — covers `vimeo.com/{id}`, `vimeo.com/{id}/{hash}` (unlisted-video privacy hash, kept in `url` not the id), `player.vimeo.com/video/{id}`, and an id buried deeper (`vimeo.com/channels/x/{id}`). `undefined` on an unrecognized host too. */
+function detectVimeoId(url: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url, window.location.href);
+  } catch {
+    return undefined;
+  }
+  if (!VIMEO_HOSTS.has(normalizeVideoHost(parsed.hostname))) return undefined;
+  return parsed.pathname.match(/\/(\d+)(?:\/|$)/)?.[1];
+}
+
+/** youtube/vimeo, in host-detection preference order — same pair `resolveDetectedProvider` covers for selector mode. */
+const DETECTABLE_PROVIDERS = [
+  { provider: 'youtube' as const, isHost: isYouTubeUrl, detectId: detectYouTubeId },
+  { provider: 'vimeo' as const, isHost: isVimeoUrl, detectId: detectVimeoId },
+];
+
 /**
  * Dynamic mode skips `scanContainer()` entirely, so it never gets the same
  * src-based detection `data-shoji-video`/`data-shoji-video-id` have.
  * Mirrors it here: `video: true` infers the whole descriptor from `src`
- * (youtube if the host matches, else html5); `{provider:'youtube'}` with no
- * `id` fills in just the id. An explicit `id` always wins. Warns (doesn't
- * throw) when a youtube item ends up with no id — `youtube.ts` guards this
- * at render time too, showing a placeholder instead of a broken embed.
+ * (youtube or vimeo if the host matches, else html5); `{provider:'youtube'|
+ * 'vimeo'}` with no `id` fills in just the id. An explicit `id` always
+ * wins. Warns (doesn't throw) when a detectable-provider item ends up with
+ * no id — the renderer guards this at render time too, showing a
+ * placeholder instead of a broken embed.
  */
 export function resolveDynamicVideoItems(items: GalleryItemInput[]): GalleryItem[] {
   return items.map((item): GalleryItem => {
     if (item.video === true) {
-      const video: VideoDescriptor = isYouTubeUrl(item.src)
-        ? { provider: 'youtube', id: detectYouTubeId(item.src) }
+      const detected = DETECTABLE_PROVIDERS.find((p) => p.isHost(item.src));
+      const video: VideoDescriptor = detected
+        ? { provider: detected.provider, id: detected.detectId(item.src) }
         : { provider: 'html5' };
-      if (video.provider === 'youtube' && !video.id) {
+      if ((video.provider === 'youtube' || video.provider === 'vimeo') && !video.id) {
         console.warn(
           `Shoji: item "${item.id ?? item.src}" has video: true, but no id could be parsed from src ("${item.src}") — the embed won't load. Use an explicit video.id instead.`,
         );
@@ -260,15 +302,17 @@ export function resolveDynamicVideoItems(items: GalleryItemInput[]): GalleryItem
     // hence the cast (the map's `: GalleryItem` annotation is what actually
     // catches a mistake here).
     const resolved = item as GalleryItem;
-    if (resolved.video?.provider !== 'youtube' || resolved.video.id) return resolved;
-    const id = detectYouTubeId(resolved.src);
+    const provider = resolved.video?.provider;
+    if (provider !== 'youtube' && provider !== 'vimeo') return resolved;
+    if (resolved.video && 'id' in resolved.video && resolved.video.id) return resolved;
+    const id = DETECTABLE_PROVIDERS.find((p) => p.provider === provider)!.detectId(resolved.src);
     if (!id) {
       console.warn(
-        `Shoji: item "${resolved.id ?? resolved.src}" has video.provider: 'youtube' with no id, and src ("${resolved.src}") isn't a recognized YouTube URL — the embed won't load. Set video.id explicitly.`,
+        `Shoji: item "${resolved.id ?? resolved.src}" has video.provider: '${provider}' with no id, and src ("${resolved.src}") isn't a recognized ${provider === 'youtube' ? 'YouTube' : 'Vimeo'} URL — the embed won't load. Set video.id explicitly.`,
       );
       return resolved;
     }
-    return { ...resolved, video: { ...resolved.video, id } };
+    return { ...resolved, video: { provider, id, url: resolved.video?.url } };
   });
 }
 

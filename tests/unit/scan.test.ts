@@ -164,6 +164,59 @@ describe('scanContainer', () => {
     });
   });
 
+  describe('Vimeo detection in data-shoji-video', () => {
+    it.each([
+      ['https://vimeo.com/76979871', '76979871'],
+      ['https://vimeo.com/76979871/2b74b0294a', '76979871'], // an unlisted video's privacy hash
+      ['https://player.vimeo.com/video/76979871', '76979871'],
+      ['https://www.vimeo.com/76979871', '76979871'],
+      ['https://vimeo.com/channels/staffpicks/76979871', '76979871'],
+    ])('recognizes %s -> id %s', (url, id) => {
+      const el = container(`<div data-shoji-video="${url}"></div>`);
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item).toMatchObject({
+        src: url,
+        video: { provider: 'vimeo', id, url },
+      });
+      // A Vimeo-provider item has no `sources` — the html5 fallback path is
+      // the only one that sets it, and this shouldn't have taken it.
+      expect(scanned[0]?.item.sources).toBeUndefined();
+    });
+
+    it('does not treat an unrelated host containing "vimeo" as a match', () => {
+      const el = container(`<div data-shoji-video="https://notvimeo.com/76979871"></div>`);
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
+    });
+
+    it('falls back to html5 for a vimeo.com URL with no recognizable numeric id', () => {
+      const el = container(`<div data-shoji-video="https://vimeo.com/about"></div>`);
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
+    });
+
+    it('still picks up data-shoji-poster/caption/id on a Vimeo item', () => {
+      const el = container(
+        `<div data-shoji-video="https://vimeo.com/76979871" data-shoji-poster="poster.jpg" data-shoji-caption="A clip" data-shoji-id="vimeo-1"></div>`,
+      );
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item).toMatchObject({
+        id: 'vimeo-1',
+        poster: 'poster.jpg',
+        caption: 'A clip',
+        video: { provider: 'vimeo', id: '76979871' },
+      });
+    });
+  });
+
   describe('data-shoji-video-id', () => {
     it('overrides the id that would otherwise be parsed from the URL', () => {
       const el = container(
@@ -202,7 +255,7 @@ describe('scanContainer', () => {
       expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
       expect(scanned[0]?.item.sources).toEqual([{ src: 'clip.mp4', type: 'video/mp4' }]);
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]?.[0]).toMatch(/bogus-id.*isn't a recognized YouTube URL/);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/bogus-id.*isn't a recognized YouTube\/Vimeo URL/);
       warn.mockRestore();
     });
 
@@ -267,9 +320,29 @@ describe('scanContainer', () => {
       warn.mockRestore();
     });
 
-    it('builds a vimeo/wistia item from an explicit id — neither has URL-based detection', () => {
+    it('wistia is not a recognized provider — warns and falls back to normal auto-detection, same as any unrecognized value', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const el = container(
-        `<div data-shoji-video="https://vimeo.com/76979871" data-shoji-video-provider="vimeo" data-shoji-video-id="76979871"></div>`,
+        `<div data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-video-provider="wistia"></div>`,
+      );
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({
+        provider: 'youtube',
+        id: 'dQw4w9WgXcQ',
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+      });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toMatch(
+        /data-shoji-video-provider="wistia" isn't recognized/,
+      );
+      warn.mockRestore();
+    });
+
+    it('vimeo, explicit provider on a real vimeo.com URL: auto-detects the id same as unset provider would', () => {
+      const el = container(
+        `<div data-shoji-video="https://vimeo.com/76979871" data-shoji-video-provider="vimeo"></div>`,
       );
 
       const scanned = scanContainer(el);
@@ -281,18 +354,36 @@ describe('scanContainer', () => {
       });
     });
 
-    it('warns and falls back to html5 for vimeo/wistia with no id given at all', () => {
+    it('vimeo, explicit and unparseable: warns but still builds an id-less item — same as youtube, not an html5 fallback (an explicit provider is a deliberate claim, trusted even without a usable id)', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const el = container(
-        `<div data-shoji-video="https://vimeo.com/76979871" data-shoji-video-provider="vimeo"></div>`,
+        `<div data-shoji-video="https://proxy.example.com/v/xyz" data-shoji-video-provider="vimeo"></div>`,
       );
 
       const scanned = scanContainer(el);
 
-      expect(scanned[0]?.item.video).toEqual({ provider: 'html5' });
+      expect(scanned[0]?.item.video).toEqual({
+        provider: 'vimeo',
+        id: undefined,
+        url: 'https://proxy.example.com/v/xyz',
+      });
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]?.[0]).toMatch(/needs a data-shoji-video-id/);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/no id could be parsed/);
       warn.mockRestore();
+    });
+
+    it('lets data-shoji-video-id be trusted on a URL whose host is not a recognized Vimeo one', () => {
+      const el = container(
+        `<div data-shoji-video="https://proxy.example.com/v/xyz" data-shoji-video-provider="vimeo" data-shoji-video-id="76979871"></div>`,
+      );
+
+      const scanned = scanContainer(el);
+
+      expect(scanned[0]?.item.video).toEqual({
+        provider: 'vimeo',
+        id: '76979871',
+        url: 'https://proxy.example.com/v/xyz',
+      });
     });
 
     it('forces html5 even on a URL that looks like YouTube, and warns if an id was also set', () => {

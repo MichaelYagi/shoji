@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Gallery } from '../../../src/core';
 import { Video } from '../../../src/plugins/video';
+import { renderVimeo } from '../../../src/plugins/video/vimeo';
 import { renderYouTube } from '../../../src/plugins/video/youtube';
 
 afterEach(() => {
@@ -37,7 +38,25 @@ describe('Video plugin', () => {
     gallery.destroy();
   });
 
-  it('unregisters on reinit() without Video — the same instance falls back to the placeholder for a youtube item afterward', () => {
+  it("registers renderVimeo for the 'vimeo' provider — a later render of a vimeo item uses it, not the unregistered-provider placeholder", () => {
+    const items = [
+      { id: 'vimeo', src: 'https://vimeo.com/1', video: { provider: 'vimeo' as const, id: '1' } },
+    ];
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items, plugins: [Video], preload: 0 });
+
+    gallery.open(0);
+
+    // renderVimeo kicks off async API loading (window.Vimeo isn't mocked
+    // here) — the point of this test is only that it was reached at all
+    // (not the unregistered-provider fallback), not that it completes.
+    expect(document.querySelector('.shoji-slide-placeholder')).toBeNull();
+    expect(document.querySelector('.shoji-slide-provider-video')).not.toBeNull();
+
+    gallery.destroy();
+  });
+
+  it('unregisters on reinit() without Video — the same instance falls back to the placeholder for a youtube/vimeo item afterward', () => {
     const items = [
       { id: 'yt', src: 'https://youtu.be/x', video: { provider: 'youtube' as const, id: 'x' } },
     ];
@@ -56,7 +75,8 @@ describe('Video plugin', () => {
     gallery.destroy();
   });
 
-  it('exports renderYouTube as a real function (sanity check on the module shape this plugin depends on)', () => {
+  it('exports renderYouTube/renderVimeo as real functions (sanity check on the module shape this plugin depends on)', () => {
     expect(typeof renderYouTube).toBe('function');
+    expect(typeof renderVimeo).toBe('function');
   });
 });

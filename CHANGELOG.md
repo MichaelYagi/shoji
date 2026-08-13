@@ -9,6 +9,19 @@ still include breaking changes).
 
 ### Fixed
 
+- Layout: rotating certain photos (via RotateFlip) never resized to fit the
+  window — fit-scale silently computed to exactly `1` every time. Only
+  affected items with a dynamic-mode `thumb` genuinely different from their
+  `src` and no explicit `item.width`/`height`. Root cause: Layout's
+  auto-measure feature was writing its own tile-thumbnail measurement
+  straight onto the shared `item.width`/`item.height` fields — a
+  convenient shortcut, but wrong, since RotateFlip's fit-scale (and
+  `SlideManager`'s aspect-ratio open placeholder) read those same fields
+  expecting the full photo's true dimensions, not a thumbnail's. Fixed by
+  keeping Layout's auto-measurement cache private to the plugin; `item.
+width`/`item.height` now only ever reflect what the host explicitly
+  supplied. See DESIGN.md §4.5/§5.4 for the full investigation, including
+  an initial (disproven) theory about the loading placeholder.
 - Autoplay: a provider video's (e.g. YouTube) error event could go unheard
   after navigating to it — a regression from the `SlideManager` pool-slot
   relabeling change (see the `0.1.0-alpha.8` entry below). Autoplay used to
@@ -41,9 +54,68 @@ still include breaking changes).
   and stopped the slideshow — sometimes from inside the very `advance()`
   call trying to move past it. Fixed both: exhaustion now advances, and
   `beforeSlide` fires before the pause so Autoplay can detach first.
+- Vimeo embeds rendered wrong at every viewport shape tried, in sequence:
+  first as a small, fixed-size box in a corner (Vimeo's SDK sizes its own
+  wrapper div itself, regardless of the CSS already telling its `<iframe>`
+  to fill 100% of that box); then, once sized to its parent, cropped —
+  stretching to an arbitrary box ignored the video's own 16:9 shape,
+  pushing its bottom (and Vimeo's own controls bar, always along that
+  edge) below the visible area at any viewport that wasn't already 16:9
+  itself; then, once fitted to a real 16:9 box, a white background showed
+  in the resulting letterbox gap instead of Shoji's own dark one — neither
+  YouTube's nor Vimeo's own player page renders with a background matching
+  Shoji's theme there, and that content is cross-origin, unreachable from
+  here either way. Fixed by containing the embed within its slide at a
+  real 16:9 aspect ratio (CSS container query units — plain `aspect-ratio`
+  can't do this alone for a non-replaced element like a div/iframe), so
+  any gap lands outside the iframe, where Shoji's own backdrop shows
+  through instead of the provider's white.
+- Autoplay: a Vimeo video reached via the slideshow would never actually
+  play — it either silently skipped to the next slide, or (if the
+  slideshow was paused at exactly the right moment) started playing right
+  afterward, the tell that something already in flight was being
+  interrupted rather than never attempted. `ensureProviderPlaying()`'s
+  retry loop reissued `play()` on every retry — correct for YouTube's
+  fire-and-forget API, needed because a single command can silently get
+  dropped before its postMessage bridge is ready — but Vimeo's `play()`
+  genuinely returns a promise, and reissuing it resets the player's own
+  in-progress start each time, so it could never finish what the first
+  call had already begun. Now branches on whether `play()`'s return value
+  is genuinely thenable: a real promise is issued exactly once per
+  attempt cycle, only re-checking `.paused` afterward rather than calling
+  `play()` again.
+- Autoplay: a Vimeo video reaching its natural end stopped the slideshow
+  instead of advancing to the next slide. Vimeo's own `'pause'` event
+  arrives shortly _before_ `'ended'` when a video finishes (~20ms apart,
+  confirmed directly) — unlike native `<video>`, whose `.ended` property
+  the browser sets synchronously before firing either event, so Autoplay's
+  own real-pause-vs-natural-end check reliably lost the race and treated
+  the end as a manual pause. Fixed in the Vimeo renderer: `'pause'` is now
+  held back briefly and dropped entirely if `'ended'` arrives first, which
+  then becomes the only event a natural end produces; a genuine standalone
+  pause still dispatches, just delayed by that same short, imperceptible
+  window.
+
+### Removed
+
+- `wistia` as a `VideoDescriptor`/`data-shoji-video-provider` value. It was
+  never more than typed — no URL detection, no renderer, and no use case has
+  asked for it — so it's removed rather than left half-supported alongside
+  Vimeo's new real implementation below. `data-shoji-video-provider="wistia"`
+  now warns and falls back to normal auto-detection, same as any other
+  unrecognized value.
 
 ### Added
 
+- Video: Vimeo support, alongside the existing YouTube/HTML5 providers.
+  `data-shoji-video="https://vimeo.com/<id>"` (or `player.vimeo.com/video/<id>`,
+  or an unlisted video's `/<id>/<hash>` privacy-hash form) is now
+  auto-detected the same way a YouTube link already was — no explicit
+  `data-shoji-video-provider` needed — and `video: true`/`{ provider: 'vimeo' }`
+  get the same `src`-based id auto-fill in dynamic mode YouTube items have.
+  Fully integrates with Autoplay (play/pause/ended sync, the same video-aware
+  slideshow state machine) and the toolbar top-gutter fix, no provider-specific
+  work needed on either side.
 - Autoplay: `autoStart: boolean` (default `false`) starts the slideshow
   automatically as soon as the gallery opens, every `open()` not just the
   first, instead of requiring a click on the toolbar button or `Space`.

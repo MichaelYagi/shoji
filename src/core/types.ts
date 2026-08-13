@@ -51,21 +51,21 @@ export interface MediaSource {
 }
 
 /**
- * `'youtube'` is detected by core's DOM scanning too (§2.1) — cheap,
- * dependency-free URL parsing, not the provider's SDK. *Rendering* any
- * non-`'html5'` provider is a plugin's job (§4-video), via
+ * `'youtube'`/`'vimeo'` are detected by core's DOM scanning too (§2.1) —
+ * cheap, dependency-free URL parsing, not the provider's SDK. *Rendering*
+ * any non-`'html5'` provider is a plugin's job (§4-video), via
  * `ctx.ui.registerVideoProvider()` or `'custom'`'s own `render`.
  *
- * `id` is optional on the youtube/vimeo/wistia variant so dynamic-mode
- * hosts can write `video: { provider: 'youtube' }` and let `id` be filled
- * in from `src` (`scan.ts`'s `resolveDynamicVideoItems`) — same reasoning
- * as `video: true` above, just with the provider spelled out explicitly. A
- * rendered item with no `id` (src wasn't a recognized YouTube URL either)
- * shows a placeholder instead of a broken embed — see `youtube.ts`.
+ * `id` is optional on the youtube/vimeo variant so dynamic-mode hosts can
+ * write `video: { provider: 'youtube' }` and let `id` be filled in from
+ * `src` (`scan.ts`'s `resolveDynamicVideoItems`) — same reasoning as
+ * `video: true` above, just with the provider spelled out explicitly. A
+ * rendered item with no `id` (src wasn't a recognized URL either) shows a
+ * placeholder instead of a broken embed — see `youtube.ts`/`vimeo.ts`.
  */
 export type VideoDescriptor =
   | { provider: 'html5' }
-  | { provider: 'youtube' | 'vimeo' | 'wistia'; id?: string; url?: string }
+  | { provider: 'youtube' | 'vimeo'; id?: string; url?: string }
   | {
       provider: 'custom';
       /** Same contract as `plugin.ts`'s `VideoProviderRenderer` — see its doc comment. */

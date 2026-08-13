@@ -257,6 +257,59 @@ describe('Gallery — dynamic mode: YouTube video.id auto-fill from src', () => 
   });
 });
 
+describe('Gallery — dynamic mode: Vimeo video.id auto-fill from src', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('leaves an explicit video.id untouched, even if src would parse to a different id', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        {
+          id: 'a',
+          src: 'https://vimeo.com/00000000',
+          video: { provider: 'vimeo', id: '76979871' },
+        },
+      ],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'vimeo', id: '76979871' });
+  });
+
+  it('fills in video.id from src when missing and the URL is a recognized Vimeo link', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'https://vimeo.com/76979871', video: { provider: 'vimeo' } }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'vimeo', id: '76979871' });
+  });
+
+  it('warns and leaves video.id unset when missing and src is not a recognized Vimeo link', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'not-a-vimeo-url.mp4', video: { provider: 'vimeo' } }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'vimeo' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/item "a".*no id.*not-a-vimeo-url\.mp4/);
+  });
+
+  it('also fills in on updateSlides(), not just construction', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items: [] });
+
+    gallery.updateSlides([
+      { id: 'a', src: 'https://vimeo.com/76979871', video: { provider: 'vimeo' } },
+    ]);
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'vimeo', id: '76979871' });
+  });
+});
+
 describe('Gallery — dynamic mode: video: true (full inference from src)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -271,7 +324,16 @@ describe('Gallery — dynamic mode: video: true (full inference from src)', () =
     expect(gallery.items[0]?.video).toEqual({ provider: 'youtube', id: 'dQw4w9WgXcQ' });
   });
 
-  it('resolves to html5 when src is not a recognized YouTube URL', () => {
+  it('resolves to a vimeo descriptor when src is a recognized Vimeo URL', () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [{ id: 'a', src: 'https://vimeo.com/76979871', video: true }],
+    });
+
+    expect(gallery.items[0]?.video).toEqual({ provider: 'vimeo', id: '76979871' });
+  });
+
+  it('resolves to html5 when src is not a recognized YouTube or Vimeo URL', () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [{ id: 'a', src: 'clips/sunset.mp4', video: true }],

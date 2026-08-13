@@ -149,46 +149,48 @@ new Gallery('#gallery', { plugins: [Zoom] });</code></pre>
   &lt;/video&gt;
 &lt;/a&gt;</code></pre>
     <p>
-      A <code>data-shoji-video</code> URL pointing at YouTube is recognized too —
+      A <code>data-shoji-video</code> URL pointing at YouTube or Vimeo is recognized too —
       <code>&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ"&gt;</code> becomes a
-      <code>{ provider: 'youtube', id }</code> item automatically; anything else falls back to a
-      plain HTML5 source. Rendering it needs the <a href="./plugins.html">Video plugin</a>
-      (<code>Shoji.Video</code>) — core only detects the provider, it doesn't embed one.
+      <code>{ provider: 'youtube', id }</code> item automatically, and likewise
+      <code>&lt;a data-shoji-video="https://vimeo.com/76979871"&gt;</code> becomes
+      <code>{ provider: 'vimeo', id }</code>; anything else falls back to a plain HTML5 source.
+      Rendering either needs the
+      <a href="./plugins.html">Video plugin</a> (<code>Shoji.Video</code>) — core only detects the
+      provider, it doesn't embed one.
     </p>
     <p>
-      Detection covers <code>youtu.be/&lt;id&gt;</code>, <code>watch?v=</code>,
+      YouTube detection covers <code>youtu.be/&lt;id&gt;</code>, <code>watch?v=</code>,
       <code>/embed/</code>, <code>/shorts/</code>, <code>/live/</code> (streams/premieres),
-      <code>/v/</code> (legacy), and <code>youtube-nocookie.com</code> — but it's still just pattern
-      matching against known URL shapes, not a guarantee. An optional
-      <code>data-shoji-video-id</code> attribute overrides the id that would otherwise be parsed out
-      of the URL — useful either to rescue a URL shape detection doesn't recognize, or to skip
-      parsing entirely:
+      <code>/v/</code> (legacy), and <code>youtube-nocookie.com</code>. Vimeo detection covers
+      <code>vimeo.com/&lt;id&gt;</code> (including an unlisted video's
+      <code>/&lt;id&gt;/&lt;hash&gt;</code> privacy hash) and
+      <code>player.vimeo.com/video/&lt;id&gt;</code>. Both are still just pattern matching against
+      known URL shapes, not a guarantee. An optional <code>data-shoji-video-id</code> attribute
+      overrides the id that would otherwise be parsed out of the URL — useful either to rescue a URL
+      shape detection doesn't recognize, or to skip parsing entirely:
     </p>
     <pre><code>&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-video-id="dQw4w9WgXcQ"&gt;</code></pre>
     <p>
       The link (<code>data-shoji-video</code>) is still required either way — the id attribute only
       ever overrides the <em>id</em>, never the URL itself. If it's set but
-      <code>data-shoji-video</code> clearly isn't a YouTube host, it's ignored (falls back to html5)
-      with a console warning — same if it's set without any <code>data-shoji-video</code> at all, or
-      on a real <code>&lt;video&gt;</code> element (always html5, regardless).
+      <code>data-shoji-video</code> clearly isn't a recognized YouTube or Vimeo host, it's ignored
+      (falls back to html5) with a console warning — same if it's set without any
+      <code>data-shoji-video</code> at all, or on a real <code>&lt;video&gt;</code> element (always
+      html5, regardless).
     </p>
     <p>
       A third attribute, <code>data-shoji-video-provider</code>, declares the provider outright —
-      the DOM-mode equivalent of dynamic mode's explicit <code>video.provider</code>. It's what lets
-      a <code>data-shoji-video-id</code> be trusted even on a URL whose host isn't recognized as
-      YouTube (e.g. an internal proxy link), and it's the only way to build a
-      <code>vimeo</code>/<code>wistia</code> item in selector mode — neither has URL-based
-      detection, so an id has to be supplied explicitly alongside it:
+      the DOM-mode equivalent of dynamic mode's explicit <code>video.provider</code>. For
+      YouTube/Vimeo it just makes the claim explicit (still trusting the id even off a host neither
+      recognizes, e.g. an internal proxy link); <code>wistia</code> isn't a supported provider at
+      all — an unrecognized <code>data-shoji-video-provider</code> value is ignored with a warning
+      and falls back to normal auto-detection:
     </p>
     <pre><code>&lt;a
   data-shoji-video="https://youtu.be/dQw4w9WgXcQ"
   data-shoji-video-provider="youtube"
   data-shoji-video-id="dQw4w9WgXcQ"
 &gt;</code></pre>
-    <p>
-      No renderer exists for <code>vimeo</code>/<code>wistia</code> yet — those items scan correctly
-      but show the same placeholder as any provider without a registered renderer, until one exists.
-    </p>
 
     <h2>GalleryItem fields</h2>
     <p>

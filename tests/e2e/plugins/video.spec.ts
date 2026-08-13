@@ -1,18 +1,22 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * The only e2e coverage in this repo that depends on a real external
- * network call (loading YouTube's own IFrame Player API) — deliberately:
+ * The only e2e coverage in this repo that depends on real external network
+ * calls (loading YouTube's/Vimeo's own player SDKs) — deliberately:
  * confirming a real `<iframe>` actually loads isn't meaningfully testable
- * any other way, and `tests/unit/plugins/video-youtube.test.ts` already
- * covers the provider-renderer logic itself against a mocked `window.YT`.
- * Generous timeouts here account for that real network round trip, not
- * flakiness in Shoji's own code.
+ * any other way, and `tests/unit/plugins/video-youtube.test.ts`/
+ * `video-vimeo.test.ts` already cover each provider-renderer's own logic
+ * against a mocked `window.YT`/`window.Vimeo`. Generous timeouts here
+ * account for that real network round trip, not flakiness in Shoji's own
+ * code. Locates each fixture tile by its `data-shoji-id` rather than
+ * position (`.last()`) — `demo/pages/video.ts` mixes photo tiles ahead of
+ * both video tiles, and YouTube isn't the last one anymore now that Vimeo
+ * sits after it.
  */
 
 test('opens a YouTube slide and loads a real embed, replacing the spinner', async ({ page }) => {
   await page.goto('/pages/video.html');
-  await page.locator('#gallery > a').last().click();
+  await page.locator('[data-shoji-id="yt-1"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
   const container = page.locator('.shoji-slide-provider-video');
@@ -36,11 +40,11 @@ test('opens a YouTube slide and loads a real embed, replacing the spinner', asyn
   await expect(caption).toBeVisible();
 });
 
-test("the embed's iframe never renders under Shoji's own toolbar (top gutter, DESIGN.md §4-video)", async ({
+test("the YouTube embed's iframe never renders under Shoji's own toolbar (top gutter, DESIGN.md §4-video)", async ({
   page,
 }) => {
   await page.goto('/pages/video.html');
-  await page.locator('#gallery > a').last().click();
+  await page.locator('[data-shoji-id="yt-1"]').click();
 
   const container = page.locator('.shoji-slide-provider-video');
   await expect(container).toBeVisible({ timeout: 15000 });
@@ -58,11 +62,14 @@ test('Autoplay plays the YouTube embed and waits for its own ended state, not th
   page,
 }) => {
   await page.goto('/pages/video.html');
-  await page.locator('#gallery > a').last().click();
+  await page.locator('[data-shoji-id="yt-1"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
   const container = page.locator('.shoji-slide-provider-video');
   await expect(container).toBeVisible({ timeout: 15000 });
+
+  const beforeCounter = await page.locator('.shoji-counter').textContent();
+  const [beforeIndex] = beforeCounter!.split(' / ').map(Number);
 
   await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
 
@@ -86,11 +93,96 @@ test('Autoplay plays the YouTube embed and waits for its own ended state, not th
   // This part holds regardless of whether YouTube actually starts playing:
   // findPlayable() locating a playable provider container is what stops
   // enterSlide() from ever arming the fixed-interval timer for this slide
-  // (DESIGN.md §4.1) — confirm the slideshow is still sitting on the video
-  // well past the default 5000ms interval, not advanced by it.
-  await page.waitForTimeout(5500);
+  // (DESIGN.md §4.1) — confirm the slideshow hasn't advanced this early.
+  // Checked well before the default 5000ms interval could fire it, and
+  // before DESIGN.md §4.1 point 12's retry-exhaustion (~3.6s) could
+  // legitimately advance past a video whose play() never actually took —
+  // that's correct behavior in its own right, just not what this assertion
+  // is about, so it can't be allowed to race this one.
+  await page.waitForTimeout(2000);
   const counter = await page.locator('.shoji-counter').textContent();
   expect(counter).toMatch(/^\d+ \/ \d+$/);
-  const [current, total] = counter!.split(' / ').map(Number);
-  expect(current).toBe(total); // the video is the last tile in this fixture
+  const [current] = counter!.split(' / ').map(Number);
+  expect(current).toBe(beforeIndex);
+});
+
+test('opens a Vimeo slide and loads a real embed, replacing the spinner', async ({ page }) => {
+  await page.goto('/pages/video.html');
+  await page.locator('[data-shoji-id="vimeo-1"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const container = page.locator('.shoji-slide-provider-video');
+  await expect(container).toBeVisible({ timeout: 15000 });
+  await expect(container).not.toHaveAttribute('hidden', '');
+  await expect(page.locator('.shoji-slide-spinner')).toHaveCount(0);
+
+  const iframe = container.locator('iframe');
+  await expect(iframe).toHaveCount(1);
+  await expect(iframe).toHaveAttribute('src', /player\.vimeo\.com\/video\/1084537/);
+
+  const caption = page.locator('.shoji-caption');
+  await expect(caption).toBeHidden();
+  await expect(caption).toHaveText(/Big Buck Bunny/);
+
+  await page.locator('.shoji-caption-toggle').click();
+  await expect(caption).toBeVisible();
+});
+
+test("the Vimeo embed's iframe never renders under Shoji's own toolbar (top gutter, DESIGN.md §4-video)", async ({
+  page,
+}) => {
+  await page.goto('/pages/video.html');
+  await page.locator('[data-shoji-id="vimeo-1"]').click();
+
+  const container = page.locator('.shoji-slide-provider-video');
+  await expect(container).toBeVisible({ timeout: 15000 });
+
+  const toolbarBottom = await page
+    .locator('.shoji-toolbar')
+    .evaluate((el) => el.getBoundingClientRect().bottom);
+  const iframeTop = await container
+    .locator('iframe')
+    .evaluate((el) => el.getBoundingClientRect().top);
+  expect(iframeTop).toBeGreaterThanOrEqual(toolbarBottom);
+});
+
+test('Autoplay plays the Vimeo embed and waits for its own ended state, not the fixed interval', async ({
+  page,
+}) => {
+  await page.goto('/pages/video.html');
+  await page.locator('[data-shoji-id="vimeo-1"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const container = page.locator('.shoji-slide-provider-video');
+  await expect(container).toBeVisible({ timeout: 15000 });
+
+  const beforeCounter = await page.locator('.shoji-counter').textContent();
+  const [beforeIndex] = beforeCounter!.split(' / ').map(Number);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+
+  // Same CI infrastructure caveat as the YouTube test above (DESIGN.md §4.1
+  // point 10) — not asserted there. What was originally misdiagnosed here
+  // as an environment-level Cloudflare block turned out to be a real bug in
+  // ensureProviderPlaying() itself (DESIGN.md §4.1 point 12): reissuing
+  // play() on every retry reset Vimeo's own in-progress start each time, so
+  // it could never finish what the first call had already begun — fixed by
+  // calling a promise-returning play() (Vimeo) exactly once and only
+  // polling `.paused` afterward, never reissuing. Reliably verified outside
+  // CI once that fix landed.
+  if (!process.env.CI) {
+    await expect
+      .poll(async () => container.evaluate((el: HTMLElement & { paused?: boolean }) => el.paused), {
+        timeout: 10000,
+      })
+      .toBe(false);
+  }
+
+  // Same reasoning as the YouTube test above — checked early enough to
+  // avoid racing point 12's own retry-exhaustion advance.
+  await page.waitForTimeout(2000);
+  const counter = await page.locator('.shoji-counter').textContent();
+  expect(counter).toMatch(/^\d+ \/ \d+$/);
+  const [current] = counter!.split(' / ').map(Number);
+  expect(current).toBe(beforeIndex);
 });

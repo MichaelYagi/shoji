@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Shoji Demo — Video (YouTube)</title>
+    <title>Shoji Demo — Video (YouTube + Vimeo)</title>
     <link rel="stylesheet" href="../demo.css" />
   </head>
   <body>
@@ -16,22 +16,24 @@
       <a href="./infinite-scroll.html">Infinite scroll</a>
       <a href="./layout.html">Layout (masonry)</a>
       <a href="./transitions.html">Transitions</a>
-      <a href="./video.html" aria-current="page">Video (YouTube)</a>
+      <a href="./video.html" aria-current="page">Video (YouTube + Vimeo)</a>
     </nav>
     <p>
-      <code>Shoji.Video</code> renders a <code>{ provider: 'youtube', id }</code> item as a real
-      YouTube embed — core's own native-<code>&lt;video&gt;</code> rendering can't play a YouTube
-      URL at all. The last tile below is a plain
-      <code>data-shoji-video="https://youtu.be/..."</code> link; Shoji's page scanning recognizes
-      the host and extracts the video ID automatically, no JS item-authoring needed. No
-      poster/thumbnail handling by Shoji itself — the grid tile's own <code>&lt;img&gt;</code> is
-      just an ordinary page thumbnail the host supplies, unrelated to the lightbox slide. Autoplay
-      is enabled too: press play (or <kbd>Space</kbd>) and it waits for the real YouTube player's
-      own <code>ended</code> state before advancing, the same video-aware slideshow behavior a
-      native <code>&lt;video&gt;</code> slide gets. Notice the caption starts hidden on this video
-      slide — a caption sitting over the player's own controls would block them, so a toolbar toggle
-      button reveals it on demand instead (<code>showVideoCaption: true</code> flips the default;
-      see the <a href="../../docs/guides/settings.html">Settings guide</a>).
+      <code>Shoji.Video</code> renders a <code>{ provider: 'youtube' | 'vimeo', id }</code> item as
+      a real embed — core's own native-<code>&lt;video&gt;</code> rendering can't play either URL at
+      all. Two tiles below (with a plain photo tile between them, so neither preloads as the other's
+      neighbor) are plain <code>data-shoji-video="https://youtu.be/..."</code>/<code
+        >data-shoji-video="https://vimeo.com/..."</code
+      >
+      links; Shoji's page scanning recognizes both hosts and extracts the video ID automatically, no
+      JS item-authoring needed. No poster/thumbnail handling by Shoji itself — the grid tile's own
+      <code>&lt;img&gt;</code> is just an ordinary page thumbnail the host supplies, unrelated to
+      the lightbox slide. Autoplay is enabled too: press play (or <kbd>Space</kbd>) and it waits for
+      the real player's own <code>ended</code> state before advancing, the same video-aware
+      slideshow behavior a native <code>&lt;video&gt;</code> slide gets. Notice the caption starts
+      hidden on a video slide — a caption sitting over the player's own controls would block them,
+      so a toolbar toggle button reveals it on demand instead (<code>showVideoCaption: true</code>
+      flips the default; see the <a href="../../docs/guides/settings.html">Settings guide</a>).
     </p>
     <div id="gallery" class="thumb-grid"></div>
     <p id="status">Shoji not yet initialized.</p>
