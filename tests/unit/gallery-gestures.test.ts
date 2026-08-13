@@ -235,7 +235,8 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     const d = dialog();
     firePointer(d, 'pointerdown', { clientX: 10, clientY: 10, timeStamp: 0 });
     firePointer(d, 'pointerup', { clientX: 10, clientY: 10, timeStamp: 50 });
-    expect(onTap).toHaveBeenCalledWith({ x: 10, y: 10 });
+    // controlsWereHidden: false — controls are freshly opened, not auto-hidden yet.
+    expect(onTap).toHaveBeenCalledWith({ x: 10, y: 10, controlsWereHidden: false });
 
     firePointer(d, 'pointerdown', { clientX: 10, clientY: 10, timeStamp: 100 });
     firePointer(d, 'pointerup', { clientX: 10, clientY: 10, timeStamp: 150 });

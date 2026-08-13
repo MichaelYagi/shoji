@@ -47,6 +47,33 @@ function activeVideo(): HTMLVideoElement | null {
   return (document.querySelector('.shoji-slide-media video') as HTMLVideoElement) ?? null;
 }
 
+function dialog(): HTMLElement {
+  return document.querySelector('.shoji-dialog') as HTMLElement;
+}
+
+/** A pointerdown→pointerup pair close enough together (in both time and position) registers as a tap — same real gesture path a viewer's finger/mouse takes, not a synthetic 'tap' bus event (Gallery.ts doesn't expose one to construct directly). */
+function tap(target: EventTarget, x = 10, y = 10, timeStamp = 0): void {
+  firePointer(target, 'pointerdown', { clientX: x, clientY: y, timeStamp });
+  firePointer(target, 'pointerup', { clientX: x, clientY: y, timeStamp: timeStamp + 20 });
+}
+
+function firePointer(
+  target: EventTarget,
+  type: string,
+  opts: { clientX?: number; clientY?: number; timeStamp?: number } = {},
+): void {
+  const event = new PointerEvent(type, {
+    clientX: opts.clientX ?? 0,
+    clientY: opts.clientY ?? 0,
+    pointerId: 1,
+    isPrimary: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, 'timeStamp', { value: opts.timeStamp ?? 0, configurable: true });
+  target.dispatchEvent(event);
+}
+
 describe('Autoplay — button & basic timing', () => {
   it('inserts a play button in the toolbar, starting in the "Play" state', () => {
     const gallery = makeGallery();
@@ -932,5 +959,151 @@ describe('Autoplay — autoStart', () => {
 
     expect(document.querySelector('.shoji-autoplay-toggle')).toBe(toggleButton());
     gallery.destroy();
+  });
+});
+
+describe('Autoplay — tap-to-toggle on an image slide', () => {
+  it('pauses the slideshow on a tap, after a short delay to rule out the first half of a double-tap', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0); // items[0] — image
+    click(toggleButton());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    tap(dialog());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // not yet — still pending
+    vi.advanceTimersByTime(300);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
+
+    gallery.destroy();
+  });
+
+  it('resumes the slideshow on a tap while it is paused — a full toggle, not pause-only', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // not started
+
+    tap(dialog());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // not yet — still pending
+    vi.advanceTimersByTime(300);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    gallery.destroy();
+  });
+
+  it('does not pause on a tap while the active slide is a video — its own controls (play overlay, native/provider) are the surface for that, not this', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(2); // items[2] — video
+    click(toggleButton());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    tap(dialog());
+    vi.advanceTimersByTime(300);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // unaffected
+
+    gallery.destroy();
+  });
+
+  it('does not resume on a tap while paused on a video slide either — images only, in both directions', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(2); // items[2] — video, never started
+
+    tap(dialog());
+    vi.advanceTimersByTime(300);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // still not started
+
+    gallery.destroy();
+  });
+
+  it('a double-tap (zoom gesture) cancels the pending pause entirely — tapping to zoom must not also pause', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+
+    tap(dialog(), 10, 10, 0);
+    tap(dialog(), 10, 10, 100); // within DOUBLE_TAP_MAX_DELAY_MS/DISTANCE of the first — a doubleTap
+    vi.advanceTimersByTime(1000); // comfortably past the 300ms pause delay
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // never paused
+
+    gallery.destroy();
+  });
+
+  it('a double-tap while paused cancels the pending resume too — zooming a paused image must not accidentally restart the slideshow', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0); // never started
+
+    tap(dialog(), 10, 10, 0);
+    tap(dialog(), 10, 10, 100); // a doubleTap
+    vi.advanceTimersByTime(1000);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // never resumed
+
+    gallery.destroy();
+  });
+
+  it('navigating away before the pause delay elapses cancels it — a tap on the slide just left must not pause whatever is active now', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+
+    tap(dialog());
+    gallery.next(); // items[1] — still an image, but a different slide than the one tapped
+    vi.advanceTimersByTime(300);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // still running
+
+    gallery.destroy();
+  });
+
+  it('hides the controls overlay on tap if it was already visible — the same tap-to-toggle-chrome pattern video players use', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+    expect(gallery.controlsHidden).toBe(false); // freshly opened, not auto-hidden yet
+
+    tap(dialog());
+    vi.advanceTimersByTime(300);
+    expect(gallery.controlsHidden).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it("does not re-hide the overlay if it was already hidden — this tap's own pointerdown already revealed it for free, nothing left to toggle", () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+    // Forced directly rather than waiting out the real (default 5000ms)
+    // auto-hide timer — which, on a tap's own pointerdown-triggered reveal
+    // below, gets rearmed fresh for another 5000ms, comfortably outside
+    // this test's 300ms window either way; using the default (instead of a
+    // short custom autoHideDelay) is what keeps that rearmed timer from
+    // confounding the assertion at the bottom of this test.
+    gallery.hideControls();
+    expect(gallery.controlsHidden).toBe(true);
+
+    tap(dialog()); // pointerdown reveals it immediately (Gallery's own onActivity), same as before this feature
+    expect(gallery.controlsHidden).toBe(false);
+    vi.advanceTimersByTime(300);
+    expect(gallery.controlsHidden).toBe(false); // still revealed — not flashed-then-hidden
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // pause itself still applies
+
+    gallery.destroy();
+  });
+
+  it('destroy() while a tap-triggered pause is still pending does not throw or fire after teardown', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+
+    tap(dialog());
+    expect(() => gallery.destroy()).not.toThrow();
+    expect(() => vi.advanceTimersByTime(300)).not.toThrow();
   });
 });

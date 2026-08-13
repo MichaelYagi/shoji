@@ -7,6 +7,18 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- Autoplay: tapping/clicking a photo slide (not video — its own controls
+  already cover this) now toggles the slideshow, same as the toolbar
+  button — pauses if running, resumes if paused. A double-tap to zoom
+  (Zoom plugin) is unaffected: the toggle is held for a brief window and
+  dropped entirely if a second tap arrives, so tapping to zoom never also
+  pauses or resumes. Also toggles the auto-hide controls overlay on the
+  same tap: hides it if it was already visible, leaves it alone (already
+  revealed for free) if it was hidden. `Gallery.hideControls()` is now
+  public.
+
 ## [0.1.0-alpha.10] - 2026-08-12
 
 ### Changed

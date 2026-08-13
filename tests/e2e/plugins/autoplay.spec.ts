@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type ElementHandle } from '@playwright/test';
 
 /**
  * Real timer-driven advance — the video-interrupt state machine (§4.1) is
@@ -13,6 +13,23 @@ async function openLightbox(page: Page): Promise<void> {
   await page.goto('/pages/e2e-plugins.html');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
+}
+
+// Same lookup as tests/e2e/plugins/zoom.spec.ts's own — the slide pool keeps
+// multiple `.shoji-slide-media` elements in the DOM at once (preload), so a
+// plain CSS locator can't reliably pick out the active one.
+type GalleryHandle = { getActiveMedia(): HTMLElement | null };
+
+async function activeImgHandle(page: Page): Promise<ElementHandle<HTMLImageElement>> {
+  const handle = await page.evaluateHandle(() => {
+    const media = (
+      window as unknown as { __shojiGallery: GalleryHandle }
+    ).__shojiGallery.getActiveMedia();
+    return media?.firstElementChild as HTMLImageElement | undefined;
+  });
+  const el = handle.asElement() as ElementHandle<HTMLImageElement> | null;
+  if (!el) throw new Error('no active image found');
+  return el;
 }
 
 test('play button starts auto-advance and flips to a pause label', async ({ page }) => {
@@ -63,4 +80,44 @@ test('loops back to the first slide after the last, by default (loop: true)', as
   await expect
     .poll(() => page.locator('.shoji-counter').textContent(), { timeout: 3000 })
     .toBe('1 / 4');
+});
+
+test('tapping/clicking a photo slide toggles play/pause, same as the toolbar button', async ({
+  page,
+}) => {
+  // A long interval — the default 300ms page interval would otherwise race
+  // Autoplay's own 300ms tap-toggle decision window (see e2e-plugins.ts's
+  // own comment): whichever fires first wins, and the interval's own
+  // advance() cancels the pending tap-toggle via beforeSlide, an unrelated
+  // false failure that has nothing to do with what this test checks.
+  await page.goto('/pages/e2e-plugins.html?interval=10000');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
+
+  await (await activeImgHandle(page)).click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toBeVisible();
+
+  await (await activeImgHandle(page)).click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
+});
+
+test('a double-click to zoom does not also pause the slideshow — the first half of the zoom gesture is held back long enough to see the second half coming', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html?interval=10000'); // see previous test's comment on why
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+
+  await (await activeImgHandle(page)).dblclick();
+  await expect
+    .poll(async () => (await activeImgHandle(page)).evaluate((el) => el.style.transform))
+    .toMatch(/scale3d\(2/); // zoomed in — confirms the dblclick genuinely registered as a zoom gesture
+
+  // Comfortably past the 300ms toggle-decision window — never paused.
+  await page.waitForTimeout(500);
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
 });

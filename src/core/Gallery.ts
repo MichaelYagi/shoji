@@ -178,6 +178,12 @@ export class Gallery {
     this.scheduleAutoHide();
   };
 
+  /** x */
+  private controlsHiddenAtGestureStart = false;
+  private readonly captureGestureStartState = (): void => {
+    this.controlsHiddenAtGestureStart = this.autoHidden;
+  };
+
   private readonly onKeydown = (event: KeyboardEvent): void => {
     // A focused <video>'s native controls own arrow/space/home/end for
     // seeking, volume, and play/pause — don't let slide navigation hijack
@@ -340,6 +346,8 @@ export class Gallery {
     });
     dom.outer.addEventListener('click', this.onOuterClick);
     dom.outer.addEventListener('pointermove', this.onActivity, { passive: true });
+    // Registered before onActivity's own pointerdown listener — order matters, see captureGestureStartState's doc comment.
+    dom.outer.addEventListener('pointerdown', this.captureGestureStartState, { passive: true });
     dom.outer.addEventListener('pointerdown', this.onActivity, { passive: true });
     dom.outer.addEventListener('touchstart', this.onActivity, { passive: true });
     dom.outer.addEventListener('wheel', this.onActivity, { passive: true });
@@ -388,7 +396,12 @@ export class Gallery {
         isZoomed: () => this.zoomGate?.() ?? false,
       },
       {
-        onTap: (x, y) => this.bus.emit('tap', { x, y }),
+        onTap: (x, y) =>
+          this.bus.emit('tap', {
+            x,
+            y,
+            controlsWereHidden: this.controlsHiddenAtGestureStart,
+          }),
         onDoubleTap: (x, y) => this.bus.emit('doubleTap', { x, y }),
         onPinchStart: (centerX, centerY) => this.bus.emit('pinchStart', { centerX, centerY }),
         onPinchMove: (scale, centerX, centerY) =>
@@ -586,7 +599,8 @@ export class Gallery {
     this.autoHideTimer = setTimeout(() => this.hideControls(), this.autoHideDelay);
   }
 
-  private hideControls(): void {
+  /** Forces the same fade §2.8's idle timer would eventually trigger — public so a plugin can hide controls on its own trigger. Same `isControlActive()` guard as the timer. */
+  hideControls(): void {
     if (!this.dom || this.autoHidden || this.isControlActive()) return;
     this.autoHidden = true;
     this.dom.dialog.classList.add('shoji-controls-hidden');

@@ -42,6 +42,12 @@ function isPendingProviderVideo(media: HTMLElement | null): boolean {
 const PROVIDER_PLAY_RETRY_MS = 400;
 const MAX_PROVIDER_PLAY_ATTEMPTS = 8; // + the initial attempt = 9 total, ~3.6s before giving up
 
+// Intentionally matches GestureEngine's own DOUBLE_TAP_MAX_DELAY_MS (not
+// imported — plugins don't reach into src/gestures directly, same boundary
+// every other plugin already respects). See the tap-toggle wiring below
+// for why this delay exists at all.
+const TAP_TOGGLE_DELAY_MS = 300;
+
 export interface AutoplayOptions {
   /** Milliseconds between advances for timed (photo) slides. Default `5000`. */
   interval?: number;
@@ -77,6 +83,7 @@ export const Autoplay: ShojiPlugin = {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let currentVideo: PlayableMedia | null = null;
     let awaitingProviderVideo = false;
+    let pendingTapTimer: ReturnType<typeof setTimeout> | null = null;
 
     // A real bug, regression: this used to capture gallery.getActiveMedia()
     // once here and listen on that node directly, back when a pool slot's
@@ -323,6 +330,56 @@ export const Autoplay: ShojiPlugin = {
       else start();
     }
 
+    function clearPendingTap(): void {
+      if (pendingTapTimer !== null) {
+        clearTimeout(pendingTapTimer);
+        pendingTapTimer = null;
+      }
+    }
+
+    /**
+     * Tapping an image slide toggles the slideshow — pauses if running,
+     * resumes if paused — asked for directly, scoped to images only (a tap
+     * on a video slide is its own, separate control surface — play overlay,
+     * native/provider controls — already reachable without this). Held for
+     * `TAP_TOGGLE_DELAY_MS` rather than acting immediately: `tap` fires the
+     * instant a single tap resolves, before the gesture engine can know
+     * whether a second tap is about to land and turn it into a `doubleTap`
+     * (Zoom's double-tap-to-zoom, §4.6) — toggling on the first half of a
+     * zoom gesture would be a real, reported-as-a-concern annoyance
+     * (imagine tapping to zoom and accidentally pausing — or worse,
+     * resuming a slideshow you'd deliberately paused to look closer). If a
+     * `doubleTap` does land in that window, the pending toggle below is
+     * dropped entirely; a genuine single tap just toggles a beat later,
+     * imperceptibly. Re-checks "still an image slide" and that `playing`
+     * hasn't changed by other means (the toolbar button, a stray navigation)
+     * at fire time too, not just when the tap first came in — 300ms is
+     * enough room for either to have happened already.
+     *
+     * `controlsWereHidden` (Gallery.ts's own doc comment on the `tap` event
+     * explains why this can't just be a live read) drives real toggle
+     * semantics for the auto-hide overlay too, independent of play/pause
+     * direction: if it was already hidden, this tap's own pointerdown
+     * already revealed it for free (Gallery's existing auto-hide-on-activity
+     * behavior) — nothing more to do. If it was already visible, this tap
+     * hides it back down, the same tap-to-toggle-chrome pattern video
+     * players use.
+     */
+    const offTap = ctx.on('tap', ({ controlsWereHidden }) => {
+      if (gallery.items[gallery.currentIndex]?.video) return;
+      clearPendingTap();
+      const wasPlaying = playing;
+      pendingTapTimer = setTimeout(() => {
+        pendingTapTimer = null;
+        if (gallery.items[gallery.currentIndex]?.video) return;
+        if (playing !== wasPlaying) return; // already toggled by other means
+        if (wasPlaying) stop();
+        else start();
+        if (!controlsWereHidden) gallery.hideControls();
+      }, TAP_TOGGLE_DELAY_MS);
+    });
+    const offDoubleTap = ctx.on('doubleTap', () => clearPendingTap());
+
     button.addEventListener('click', toggle);
 
     // 'right' — clusters immediately before the close button, per DESIGN.md §3.1.
@@ -336,7 +393,16 @@ export const Autoplay: ShojiPlugin = {
     // afterSlide handler below ever runs. enterSlide() below also calls
     // detachVideo(), but by then it's too late for *this* transition; that
     // call is what handles the slide *after* this one instead.
-    const offBeforeSlide = ctx.on('beforeSlide', () => detachVideo());
+    // clearPendingTap(): a navigation landing inside the tap-to-pause
+    // window above (tap, then immediately swipe/arrow-key away before it
+    // fires) shouldn't pause/hide based on a tap that happened on the slide
+    // just left — the fire-time re-checks above already guard against most
+    // of this, but the *slide itself* having changed out from under a
+    // still-image check is exactly the gap they can't close on their own.
+    const offBeforeSlide = ctx.on('beforeSlide', () => {
+      detachVideo();
+      clearPendingTap();
+    });
     // Any slide change — autoplay's own next(), or the viewer manually
     // navigating mid-slideshow via arrows/buttons/goTo() — re-enters here,
     // tearing down the previous slide's timer/video listeners and setting
@@ -362,6 +428,7 @@ export const Autoplay: ShojiPlugin = {
 
     return () => {
       stop();
+      clearPendingTap();
       outer.removeEventListener('error', onVideoError);
       removeButton();
       removeProgress?.();
@@ -371,6 +438,8 @@ export const Autoplay: ShojiPlugin = {
       offSlideItemLoad();
       offOpen();
       offClose();
+      offTap();
+      offDoubleTap();
     };
   },
 };

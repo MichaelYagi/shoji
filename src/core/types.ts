@@ -215,7 +215,15 @@ export interface GalleryEvents extends Record<string, unknown> {
    * without core depending on that plugin existing. Coordinates are
    * viewport (client) pixels, same as the underlying PointerEvent/WheelEvent.
    */
-  tap: { x: number; y: number };
+  /**
+   * `controlsWereHidden` is a snapshot from *before* this same gesture's own
+   * pointerdown-triggered reveal (Gallery.ts's `onActivity`) ran — a live
+   * read of `gallery.controlsHidden` at tap time would always say "visible"
+   * regardless, since that reveal already happened by then. Lets a consumer
+   * (e.g. Autoplay's tap-to-hide on an image slide) implement real toggle
+   * semantics instead of just re-hiding whatever this tap itself revealed.
+   */
+  tap: { x: number; y: number; controlsWereHidden: boolean };
   doubleTap: { x: number; y: number };
   pinchStart: { centerX: number; centerY: number };
   /** scale is relative to this pinch gesture's own start distance (1 = unchanged), not cumulative across separate pinches. */
