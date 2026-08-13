@@ -1,6 +1,7 @@
 import { PLAY_ICON } from './icons';
 import type { VideoProviderRenderer } from './plugin';
 import type { GalleryItem } from './types';
+import { containedBox } from './zoomTransition';
 
 /** Native scrub-bar dragging genuinely pauses `<video>` for its duration — showing the play-overlay immediately on every `pause` would flash it on every seek. Long enough to swallow that, short enough a real pause doesn't feel delayed. */
 const PAUSE_OVERLAY_DELAY_MS = 200;
@@ -191,7 +192,9 @@ export class SlideManager {
       releaseVideo(slot.media);
       slot.media.replaceChildren(createSpinner());
       if (index === centerIndex && openPlaceholderSrc) {
-        this.revealOpenPlaceholder(openPlaceholderSrc, slot, index);
+        const naturalSize =
+          item.width && item.height ? { width: item.width, height: item.height } : undefined;
+        this.revealOpenPlaceholder(openPlaceholderSrc, slot, index, naturalSize);
       }
 
       if (item.video?.provider === 'html5') {
@@ -296,8 +299,28 @@ export class SlideManager {
     }
   }
 
-  /** DESIGN.md §2.3 — swaps the spinner for the placeholder once *it* decodes, not immediately: `item.thumb` is often just `item.src` again, so an undecoded placeholder can leave as long a blank gap as the spinner it replaces. */
-  private revealOpenPlaceholder(src: string, slot: Slot, index: number): void {
+  /**
+   * DESIGN.md §2.3 — swaps the spinner for the placeholder once *it*
+   * decodes, not immediately: `item.thumb` is often just `item.src` again,
+   * so an undecoded placeholder can leave as long a blank gap as the
+   * spinner it replaces.
+   *
+   * A real bug: `.shoji-slide-open-placeholder`'s CSS unconditionally
+   * force-fills the frame (deliberate default: a real photo is usually
+   * bigger than the dialog). Wrong for a genuinely small photo with known
+   * `item.width`/`item.height` — same "grows too big, snaps down once real"
+   * symptom the zoom-in transition itself had (§2.3b), but that fix only
+   * governs the animated *transform*, not this placeholder's own CSS box
+   * once it settles. When `naturalSize` is known, sizes the placeholder
+   * explicitly instead, reusing `containedBox` (`zoomTransition.ts`) —
+   * unknown-size items keep the original force-fill guess.
+   */
+  private revealOpenPlaceholder(
+    src: string,
+    slot: Slot,
+    index: number,
+    naturalSize?: { width: number; height: number },
+  ): void {
     const img = createOpenPlaceholder(src);
     const reveal = (): void => {
       if (slot.assignedIndex !== index || slot.ready) return; // stale, or the real content already won the race
@@ -305,6 +328,16 @@ export class SlideManager {
       // have already appended its own (still-hidden) container alongside it.
       slot.media.querySelector('.shoji-slide-spinner')?.remove();
       slot.media.appendChild(img);
+      if (naturalSize) {
+        const containerRect = slot.media.getBoundingClientRect();
+        const box = containedBox(
+          { left: 0, top: 0, width: containerRect.width, height: containerRect.height },
+          naturalSize.width / naturalSize.height,
+          naturalSize,
+        );
+        img.style.width = `${box.width}px`;
+        img.style.height = `${box.height}px`;
+      }
     };
     if (typeof img.decode === 'function') {
       img.decode().then(reveal, reveal);

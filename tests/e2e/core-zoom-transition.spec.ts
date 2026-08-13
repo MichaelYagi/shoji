@@ -159,3 +159,77 @@ test("open() computes the zoom-in transform against the real photo's own small n
   // instead, would compute a scale roughly an order of magnitude smaller.
   expect(scale).toBeCloseTo(0.5, 1);
 });
+
+/**
+ * DESIGN.md §2.3 — a second, separate real bug found investigating the same
+ * report: even with the zoom-in transform itself fixed (previous test), a
+ * small photo still visibly ballooned to fill the dialog while its
+ * `item.thumb`-sourced open placeholder was showing — a *different* code
+ * path (SlideManager's `revealOpenPlaceholder`/`createOpenPlaceholder`),
+ * whose CSS unconditionally forces it to `width/height: 100%` of the slide
+ * frame, deliberately, as a stand-in for the common "this is probably a big
+ * photo" case. It has nothing to do with the FLIP transform, which had
+ * already settled to its natural (still full-size) resting state by the
+ * time this placeholder is even visible — fixed separately, by sizing the
+ * placeholder explicitly from `item.width`/`height` when known, instead of
+ * always force-filling. `page.route` holds the real image's own request
+ * open indefinitely so the placeholder stays up long enough to measure —
+ * both `thumb`/`src` point at fake paths; the real image "loading forever"
+ * is what keeps the placeholder the thing on screen to check.
+ */
+test("the open placeholder is capped at the real photo's own small native size too, not just the FLIP transform — stays capped after the transform settles, for as long as the real image is still loading", async ({
+  page,
+}) => {
+  await page.route('**/full-photo.jpg', () => {}); // never resolves — holds the real image loading forever
+  await page.goto('/pages/e2e-plugins.html');
+
+  const result = await page.evaluate(
+    async ({ corePath }) => {
+      const { Gallery } = await import(/* @vite-ignore */ corePath);
+
+      const marker = document.createElement('div');
+      marker.setAttribute('data-shoji-id', 'p');
+      Object.assign(marker.style, {
+        position: 'fixed',
+        top: '10px',
+        left: '10px',
+        width: '50px',
+        height: '40px',
+      });
+      document.body.appendChild(marker);
+
+      const mount = document.createElement('div');
+      document.body.appendChild(mount);
+      const gallery = new Gallery(mount, {
+        items: [{ id: 'p', src: 'full-photo.jpg', thumb: 'thumb.jpg', width: 100, height: 80 }],
+        preload: 0,
+      });
+
+      gallery.open(0);
+      // Let the placeholder's own (fast — a genuinely broken/missing image,
+      // but decode()'s rejection still reveals it the same as success would)
+      // decode settle, without waiting on the real (deliberately held-open)
+      // image at all.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const outers = document.querySelectorAll('.shoji-outer');
+      const myOuter = outers[outers.length - 1] as HTMLElement;
+      const placeholder = myOuter.querySelector(
+        '.shoji-slide-open-placeholder',
+      ) as HTMLElement | null;
+      const rect = placeholder?.getBoundingClientRect();
+
+      gallery.destroy();
+      marker.remove();
+
+      return { found: !!placeholder, width: rect?.width, height: rect?.height };
+    },
+    { corePath: corePath() },
+  );
+
+  expect(result.found).toBe(true);
+  // Capped at the real 100x80 — not anywhere near the dialog's own much
+  // larger size (hundreds of px on any real viewport this runs at).
+  expect(result.width).toBeLessThanOrEqual(101);
+  expect(result.height).toBeLessThanOrEqual(81);
+});

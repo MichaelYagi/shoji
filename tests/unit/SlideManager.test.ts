@@ -227,6 +227,89 @@ describe('SlideManager', () => {
       expect(real.style.transform).toBe('');
       expect(real.style.opacity).toBe('');
     });
+
+    it("regression: caps the placeholder at the real photo's own known size (item.width/height) instead of always force-filling the frame — reported from real usage: a genuinely small photo blew up to fill the dialog while the placeholder showed, then snapped back down to its true size once the real image loaded, even though item.width/height were supplied", async () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      const smallItems: GalleryItem[] = [
+        { id: 'small', src: 'full.jpg', thumb: 'thumb.jpg', width: 239, height: 339 },
+      ];
+      // Both the placeholder's own decode() and the real image's happen
+      // within the same render() call — a single shared resolver would only
+      // ever capture the *last* one assigned (the real image's, per
+      // ensureImageDecoding running right after revealOpenPlaceholder),
+      // leaving the placeholder's own decode permanently pending. Keyed by
+      // src instead, same pattern as this file's first placeholder test.
+      const resolvers = new Map<string, () => void>();
+      HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+        return new Promise<void>((resolve) => resolvers.set(this.src, resolve));
+      });
+      const resolveDecodeFor = (urlSubstring: string): void => {
+        const entry = [...resolvers].find(([src]) => src.includes(urlSubstring));
+        if (!entry) throw new Error(`no pending decode for ${urlSubstring}`);
+        resolvers.delete(entry[0]);
+        entry[1]();
+      };
+
+      manager.render(smallItems, 0, vi.fn(), 'thumb.jpg');
+      const media = manager.element.querySelector('.shoji-slide-media') as HTMLElement;
+      vi.spyOn(media, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        left: 0,
+        right: 1200,
+        bottom: 800,
+        width: 1200,
+        height: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      resolveDecodeFor('thumb.jpg');
+      await flush();
+
+      const placeholder = manager.element.querySelector(
+        'img.shoji-slide-open-placeholder',
+      ) as HTMLImageElement;
+      expect(placeholder).not.toBeNull();
+      // Capped at the real 239x339 (height-constrained in a 1200x800
+      // container: contained box would otherwise be 800*239/339 = 564x800,
+      // both still over the real size, so capped to exactly 239x339) —
+      // not force-filled to anywhere near the 1200x800 container.
+      expect(parseFloat(placeholder.style.width)).toBeCloseTo(239, 3);
+      expect(parseFloat(placeholder.style.height)).toBeCloseTo(339, 3);
+    });
+
+    it('leaves the placeholder to its default CSS force-fill sizing when item.width/height are not known — no inline size to guess from', async () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      const resolvers = new Map<string, () => void>();
+      HTMLImageElement.prototype.decode = vi.fn(function (this: HTMLImageElement) {
+        return new Promise<void>((resolve) => resolvers.set(this.src, resolve));
+      });
+      const resolveDecodeFor = (urlSubstring: string): void => {
+        const entry = [...resolvers].find(([src]) => src.includes(urlSubstring));
+        if (!entry) throw new Error(`no pending decode for ${urlSubstring}`);
+        resolvers.delete(entry[0]);
+        entry[1]();
+      };
+
+      manager.render(items, 1, vi.fn(), 'thumb-b.jpg'); // items[1] ('b') has no width/height
+      resolveDecodeFor('thumb-b.jpg');
+      await flush();
+
+      const placeholder = manager.element.querySelector(
+        'img.shoji-slide-open-placeholder',
+      ) as HTMLImageElement;
+      expect(placeholder).not.toBeNull();
+      expect(placeholder.style.width).toBe('');
+      expect(placeholder.style.height).toBe('');
+    });
   });
 
   it('preload keeps neighbors decoded ahead of time — navigating to one shows it instantly, no spinner, onLoad fires synchronously', async () => {

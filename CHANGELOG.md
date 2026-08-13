@@ -19,6 +19,13 @@ still include breaking changes).
   CSS already enforces once loaded. Photos without explicit dimensions are
   unaffected — there's no way to know a small photo's true size before its
   file starts loading.
+- The fix above wasn't actually sufficient on its own: the open-transition
+  placeholder (the low-res stand-in shown while the real photo loads) has
+  its own separate CSS forcing it to fill the entire dialog, unrelated to
+  the animation fixed above — so a small photo still visibly ballooned
+  while the placeholder was showing, even after that fix. Now sized
+  explicitly from `item.width`/`item.height` too, when known, instead of
+  always force-filling.
 
 ### Added
 

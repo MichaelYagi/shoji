@@ -24,15 +24,15 @@ function parseCssTime(value: string): number {
   return 0;
 }
 
-interface Box {
+export interface Box {
   left: number;
   top: number;
   width: number;
   height: number;
 }
 
-/** The `object-fit: contain` box for `aspectRatio` within `container`, computed analytically since the real image may not be loaded yet. `naturalSize`, when known, caps the result at the photo's own true pixel size — never stretches past native resolution, same rule `.shoji-slide-img`'s CSS already enforces on the loaded image. */
-function containedBox(
+/** The `object-fit: contain` box for `aspectRatio` within `container`, computed analytically since the real image may not be loaded yet. `naturalSize` caps the result at the photo's own true pixel size, never stretching past native resolution. Exported — `SlideManager.ts`'s open-transition placeholder (§2.3) reuses this same math. */
+export function containedBox(
   container: Box,
   aspectRatio: number,
   naturalSize?: { width: number; height: number },
