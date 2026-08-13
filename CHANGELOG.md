@@ -7,6 +7,21 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-08-12
+
+### Changed
+
+- Vimeo e2e coverage: CI runners were increasingly seeing Vimeo decline to
+  ever call `player.ready()` for the fixture video (an `error` event
+  instead — no code path treats that as a fallback reveal, mirroring an
+  identical pre-existing gap in `youtube.ts`'s own `onError`), leaving the
+  slide's `.shoji-slide-provider-video` container `hidden` forever rather
+  than failing gracefully. Soft-waits for the reveal in CI now and skips
+  the rest of the affected test if it never arrives, matching the
+  tolerance the YouTube e2e tests already had for the same class of
+  external-network unreliability; still hard-asserts locally. No library
+  code changed — `tests/e2e/plugins/video.spec.ts` only.
+
 ## [0.1.0-alpha.9] - 2026-08-12
 
 ### Fixed
