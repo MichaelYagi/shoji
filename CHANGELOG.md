@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-08-13
+
 ### Fixed
 
 - A genuinely small photo visibly grew to fill the dialog on open, then
