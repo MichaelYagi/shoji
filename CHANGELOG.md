@@ -7,6 +7,16 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Completing a horizontal mouse drag to navigate to the next/previous slide
+  could immediately close the gallery instead — a browser quirk where a
+  captured drag's release still fires an ordinary `click` event afterward,
+  retargeted to the dialog itself regardless of where the pointer visually
+  ended up, which click-outside-to-close misread as "clicked nothing." Fixed
+  by consuming exactly that one retargeted click after a real drag ends.
+  Touch drags and plain clicks were unaffected either way.
+
 ## [0.1.0-alpha.11] - 2026-08-13
 
 ### Fixed

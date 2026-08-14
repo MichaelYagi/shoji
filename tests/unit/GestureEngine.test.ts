@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GestureEngine, type GestureEngineCallbacks } from '../../src/gestures/GestureEngine';
 
 /**
@@ -412,6 +412,95 @@ describe('GestureEngine — pointer capture timing (DESIGN.md §2.4, "third real
 
     expect(callbacks.onDragStart).toHaveBeenCalledTimes(1); // the drag itself still locks/reports normally
     expect(captureSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('GestureEngine — suppresses the retargeted click a captured drag leaves behind (real bug, reported from real usage: completing a horizontal drag-to-navigate closed the gallery right after)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("a real browser's own click firing on target right after a captured, completed drag never reaches an ancestor listener — Gallery.ts's click-outside-to-close, in particular", () => {
+    const parent = document.createElement('div');
+    parent.appendChild(target);
+    document.body.appendChild(parent);
+    const parentClick = vi.fn();
+    parent.addEventListener('click', parentClick);
+
+    const callbacks = makeCallbacks();
+    new GestureEngine(target, callbacks, { lockThreshold: 10, swipeThreshold: 50 });
+
+    firePointer(target, 'pointerdown', { clientX: 100, timeStamp: 0 });
+    firePointer(target, 'pointermove', { clientX: 20, timeStamp: 20 }); // crosses lockThreshold, locks + captures
+    firePointer(target, 'pointerup', { clientX: 20, timeStamp: 40 });
+
+    // The browser's own post-release click — jsdom doesn't synthesize this
+    // on its own the way a real browser does after a captured pointer's
+    // release, so it's fired explicitly here to exercise the suppression
+    // path in isolation; confirmed against the real thing via a real
+    // browser e2e test (tests/e2e/core-drag-gesture.spec.ts).
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(parentClick).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress a click when the gesture never actually captured the pointer (e.g. a plain tap, never crossing lockThreshold)', () => {
+    const parent = document.createElement('div');
+    parent.appendChild(target);
+    document.body.appendChild(parent);
+    const parentClick = vi.fn();
+    parent.addEventListener('click', parentClick);
+
+    const callbacks = makeCallbacks();
+    new GestureEngine(target, callbacks, { lockThreshold: 10 });
+
+    firePointer(target, 'pointerdown', { clientX: 0, timeStamp: 0 });
+    firePointer(target, 'pointerup', { clientX: 0, timeStamp: 10 }); // never moved — no lock, no capture
+
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(parentClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not suppress a click when shouldCapture() skipped capture for this gesture (e.g. the zoom plugin panning while zoomed)', () => {
+    const parent = document.createElement('div');
+    parent.appendChild(target);
+    document.body.appendChild(parent);
+    const parentClick = vi.fn();
+    parent.addEventListener('click', parentClick);
+
+    const callbacks = makeCallbacks();
+    callbacks.shouldCapture = vi.fn().mockReturnValue(false);
+    new GestureEngine(target, callbacks, { lockThreshold: 10 });
+
+    firePointer(target, 'pointerdown', { clientX: 100, timeStamp: 0 });
+    firePointer(target, 'pointermove', { clientX: 20, timeStamp: 20 });
+    firePointer(target, 'pointerup', { clientX: 20, timeStamp: 40 });
+
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(parentClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('only ever consumes exactly one click per captured drag — a later, unrelated click still reaches ancestor listeners normally', () => {
+    vi.useFakeTimers();
+    const parent = document.createElement('div');
+    parent.appendChild(target);
+    document.body.appendChild(parent);
+    const parentClick = vi.fn();
+    parent.addEventListener('click', parentClick);
+
+    const callbacks = makeCallbacks();
+    new GestureEngine(target, callbacks, { lockThreshold: 10, swipeThreshold: 50 });
+
+    firePointer(target, 'pointerdown', { clientX: 100, timeStamp: 0 });
+    firePointer(target, 'pointermove', { clientX: 20, timeStamp: 20 });
+    firePointer(target, 'pointerup', { clientX: 20, timeStamp: 40 });
+
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(parentClick).not.toHaveBeenCalled(); // the retargeted one, suppressed
+
+    vi.advanceTimersByTime(600); // past the fallback cleanup window
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(parentClick).toHaveBeenCalledTimes(1); // a genuine later click, not suppressed
   });
 });
 

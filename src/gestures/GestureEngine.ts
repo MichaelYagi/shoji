@@ -89,6 +89,9 @@ export class GestureEngine {
   private pinching = false;
   private pinchStartDistance = 0;
 
+  /** True once `setPointerCapture` has actually been called for the gesture currently in progress — see `suppressRetargetedClick`'s own doc comment for why this needs tracking separately from `direction`. */
+  private capturedThisGesture = false;
+
   // -Infinity, not 0: `event.timeStamp` is time-since-navigation-start, so a
   // real first tap is always some large positive number and 0 would seem
   // like a safe "no previous tap" sentinel in practice — but not always: a
@@ -154,6 +157,7 @@ export class GestureEngine {
     if (this.pointers.size === 1) {
       this.primaryPointerId = event.pointerId;
       this.direction = null;
+      this.capturedThisGesture = false;
       // Deliberately NOT captured here — see onPointerMove's direction-lock
       // branch for why.
     } else if (this.pointers.size === 2) {
@@ -198,27 +202,17 @@ export class GestureEngine {
       this.direction = absX > absY ? 'horizontal' : 'vertical';
       this.dragStartDistance = this.direction === 'horizontal' ? dx : dy;
       // Captured only once a real drag is confirmed (direction locked), not
-      // on every pointerdown — a real bug: capturing eagerly retargets the
-      // browser's synthesized mousedown/click to the capturing element
-      // (Chromium computes their target using whatever capture state is
-      // already in effect once pointerdown's own synchronous handlers have
-      // run), so a plain tap/click on the content was landing on `target`
-      // itself instead of whatever the pointer was actually over — breaking
-      // any click-target-based logic downstream (Gallery's click-outside-
-      // to-close, in particular: it saw every click, even one dead-center
-      // on the photo, as if it had landed on nothing recognizable, and
-      // closed the gallery). A confirmed drag never fires a native "click"
-      // anyway (mousedown/mouseup target different elements once the
-      // pointer has actually moved), so deferring capture to here loses
-      // nothing for real drags while leaving taps/clicks alone entirely.
-      // Still not enough on its own for a gesture whose *effect* a caller
-      // suppresses but whose direction still locks here regardless (the
-      // zoom plugin's pan: core's own drag-to-navigate/close is gated off
-      // while zoomed, but this engine has no idea — it still locks and
-      // still captured, so the release still retargeted its click the same
-      // way). `shouldCapture()` lets the caller skip capture for the whole
-      // gesture in that case, not just its effect.
-      if (this.callbacks.shouldCapture?.() ?? true) this.target.setPointerCapture(event.pointerId);
+      // on every pointerdown — capturing eagerly retargets the browser's
+      // synthesized mousedown/click to the capturing element, breaking any
+      // click-target-based logic downstream on an ordinary tap. Deferring
+      // capture to here fixes that — but a *confirmed* drag still captures,
+      // and a captured pointer's release still fires a real click
+      // afterward, still retargeted to `target`. See
+      // `suppressRetargetedClick` below for that other half of the fix.
+      if (this.callbacks.shouldCapture?.() ?? true) {
+        this.target.setPointerCapture(event.pointerId);
+        this.capturedThisGesture = true;
+      }
       this.callbacks.onDragStart?.(this.direction, event);
     }
 
@@ -279,10 +273,32 @@ export class GestureEngine {
         (Math.abs(totalDelta) >= this.options.swipeThreshold ||
           Math.abs(velocity) >= this.options.swipeVelocity);
       this.callbacks.onDragEnd?.(this.direction, totalDelta, velocity, completed, cancelled);
+      if (this.capturedThisGesture) this.suppressRetargetedClick();
     }
 
     this.primaryPointerId = null;
     this.direction = null;
+    this.capturedThisGesture = false;
+  }
+
+  /**
+   * A captured pointer's release still fires a real `click`, retargeted to
+   * `target` regardless of where the pointer visually ends up — misread by
+   * Gallery's click-outside-to-close as landing nowhere recognizable.
+   * Consumes exactly one `click` on `target` in the capture phase, then
+   * removes itself; a fallback timeout also removes it in case no `click`
+   * ever comes, so it can't swallow a later, unrelated one.
+   */
+  private suppressRetargetedClick(): void {
+    let done = false;
+    const cleanup = (event?: MouseEvent): void => {
+      if (done) return;
+      done = true;
+      event?.stopPropagation();
+      this.target.removeEventListener('click', cleanup, { capture: true });
+    };
+    this.target.addEventListener('click', cleanup, { capture: true });
+    setTimeout(cleanup, 500);
   }
 
   private registerTap(x: number, y: number, event: PointerEvent): void {
