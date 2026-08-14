@@ -22,7 +22,9 @@ function isRealControl(event: PointerEvent): boolean {
     .some(
       (node) =>
         node instanceof Element &&
-        node.matches('button, video, input, select, textarea, a[href], [data-shoji-no-drag]'),
+        node.matches(
+          'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption',
+        ),
     );
 }
 

@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import path from 'node:path';
+
+const corePath = () => '/@fs' + path.join(process.cwd(), 'src/core/index.ts').replace(/\\/g, '/');
 
 /**
  * DESIGN.md §2.4 — a real bug, reported from real usage: completing a
@@ -73,4 +76,70 @@ test('a plain click on the image (no drag at all) is unaffected — still does n
 
   await expect(page.locator('.shoji-dialog')).toBeVisible();
   await expect(page.locator('.shoji-counter')).toHaveText('1 / 4'); // no navigation either — a plain click, not a drag
+});
+
+/**
+ * A related real bug found auditing this area for other mouse-specific
+ * parity drifts: `.shoji-caption` wasn't in `INTERACTIVE_CONTROL_SELECTOR`
+ * (`GestureController.ts`), so a click-drag meant to select/copy caption
+ * text got captured as a navigate/close gesture instead — `preventDefault()`
+ * on the locked-direction `pointermove` broke native text selection.
+ * Confirmed directly: the same drag technique selects real text on a plain
+ * `<p>`, but inside `.shoji-caption` it selected almost nothing. Fixed by
+ * adding `.shoji-caption` to the shared selector.
+ */
+test('a mouse drag starting on caption text selects it, instead of being captured as a navigate/close gesture', async ({
+  page,
+  isMobile,
+}) => {
+  // Touch text selection is a long-press-then-drag gesture, not a plain
+  // drag — genuinely different from the mouse-drag-to-select this covers,
+  // so it's out of scope on touch/mobile-emulated projects.
+  test.skip(isMobile, 'text-selection-by-drag is a desktop mouse interaction');
+
+  await page.goto('/pages/e2e-plugins.html');
+  await page.evaluate(
+    async ({ corePath }) => {
+      const { Gallery } = await import(/* @vite-ignore */ corePath);
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      const svg =
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"/>';
+      const gallery = new Gallery(el, {
+        items: [
+          {
+            id: 'a',
+            src: svg,
+            caption:
+              'A fairly long caption with several words in it that a user might want to select and copy with the mouse',
+          },
+          { id: 'b', src: svg, caption: 'second' },
+        ],
+      });
+      gallery.open(0);
+    },
+    { corePath: corePath() },
+  );
+
+  const dialog = page.locator('.shoji-dialog').last();
+  await expect(dialog).toBeVisible();
+  const counter = page.locator('.shoji-counter').last();
+  await expect(counter).toHaveText('1 / 2');
+
+  const caption = page.locator('.shoji-caption').last();
+  await expect(caption).toBeVisible();
+  const box = (await caption.boundingBox())!;
+  const startX = box.x + 5;
+  const endX = box.x + box.width - 5;
+  const y = box.y + box.height / 2;
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(endX, y, { steps: 10 });
+  await page.mouse.up();
+
+  const selectedText = await page.evaluate(() => window.getSelection()?.toString());
+  expect(selectedText).toContain('words');
+  await expect(counter).toHaveText('1 / 2'); // no navigation
+  await expect(dialog).toBeVisible(); // no close
 });

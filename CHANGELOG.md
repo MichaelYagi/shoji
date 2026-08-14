@@ -16,6 +16,11 @@ still include breaking changes).
   ended up, which click-outside-to-close misread as "clicked nothing." Fixed
   by consuming exactly that one retargeted click after a real drag ends.
   Touch drags and plain clicks were unaffected either way.
+- Click-dragging over a caption to select/copy its text instead navigated to
+  the next/previous slide (or panned, while zoomed) — captions weren't
+  excluded from the gesture engine's drag recognition, so the drag hijacked
+  native text selection. Captions are now excluded, same as buttons/links/
+  form controls already were.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 

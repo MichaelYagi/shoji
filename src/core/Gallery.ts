@@ -85,7 +85,7 @@ function isBackdropClick(event: Event): boolean {
       (node) =>
         node instanceof Element &&
         node.matches(
-          `.shoji-slide-img, .shoji-slide-provider-video, .shoji-counter, .shoji-caption, ${INTERACTIVE_CONTROL_SELECTOR}`,
+          `.shoji-slide-img, .shoji-slide-provider-video, .shoji-counter, ${INTERACTIVE_CONTROL_SELECTOR}`,
         ),
     );
 }
