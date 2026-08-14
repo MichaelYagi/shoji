@@ -22,6 +22,9 @@ still include breaking changes).
   with everything else in one abrupt cut once it finished. Moving the mouse
   (or touching the screen) during that fade no longer brings the controls
   back mid-close.
+- Completing a vertical swipe-to-close now fades and shrinks the photo
+  toward its thumbnail in one continuous motion, instead of snapping back to
+  fully visible for a beat before the zoom-out took over.
 
 ### Fixed
 

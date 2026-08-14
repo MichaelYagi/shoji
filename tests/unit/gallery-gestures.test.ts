@@ -161,6 +161,51 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     gallery.destroy();
   });
 
+  it('a completed vertical drag eases the dialog back to neutral concurrently with closing, instead of snapping it instantly first — a real bug, reported from real usage: an instant reset read as the photo popping back to fully visible for a beat before the zoom-out took over', () => {
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', '0');
+    document.body.appendChild(marker);
+    const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
+    gallery.open(0);
+
+    dragVertical(120);
+
+    // clearVerticalDragFeedback(true) — a real CSS transition, not an
+    // instant '' reset — transform/opacity still end up back at neutral
+    // ('', the inline-cleared state), just eased there rather than snapped.
+    expect(dialog().style.transition).toContain('var(--shoji-momentum-easing)');
+    expect(dialog().style.transform).toBe('');
+    expect(dialog().style.opacity).toBe('');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it("a completed vertical drag with a real origin element starts the zoom-out immediately — doesn't wait for a controls-fade transitionend the way a regular close() does, since the drag's own live feedback is already the closing motion in progress", () => {
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', '0');
+    document.body.appendChild(marker);
+    const gallery = new Gallery(document.body, {
+      items: [
+        { id: '0', src: '0.jpg', width: 800, height: 600 },
+        { id: '1', src: '1.jpg', width: 800, height: 600 },
+      ],
+      preload: 0,
+    });
+    gallery.open(0);
+    const media = document.querySelector('.shoji-slide-media') as HTMLElement;
+
+    dragVertical(120);
+
+    // No extra transitionend needed — zoomOut() already ran synchronously,
+    // right after the drag's own release, not gated behind a controls-fade
+    // wait the way Gallery.close() (button/Escape/backdrop) sequences it.
+    expect(media.style.transform).not.toBe('');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
   it('closable: false suspends vertical drag-to-close entirely — no live feedback, no close on release', () => {
     const gallery = new Gallery(document.body, {
       items: items(2),

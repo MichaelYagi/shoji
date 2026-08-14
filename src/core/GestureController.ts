@@ -40,6 +40,8 @@ export interface GestureControllerHost {
   next(): void;
   prev(): void;
   close(): void;
+  /** Same effect as `close()`, but for a completed vertical swipe specifically — the drag's own live feedback is already easing back to neutral, so this skips sequencing a second, separate controls-fade pause in front of the zoom-out (see `finishVerticalDrag`). */
+  closeFromSwipe(): void;
   /** `closable: false` (GalleryOptions) — false suspends vertical drag-to-close entirely: no live feedback, release never calls `close()`. */
   canClose(): boolean;
   onActivity(): void;
@@ -174,11 +176,14 @@ export class GestureController {
 
   private finishVerticalDrag(completed: boolean): void {
     if (completed && this.host.canClose()) {
-      // No settle animation of its own — clear the feedback instantly and
-      // let close()'s own zoom-out transition (zoomTransition.ts) take over
-      // as the single visible closing animation, rather than stacking two.
-      this.clearVerticalDragFeedback(false);
-      this.host.close();
+      // Eases back to neutral *concurrently* with the zoom-out, not snapped
+      // instantly first — a real bug, reported from real usage: an instant
+      // reset read as the photo popping back to full visibility for a beat
+      // before shrinking, not one continuous close. closeFromSwipe() (not
+      // close()) skips its own controls-fade pause in front of the zoom-out
+      // for the same reason — this drag already has a closing motion going.
+      this.clearVerticalDragFeedback(true);
+      this.host.closeFromSwipe();
     } else {
       // Not completed, or closable: false suspended the drag entirely (no
       // feedback was ever applied by onDragMove) — either way, a clean

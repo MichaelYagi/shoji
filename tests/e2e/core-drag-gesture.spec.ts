@@ -64,6 +64,45 @@ test('completing a vertical drag still closes the gallery — the fix only suppr
   await expect(page.locator('.shoji-dialog')).toBeHidden();
 });
 
+/**
+ * DESIGN.md §2.4/§2.6a — a real bug, reported from real usage: completing a
+ * vertical swipe-to-close visibly popped the photo back to fully opaque/
+ * full-size for a beat before the separate zoom-out-to-thumbnail animation
+ * took over — instead of one continuous fade/shrink. The drag's own live
+ * feedback (translateY/scale/opacity on `.shoji-dialog`) used to reset
+ * instantly to neutral on release, before the zoom-out even started. Now it
+ * eases back to neutral concurrently with the zoom-out instead of snapping
+ * first. This can't fully verify the visual result is *smooth* (that needs
+ * a human or a screenshot diff), but it confirms the specific regression —
+ * an instant, full-opacity frame right after release — doesn't recur.
+ */
+test('completing a vertical drag does not pop the dialog back to full opacity before closing', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  const dialog = page.locator('.shoji-dialog');
+  await expect(dialog).toBeVisible();
+
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const box = (await media.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const startY = box.y + box.height * 0.3;
+  const endY = startY + 200;
+
+  await page.mouse.move(x, startY);
+  await page.mouse.down();
+  await page.mouse.move(x, endY, { steps: 10 });
+  await page.mouse.up();
+
+  // Immediately after release — before the dialog disappears — opacity
+  // must not have snapped back to fully opaque.
+  const opacityRightAfterRelease = await dialog.evaluate((el) => getComputedStyle(el).opacity);
+  expect(Number(opacityRightAfterRelease)).toBeLessThan(1);
+
+  await expect(page.locator('.shoji-dialog')).toBeHidden();
+});
+
 test('a plain click on the image (no drag at all) is unaffected — still does not close the gallery', async ({
   page,
 }) => {

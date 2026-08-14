@@ -404,6 +404,7 @@ export class Gallery {
         next: () => this.navigate(this.nextIndex(), 1, false),
         prev: () => this.navigate(this.prevIndex(), -1, false),
         close: () => this.close(),
+        closeFromSwipe: () => this.closeFromSwipe(),
         canClose: () => this.closable,
         onActivity: () => this.onActivity(),
         isZoomed: () => this.zoomGate?.() ?? false,
@@ -895,6 +896,22 @@ export class Gallery {
   }
 
   close(): void {
+    this.beginClose(true);
+  }
+
+  /**
+   * DESIGN.md §2.4/§2.6a — same effect as `close()`, from a completed
+   * vertical swipe. The drag already has its own closing motion in progress
+   * (live feedback easing back to neutral, `GestureController`) — sequencing
+   * a separate controls-fade pause in front of the zoom-out would interrupt
+   * it. Controls still hide, just concurrently, not blocking.
+   */
+  private closeFromSwipe(): void {
+    this.beginClose(false);
+  }
+
+  /** `waitForControlsFade` — true for `close()` (nothing else is animating, so fading first avoids stationary chrome over a shrinking photo); false for `closeFromSwipe()`, which already has a concurrent closing motion. */
+  private beginClose(waitForControlsFade: boolean): void {
     if (this.destroyed || !this.opened || this.isClosing) return;
     this.bus.emit('beforeClose', {});
 
@@ -919,37 +936,32 @@ export class Gallery {
     // real content, no naturalSize to fall back on either) would have
     // nothing but a guessed target to shrink toward — same "don't guess"
     // reasoning open() above already applies to its own animation.
+    // closeFromSwipe(): target's current rect is still wherever the drag
+    // left it (its own reset eases back concurrently, not yet finished), so
+    // this naturally continues from that position instead of neutral.
     if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
-      // Controls fade out *first* — only worth sequencing here, where a
-      // photo is actually visibly shrinking; the no-zoom-out branch below
-      // vanishes everything at once regardless, so it stays synchronous.
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
-      this.hideControlsForClose(() => {
+      const runZoomOut = (): void => {
         zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
-      });
+      };
+      const alreadyHidden = this.autoHidden;
+      this.forceHideControls();
+      if (waitForControlsFade && !alreadyHidden && this.dom) {
+        waitForTransitionEnd(this.dom.toolbar, runZoomOut, 'opacity');
+      } else {
+        runZoomOut();
+      }
     } else {
       this.finishClose();
     }
   }
 
-  /**
-   * Controls fade out first, then `cb` (the zoom-out animation) runs —
-   * previously both ran at once, chrome sat motionless over the shrinking
-   * photo, then everything vanished together at the end. Bypasses
-   * `hideControls()`'s `isControlActive()` hover guard on purpose: the most
-   * common close path (clicking close) is hovering a control at this exact
-   * instant, and a deliberate close should hide regardless. No-op to `cb`
-   * if already hidden.
-   */
-  private hideControlsForClose(cb: () => void): void {
-    if (!this.dom || this.autoHidden) {
-      cb();
-      return;
-    }
+  /** Forces the same fade §2.8's idle timer would eventually trigger, bypassing `hideControls()`'s own `isControlActive()` hover guard — the most common close path (clicking close) is hovering a control at this exact instant, and a deliberate close should hide regardless. No-op if already hidden. */
+  private forceHideControls(): void {
+    if (!this.dom || this.autoHidden) return;
     this.autoHidden = true;
     this.dom.dialog.classList.add('shoji-controls-hidden');
     this.bus.emit('controls:hide', {});
-    waitForTransitionEnd(this.dom.toolbar, cb, 'opacity');
   }
 
   /** `item.width`/`height`, else origin's `naturalWidth`/`naturalHeight` (accurate when `item.thumb` is unset). Feeds `computeTransform`'s letterbox-aware sizing. */
