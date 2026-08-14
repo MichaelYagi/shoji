@@ -514,6 +514,56 @@ describe('Gallery — click-outside-to-close', () => {
   });
 });
 
+describe('Gallery — backdropOpacity', () => {
+  function backdrop(): HTMLElement {
+    return document.querySelector('.shoji-backdrop') as HTMLElement;
+  }
+
+  it('sets the --shoji-backdrop-opacity custom property on .shoji-outer', () => {
+    const gallery = makeGallery(3, { backdropOpacity: 0.5 });
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-backdrop-opacity')).toBe('0.5');
+    gallery.destroy();
+  });
+
+  it('clamps a value above 1 down to 1', () => {
+    const gallery = makeGallery(3, { backdropOpacity: 1.5 });
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-backdrop-opacity')).toBe('1');
+    gallery.destroy();
+  });
+
+  it('clamps a negative value up to 0', () => {
+    const gallery = makeGallery(3, { backdropOpacity: -0.5 });
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-backdrop-opacity')).toBe('0');
+    gallery.destroy();
+  });
+
+  it('leaves the custom property unset when the option is omitted — a host theming --shoji-backdrop-opacity directly in CSS is unaffected', () => {
+    const gallery = makeGallery(3);
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-backdrop-opacity')).toBe('');
+    gallery.destroy();
+  });
+
+  it('.shoji-backdrop itself has no inline style — the option only ever sets the custom property, styling stays in CSS', () => {
+    const gallery = makeGallery(3, { backdropOpacity: 0.5 });
+    gallery.open(0);
+
+    expect(backdrop().getAttribute('style')).toBeNull();
+    gallery.destroy();
+  });
+});
+
 describe('Gallery — closable: false', () => {
   function press(key: string): void {
     document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));

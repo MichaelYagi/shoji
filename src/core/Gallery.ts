@@ -336,6 +336,10 @@ export class Gallery {
     this.transition = new SlideTransition(this.slides);
     const dom = buildLightboxDom(this.slides.element, this.locale);
     this.dom = dom;
+    if (this.options.backdropOpacity != null) {
+      const clamped = Math.min(Math.max(this.options.backdropOpacity, 0), 1);
+      dom.outer.style.setProperty('--shoji-backdrop-opacity', String(clamped));
+    }
     dom.outer.appendChild(this.liveRegion.element);
     dom.closeButton.addEventListener('click', () => this.close());
     dom.prevButton.addEventListener('click', () => this.prev());

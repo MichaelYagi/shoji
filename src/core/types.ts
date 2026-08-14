@@ -140,6 +140,16 @@ export interface GalleryOptions {
    */
   closable?: boolean;
   /**
+   * The backdrop's real, honest opacity — `0` fully transparent, `1` fully
+   * opaque (solid `--shoji-color-backdrop`, `shoji.css`, itself a fully
+   * opaque hue by default), without needing to know or override the full
+   * color value. Clamped to [0, 1]. Unset (the default) leaves the CSS
+   * custom property `--shoji-backdrop-opacity` (default `0.92` dark /
+   * `0.96` light, matching this theme's pre-existing look) untouched, so a
+   * host already themeing it directly in CSS is unaffected either way.
+   */
+  backdropOpacity?: number;
+  /**
    * DESIGN.md §2.4 — overrides the gesture engine's `lockThreshold`/
    * `swipeThreshold`/`swipeVelocity` (defaults: 10px, 50px, 0.3px/ms).
    * Partial: any field left out keeps its default. Momentum easing is not

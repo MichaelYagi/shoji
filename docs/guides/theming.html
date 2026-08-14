@@ -47,11 +47,13 @@
   --shoji-duration: 200ms;
 }</code></pre>
     <p>
-      There is currently no way to scope a theme to just <em>one</em> gallery instance on a page
-      with multiple instances — <code>&lt;body&gt;</code>-level classes/overrides apply to all of
-      them. Per-instance theming would need a new <code>GalleryOptions</code> field (e.g. a
+      There is currently no <em>general</em> way to scope a theme to just <em>one</em> gallery
+      instance on a page with multiple instances — <code>&lt;body&gt;</code>-level classes/overrides
+      apply to all of them; that would need a new <code>GalleryOptions</code> field (e.g. a
       <code>className</code> option applied directly to <code>.shoji-outer</code>) that doesn't
-      exist yet.
+      exist yet. <code>backdropOpacity</code> (<a href="./settings.html">Settings guide</a>) is the
+      one narrow exception — it sets <code>--shoji-backdrop-opacity</code> directly on that
+      instance's own <code>.shoji-outer</code>, so it's already per-instance today.
     </p>
 
     <h2>Colors</h2>
@@ -84,8 +86,27 @@
         </tr>
         <tr>
           <td><code>--shoji-color-backdrop</code></td>
-          <td><code>rgba(0, 0, 0, 0.92)</code></td>
-          <td><code>rgba(255, 255, 255, 0.96)</code></td>
+          <td><code>#000000</code></td>
+          <td><code>#ffffff</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-backdrop-opacity</code></td>
+          <td><code>0.92</code></td>
+          <td><code>0.96</code></td>
+        </tr>
+        <tr>
+          <td colspan="3">
+            The backdrop's real alpha is <code>--shoji-backdrop-opacity</code>, not baked into
+            <code>--shoji-color-backdrop</code> — <code>--shoji-color-backdrop</code> is a fully
+            opaque hue by default, so the opacity value alone controls transparency, and
+            <code>1</code> is genuinely, fully opaque. A custom theme can still use an
+            <code>rgba()</code>/gradient value for <code>--shoji-color-backdrop</code> instead if
+            wanted (it composites multiplicatively with the opacity value, CSS
+            <code>opacity</code> semantics). Set <code>--shoji-backdrop-opacity</code> directly
+            here, or via <code>GalleryOptions.backdropOpacity</code> (<a href="./settings.html"
+              >Settings guide</a
+            >), whichever is more convenient for a given integration.
+          </td>
         </tr>
         <tr>
           <td><code>--shoji-color-toolbar-bg</code></td>

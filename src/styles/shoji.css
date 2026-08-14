@@ -28,9 +28,22 @@
   --shoji-color-bg: #0b0b0d;
   --shoji-color-fg: #f5f5f5;
   --shoji-color-accent: #4da3ff;
-  --shoji-color-backdrop: rgba(0, 0, 0, 0.92);
+  /* Fully opaque hue — the backdrop's actual on-screen transparency is
+     --shoji-backdrop-opacity below, a real 0-1 alpha, not baked in here.
+     A custom theme is still free to use an rgba()/gradient value instead;
+     --shoji-backdrop-opacity then composites on top of that value's own
+     alpha (CSS opacity multiplies), same as it always has. */
+  --shoji-color-backdrop: #000000;
   --shoji-color-toolbar-bg: rgba(20, 20, 22, 0.85);
   --shoji-color-disabled: rgba(245, 245, 245, 0.35);
+  /* Real alpha: 1 = fully opaque, 0 = fully transparent. Default 0.92 matches
+     this theme's previous baked-in rgba(0, 0, 0, 0.92) exactly, so nothing
+     changes visually out of the box — only the *meaning* of "1" changed, from
+     "unchanged from whatever the color's own alpha happened to be" (never
+     reachable as true black) to real, honest opacity. Settable directly via
+     GalleryOptions.backdropOpacity (Gallery.ts) without needing to know or
+     override the full color value. */
+  --shoji-backdrop-opacity: 0.92;
 
   --shoji-focus-ring: 2px solid var(--shoji-color-accent);
   --shoji-progress: var(--shoji-color-accent);
@@ -72,7 +85,8 @@
 .shoji-light {
   --shoji-color-bg: #fafafa;
   --shoji-color-fg: #111111;
-  --shoji-color-backdrop: rgba(255, 255, 255, 0.96);
+  --shoji-color-backdrop: #ffffff;
+  --shoji-backdrop-opacity: 0.96;
   --shoji-color-toolbar-bg: rgba(255, 255, 255, 0.9);
   --shoji-color-disabled: rgba(17, 17, 17, 0.35);
 }
@@ -100,6 +114,7 @@
   inset: 0;
   z-index: var(--shoji-z-backdrop);
   background: var(--shoji-color-backdrop);
+  opacity: var(--shoji-backdrop-opacity);
 }
 
 .shoji-dialog {

@@ -145,6 +145,20 @@
           </td>
         </tr>
         <tr>
+          <td><code>backdropOpacity</code></td>
+          <td>—</td>
+          <td>
+            0-1, clamped — real alpha: <code>1</code> is genuinely fully opaque,
+            <code>0</code> fully transparent. Sets <code>--shoji-backdrop-opacity</code> (<a
+              href="./theming.html"
+              >Theming guide</a
+            >) directly, without needing to know or override the full
+            <code>--shoji-color-backdrop</code> value. Left unset, that custom property's own
+            default (<code>0.92</code> dark / <code>0.96</code> light) is untouched, so theming it
+            directly in CSS still works.
+          </td>
+        </tr>
+        <tr>
           <td><code>gestures</code></td>
           <td>
             <code>{ lockThreshold: 10, swipeThreshold: 50, swipeVelocity: 0.3 }</code>

@@ -7,6 +7,13 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- `backdropOpacity` (`GalleryOptions`) — a real 0-1 alpha for the backdrop
+  (`1` fully opaque, `0` fully transparent), without needing to know or
+  override the full `--shoji-color-backdrop` CSS value. Left unset, nothing
+  changes from before.
+
 ### Fixed
 
 - Completing a horizontal mouse drag to navigate to the next/previous slide
