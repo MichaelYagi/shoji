@@ -165,6 +165,21 @@ describe('Gallery — transition system (DESIGN.md §2.5)', () => {
     gallery.destroy();
   });
 
+  it('mobileSettings.controls: false is overridden by autoHideDelay: false — the stronger, more explicit "never automatically hide controls" statement wins over the narrower mobile-only start-hidden convenience', () => {
+    mockMatchMedia(true);
+    const gallery = new Gallery(document.body, {
+      items: items(2),
+      preload: 0,
+      autoHideDelay: false,
+      mobileSettings: { controls: false },
+    });
+    gallery.open(0);
+
+    const dialog = document.querySelector('.shoji-dialog') as HTMLElement;
+    expect(dialog.classList.contains('shoji-controls-hidden')).toBe(false);
+    gallery.destroy();
+  });
+
   it('mobileSettings.controls: false has no effect on a fine-pointer device', () => {
     mockMatchMedia(false);
     const gallery = new Gallery(document.body, {

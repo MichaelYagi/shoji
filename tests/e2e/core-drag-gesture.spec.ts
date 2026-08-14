@@ -69,20 +69,23 @@ test('completing a vertical drag still closes the gallery — the fix only suppr
  * vertical swipe-to-close visibly popped the photo back to fully opaque/
  * full-size for a beat before the separate zoom-out-to-thumbnail animation
  * took over — instead of one continuous fade/shrink. The drag's own live
- * feedback (translateY/scale/opacity on `.shoji-dialog`) used to reset
+ * feedback (translateY/scale/opacity on `.shoji-slides`, requested directly
+ * to move here from `.shoji-dialog` so the toolbar/nav/counter/caption stay
+ * anchored in place instead of moving with the photo) used to reset
  * instantly to neutral on release, before the zoom-out even started. Now it
  * eases back to neutral concurrently with the zoom-out instead of snapping
  * first. This can't fully verify the visual result is *smooth* (that needs
  * a human or a screenshot diff), but it confirms the specific regression —
  * an instant, full-opacity frame right after release — doesn't recur.
  */
-test('completing a vertical drag does not pop the dialog back to full opacity before closing', async ({
+test('completing a vertical drag does not pop the image back to full opacity before closing', async ({
   page,
 }) => {
   await page.goto('/pages/e2e-plugins.html');
   await page.locator('#thumbs a[data-index="0"]').click();
   const dialog = page.locator('.shoji-dialog');
   await expect(dialog).toBeVisible();
+  const slides = page.locator('.shoji-slides').last();
 
   const media = page.locator('.shoji-slide-media:has(img)').first();
   const box = (await media.boundingBox())!;
@@ -97,7 +100,7 @@ test('completing a vertical drag does not pop the dialog back to full opacity be
 
   // Immediately after release — before the dialog disappears — opacity
   // must not have snapped back to fully opaque.
-  const opacityRightAfterRelease = await dialog.evaluate((el) => getComputedStyle(el).opacity);
+  const opacityRightAfterRelease = await slides.evaluate((el) => getComputedStyle(el).opacity);
   expect(Number(opacityRightAfterRelease)).toBeLessThan(1);
 
   await expect(page.locator('.shoji-dialog')).toBeHidden();
@@ -181,4 +184,79 @@ test('a mouse drag starting on caption text selects it, instead of being capture
   expect(selectedText).toContain('words');
   await expect(counter).toHaveText('1 / 2'); // no navigation
   await expect(dialog).toBeVisible(); // no close
+});
+
+/**
+ * DESIGN.md §2.4/§2.8 — requested directly: a vertical drag past the same
+ * distance a release would complete the close should hide the toolbar/nav/
+ * counter/caption as a live "let go now and this closes" cue, and reveal
+ * them again if the drag retreats back toward the original position before
+ * release. Unit tests (`tests/unit/gallery-gestures.test.ts`) cover the
+ * threshold-crossing logic with synthetic events; this confirms a real
+ * mouse drag actually produces it, toolbar opacity included.
+ */
+test('a vertical drag past the close threshold hides the toolbar, and dragging back reveals it again — without closing', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  const dialog = page.locator('.shoji-dialog').last();
+  await expect(dialog).toBeVisible();
+
+  const toolbar = page.locator('.shoji-toolbar').last();
+  await expect(toolbar).toHaveCSS('opacity', '1');
+
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const box = (await media.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const startY = box.y + box.height * 0.3;
+
+  await page.mouse.move(x, startY);
+  await page.mouse.down();
+  await page.mouse.move(x, startY + 80, { steps: 5 }); // past the default 50px threshold
+
+  await expect(toolbar).toHaveCSS('opacity', '0');
+  await expect(dialog).toBeVisible(); // still just a live cue, not closed yet
+
+  await page.mouse.move(x, startY + 10, { steps: 5 }); // retreat back under it, still held down
+
+  await expect(toolbar).toHaveCSS('opacity', '1');
+
+  await page.mouse.up();
+  await expect(dialog).toBeVisible(); // released well under threshold — did not close
+});
+
+/**
+ * DESIGN.md §2.4 — requested directly: while dragging vertically to close,
+ * the toolbar/nav overlay should stay anchored in its fixed screen
+ * position — only the photo itself moves/shrinks/fades. Previously the
+ * drag's live feedback transformed the whole `.shoji-dialog` (toolbar/nav
+ * included) as one rigid unit. Unit tests
+ * (`tests/unit/gallery-gestures.test.ts`) cover which element gets the
+ * inline style; this confirms the toolbar's real on-screen position
+ * genuinely doesn't move during a real drag.
+ */
+test('the toolbar stays visually anchored in place while a vertical drag moves the photo', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  const toolbar = page.locator('.shoji-toolbar').last();
+  await expect(toolbar).toBeVisible();
+  const toolbarBoxBefore = (await toolbar.boundingBox())!;
+
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const box = (await media.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const startY = box.y + box.height * 0.3;
+
+  await page.mouse.move(x, startY);
+  await page.mouse.down();
+  await page.mouse.move(x, startY + 30, { steps: 5 }); // under the controls-hide threshold — toolbar stays visible for this comparison
+
+  const toolbarBoxDuring = (await toolbar.boundingBox())!;
+  expect(toolbarBoxDuring.x).toBeCloseTo(toolbarBoxBefore.x, 0);
+  expect(toolbarBoxDuring.y).toBeCloseTo(toolbarBoxBefore.y, 0);
+
+  await page.mouse.up();
 });

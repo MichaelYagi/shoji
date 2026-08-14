@@ -13,6 +13,13 @@ still include breaking changes).
   (`1` fully opaque, `0` fully transparent), without needing to know or
   override the full `--shoji-color-backdrop` CSS value. Left unset, nothing
   changes from before.
+- `autoHideDelay: false` — the real "always visible" value: controls simply
+  never auto-hide, no matter how long the gallery sits idle, holding up
+  through every built-in path that can hide controls (including the
+  Autoplay plugin's own tap-to-toggle-chrome behavior and
+  `mobileSettings.controls: false`), not just the idle timer. (`0` remains
+  its own, different mode — hidden immediately and permanently, not
+  "disabled" — this is the setting that was actually missing.)
 
 ### Changed
 
@@ -25,6 +32,17 @@ still include breaking changes).
 - Completing a vertical swipe-to-close now fades and shrinks the photo
   toward its thumbnail in one continuous motion, instead of snapping back to
   fully visible for a beat before the zoom-out took over.
+- Dragging up or down to close now hides the toolbar/nav/counter/caption
+  once you've dragged far enough that releasing would actually close the
+  gallery — a live cue for "let go now and this closes." Dragging back
+  toward the original position before releasing brings them back.
+- Dragging up or down to close now only moves the photo itself — the
+  toolbar and nav overlay stay anchored in their fixed screen positions,
+  instead of moving/shrinking along with the whole lightbox as one unit.
+- `autoHideDelay: 0` no longer hides the mouse cursor along with the
+  controls — that mode is for hosts building their own chrome around Shoji,
+  not a signal that the whole gallery should act like nothing is there.
+  Ordinary idle-hide still hides the cursor as before.
 
 ### Fixed
 

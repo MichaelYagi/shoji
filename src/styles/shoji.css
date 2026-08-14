@@ -545,6 +545,16 @@
   cursor: none !important;
 }
 
+/* autoHideDelay: 0 (Gallery.ts) — Shoji's own controls stay permanently
+   invisible, but the cursor itself should behave normally, not force-hidden
+   along with them. Higher specificity than the rule above (both compound
+   selectors carry two classes/one-class-plus-descendant vs. one), so this
+   wins despite both using !important. */
+.shoji-cursor-visible.shoji-controls-hidden,
+.shoji-cursor-visible.shoji-controls-hidden * {
+  cursor: auto !important;
+}
+
 .shoji-live-region {
   position: absolute;
   width: 1px;

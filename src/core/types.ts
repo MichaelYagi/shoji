@@ -100,10 +100,16 @@ export interface GalleryOptions {
   plugins?: ShojiPlugin[];
   /**
    * DESIGN.md §2.8 — ms of inactivity before all buttons/overlays (toolbar,
-   * prev/next, counter, caption) auto-hide; default 5000. `0` is a distinct
-   * mode, not "disabled": controls never show at all, regardless of activity.
+   * prev/next, counter, caption) auto-hide; default 5000. `0` does not turn
+   * auto-hide off — it does the opposite: controls are hidden immediately
+   * on open and stay hidden permanently, regardless of activity. `false` is
+   * the actual "always visible" value: the idle timer never arms at all, so
+   * controls just stay shown, same as if activity kept resetting it forever
+   * (other explicit hides — `mobileSettings.controls: false`,
+   * `hideControls()`, drag-to-close's own live cue — are unrelated to this
+   * option and still work regardless).
    */
-  autoHideDelay?: number;
+  autoHideDelay?: number | false;
   /**
    * DESIGN.md §2.3 — how many slides on each side of the active one are
    * kept mounted *and* proactively decoded ahead of time; default 1.

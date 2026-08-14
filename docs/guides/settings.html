@@ -94,8 +94,38 @@
           <td><code>autoHideDelay</code></td>
           <td><code>5000</code></td>
           <td>
-            ms of inactivity before controls fade. <code>0</code> is distinct from "disabled" —
-            controls never show at all, regardless of activity.
+            <p>ms of inactivity before controls fade. Three genuinely different values:</p>
+            <ul>
+              <li>
+                <strong>A positive number</strong> (the default, <code>5000</code>) — normal
+                auto-hide. Controls fade after that many ms idle; any activity (mouse move, click,
+                keyboard, touch) reveals them again and resets the clock.
+              </li>
+              <li>
+                <strong><code>0</code></strong> — the <em>opposite</em> of what you might expect
+                from "0": controls are hidden immediately on open and stay hidden permanently, even
+                with activity. Not a synonym for "off" — for hosts building their own fully custom
+                chrome around Shoji. Doesn't block other, unrelated hides (a plugin calling
+                <code>hideControls()</code> directly, <code>mobileSettings.controls: false</code>) —
+                those still apply normally, they're just redundant here since everything's already
+                hidden. The mouse cursor itself is left alone in this mode specifically (<a
+                  href="./theming.html"
+                  >Theming guide</a
+                >
+                has the CSS detail) — ordinary idle-hide hides the cursor too, this one doesn't.
+              </li>
+              <li>
+                <strong><code>false</code></strong> — the real "always visible" value: controls
+                simply never auto-hide. Unlike <code>0</code>, this <em>does</em> block those same
+                other paths too — a plugin calling <code>hideControls()</code> directly (e.g.
+                Autoplay's own tap-to-toggle-chrome behavior, which hides the overlay on tap the
+                same way a video player would) and <code>mobileSettings.controls: false</code> both
+                become no-ops, since "always visible" has to mean any caller of that method, not
+                just the idle timer. The one thing neither value ever blocks: drag-to-close's own
+                live threshold cue and closing itself, since those are direct user actions with
+                their own visual feedback, not an auto-hide convenience.
+              </li>
+            </ul>
           </td>
         </tr>
         <tr>

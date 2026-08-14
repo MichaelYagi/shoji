@@ -42,6 +42,8 @@ export interface GestureControllerHost {
   close(): void;
   /** Same effect as `close()`, but for a completed vertical swipe specifically — the drag's own live feedback is already easing back to neutral, so this skips sequencing a second, separate controls-fade pause in front of the zoom-out (see `finishVerticalDrag`). */
   closeFromSwipe(): void;
+  /** Live, reversible — crossing the close threshold mid-drag hides the toolbar/nav/counter/caption (a "let go now and this closes" cue); dragging back under it before release reveals them again. See `applyVerticalDragFeedback`. */
+  setControlsHiddenForDrag(hidden: boolean): void;
   /** `closable: false` (GalleryOptions) — false suspends vertical drag-to-close entirely: no live feedback, release never calls `close()`. */
   canClose(): boolean;
   onActivity(): void;
@@ -69,12 +71,16 @@ export interface GestureRelayCallbacks {
  */
 export class GestureController {
   private readonly engine: GestureEngine;
+  /** Same distance `GestureEngine` itself uses to decide a release would complete the close — reused here so the live controls-hide cue in `applyVerticalDragFeedback` actually means what it visually claims. */
+  private readonly controlsHideThreshold: number;
+  private controlsHiddenForDrag = false;
 
   constructor(
     private readonly host: GestureControllerHost,
     relay: GestureRelayCallbacks,
     options?: Partial<GestureEngineOptions>,
   ) {
+    this.controlsHideThreshold = options?.swipeThreshold ?? 50;
     this.engine = new GestureEngine(
       host.dialog,
       {
@@ -158,23 +164,40 @@ export class GestureController {
     waitForTransitionEnd(settleEl, onSettled);
   }
 
-  /** Purely presentational drag feedback — scales/fades the dialog toward `close()`'s target state as the viewer drags, without closing until release decides the outcome. */
+  /**
+   * Purely presentational — scales/fades the *image* as it's dragged away,
+   * without closing until release decides. Applied to `host.slides.element`,
+   * not `host.dialog` — requested directly: toolbar/nav/counter/caption are
+   * siblings, not descendants, so they stay anchored, not moving with it.
+   */
   private applyVerticalDragFeedback(delta: number): void {
     const progress = Math.min(Math.abs(delta) / VERTICAL_FEEDBACK_DISTANCE, 1);
-    const dialog = this.host.dialog;
-    dialog.style.transition = '';
-    dialog.style.transform = `translateY(${delta}px) scale(${1 - progress * 0.15})`;
-    dialog.style.opacity = String(1 - progress * 0.6);
+    const slides = this.host.slides.element;
+    slides.style.transition = '';
+    slides.style.transform = `translateY(${delta}px) scale(${1 - progress * 0.15})`;
+    slides.style.opacity = String(1 - progress * 0.6);
+
+    // Requested directly: past the same distance a release would close,
+    // controls disappear — a "let go now" cue, distinct from the image's own
+    // dim above (capped at 0.4, never fully hides). Reversible: retreating
+    // under it before release reveals them. Only on a crossing, not every move.
+    const pastThreshold = Math.abs(delta) >= this.controlsHideThreshold;
+    if (pastThreshold !== this.controlsHiddenForDrag) {
+      this.controlsHiddenForDrag = pastThreshold;
+      this.host.setControlsHiddenForDrag(pastThreshold);
+    }
   }
 
   private clearVerticalDragFeedback(animate: boolean): void {
-    const dialog = this.host.dialog;
-    dialog.style.transition = animate ? DRAG_FEEDBACK_TRANSITION : '';
-    dialog.style.transform = '';
-    dialog.style.opacity = '';
+    const slides = this.host.slides.element;
+    slides.style.transition = animate ? DRAG_FEEDBACK_TRANSITION : '';
+    slides.style.transform = '';
+    slides.style.opacity = '';
   }
 
   private finishVerticalDrag(completed: boolean): void {
+    const wasHiddenForDrag = this.controlsHiddenForDrag;
+    this.controlsHiddenForDrag = false;
     if (completed && this.host.canClose()) {
       // Eases back to neutral *concurrently* with the zoom-out, not snapped
       // instantly first — a real bug, reported from real usage: an instant
@@ -189,6 +212,10 @@ export class GestureController {
       // feedback was ever applied by onDragMove) — either way, a clean
       // reset (harmless no-op in the suspended case, nothing to clear).
       this.clearVerticalDragFeedback(true);
+      // Not closing — controls must come back if the cue above left them
+      // hidden, regardless of exactly where release landed (e.g.
+      // swipeVelocity deciding "not completed" past this threshold).
+      if (wasHiddenForDrag) this.host.setControlsHiddenForDrag(false);
     }
   }
 }

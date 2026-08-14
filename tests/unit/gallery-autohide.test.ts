@@ -116,6 +116,56 @@ describe('Gallery — auto-hide controls', () => {
     gallery.destroy();
   });
 
+  it("autoHideDelay:0 still marks the dialog with .shoji-cursor-visible, so the mouse cursor itself stays normal even though Shoji's own controls stay invisible — requested directly: this mode is for hosts with fully custom chrome, not a signal that the whole gallery should act like nothing is there", () => {
+    const gallery = makeGallery({ autoHideDelay: 0 });
+    gallery.open(0);
+
+    expect(
+      document.querySelector('.shoji-dialog')?.classList.contains('shoji-cursor-visible'),
+    ).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('a normal, positive autoHideDelay does not get the cursor-visible override — the real, deliberate idle-hide state should behave as documented (cursor hides with the controls)', () => {
+    const gallery = makeGallery({ autoHideDelay: 1000 });
+    gallery.open(0);
+
+    expect(
+      document.querySelector('.shoji-dialog')?.classList.contains('shoji-cursor-visible'),
+    ).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('autoHideDelay:false keeps controls visible indefinitely — the actual "always visible" value, the opposite of 0', () => {
+    const gallery = makeGallery({ autoHideDelay: false });
+    gallery.open(0);
+
+    expect(isHidden()).toBe(false);
+
+    // No idle timer was ever armed to begin with — advancing time alone
+    // (no activity at all) still must not hide anything.
+    vi.advanceTimersByTime(10_000_000);
+    expect(isHidden()).toBe(false);
+
+    pointerMove();
+    vi.advanceTimersByTime(10_000_000);
+    expect(isHidden()).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it("autoHideDelay:false makes the public hideControls() itself a no-op, not just the idle timer — a real bug, reported from real usage: Autoplay's own tap-to-toggle-chrome behavior called hideControls() directly and ignored autoHideDelay entirely, since only the timer checked it. 'Always visible' has to mean any caller of this public method, not just the automatic one, or a host's explicit request is silently overridable by any plugin (see tests/unit/plugins/autoplay.test.ts for that exact regression). forceHideControls()/setControlsHiddenForDrag() (close, drag-to-close — tests/unit/gallery-zoom.test.ts, tests/unit/gallery-gestures.test.ts) are deliberately unaffected — those are direct user actions with their own feedback, not an auto-hide convenience.", () => {
+    const gallery = makeGallery({ autoHideDelay: false });
+    gallery.open(0);
+
+    gallery.hideControls();
+
+    expect(isHidden()).toBe(false);
+    gallery.destroy();
+  });
+
   it('focusing a control resets the idle clock, but does not block the eventual hide (real bug: a stale focused button — left over from an ordinary click, not active keyboard use — used to block auto-hide forever)', () => {
     const gallery = makeGallery();
     gallery.open(0);

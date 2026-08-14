@@ -128,13 +128,15 @@ export class Gallery {
   private captionVisibleOnVideo = false; // DESIGN.md §2.3a
   private loop = true;
   private closable = true;
-  private autoHideDelay = 5000;
+  private autoHideDelay: number | false = 5000;
   private readonly focusTrap = new FocusTrap();
   private readonly liveRegion = new LiveRegion();
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
   private autoHidden = false;
   private hoveredControlCount = 0;
   private isClosing = false;
+  /** True while a vertical drag has hidden controls past its own distance threshold (`setControlsHiddenForDrag`) — `onActivity()` defers to it, since the drag's own continuous pointermove stream would otherwise immediately re-reveal what it just hid on every single move. */
+  private controlsHiddenByDrag = false;
   private itemList: GalleryItem[] = [];
   private scannedElements: HTMLElement[] = [];
   private activeIndex = 0;
@@ -174,15 +176,23 @@ export class Gallery {
   /**
    * DESIGN.md §2.8 — any interaction re-shows controls, restarts the idle
    * clock. `autoHideDelay: 0` = "never show controls" — a no-op here.
-   * Also a no-op once `isClosing` — a real bug, reported from real usage:
-   * moving the mouse during close()'s own controls-fade-then-zoom-out
-   * sequence (§2.6a) re-showed the just-hidden controls mid-animation, since
-   * these same activity listeners stay wired for the whole close sequence,
-   * not torn down until finishClose(). Nothing to reveal controls *for*
-   * once closing has actually started.
+   * `autoHideDelay: false` = "always visible" — also a no-op: nothing to
+   * reveal (already shown) or reschedule (no timer ever runs). Also a no-op
+   * once `isClosing` — a real bug, reported from real usage: moving the
+   * mouse during close()'s own controls-fade-then-zoom-out sequence (§2.6a)
+   * re-showed the just-hidden controls mid-animation, since these listeners
+   * stay wired for the whole close sequence. Same reasoning for
+   * `controlsHiddenByDrag` (§2.4/§2.8): a vertical drag's own `pointermove`
+   * stream would otherwise re-reveal what it just hid, every single frame.
    */
   private readonly onActivity = (): void => {
-    if (this.autoHideDelay === 0 || this.isClosing) return;
+    if (
+      this.autoHideDelay === 0 ||
+      this.autoHideDelay === false ||
+      this.isClosing ||
+      this.controlsHiddenByDrag
+    )
+      return;
     this.showControls();
     this.scheduleAutoHide();
   };
@@ -349,6 +359,14 @@ export class Gallery {
       const clamped = Math.min(Math.max(this.options.backdropOpacity, 0), 1);
       dom.outer.style.setProperty('--shoji-backdrop-opacity', String(clamped));
     }
+    // DESIGN.md §2.8 — autoHideDelay: 0 means Shoji's own controls stay
+    // permanently invisible (a host building fully custom chrome), not that
+    // the whole gallery should behave like nothing is there — the mouse
+    // cursor itself should still behave normally, not force-hidden along
+    // with controls that were never meant to be seen in the first place.
+    // Requested directly; `.shoji-cursor-visible` overrides the
+    // `.shoji-controls-hidden` cursor:none rule via higher specificity.
+    if (this.autoHideDelay === 0) dom.dialog.classList.add('shoji-cursor-visible');
     dom.outer.appendChild(this.liveRegion.element);
     dom.closeButton.addEventListener('click', () => this.close());
     dom.prevButton.addEventListener('click', () => this.prev());
@@ -405,6 +423,7 @@ export class Gallery {
         prev: () => this.navigate(this.prevIndex(), -1, false),
         close: () => this.close(),
         closeFromSwipe: () => this.closeFromSwipe(),
+        setControlsHiddenForDrag: (hidden) => this.setControlsHiddenForDrag(hidden),
         canClose: () => this.closable,
         onActivity: () => this.onActivity(),
         isZoomed: () => this.zoomGate?.() ?? false,
@@ -606,6 +625,7 @@ export class Gallery {
       this.autoHideTimer = null;
     }
     if (!this.opened) return;
+    if (this.autoHideDelay === false) return; // always visible — no timer to arm
     if (this.autoHideDelay === 0) {
       this.hideControls(); // 0 = hidden immediately, no reveal — see onActivity
       return;
@@ -613,9 +633,21 @@ export class Gallery {
     this.autoHideTimer = setTimeout(() => this.hideControls(), this.autoHideDelay);
   }
 
-  /** Forces the same fade §2.8's idle timer would eventually trigger — public so a plugin can hide controls on its own trigger. Same `isControlActive()` guard as the timer. */
+  /**
+   * Forces the same fade §2.8's idle timer would eventually trigger —
+   * public so a plugin can hide controls on its own trigger. Same
+   * `isControlActive()` guard as the timer. Also a no-op under
+   * `autoHideDelay: false` — a real bug, reported from real usage: Autoplay's
+   * tap-to-toggle-chrome behavior called this directly and ignored `false`
+   * entirely, since only the idle timer checked it. `false` has to hold for
+   * every caller, not just the timer — `mobileSettings.controls: false` is
+   * affected the same way, by design. `forceHideControls()`/
+   * `setControlsHiddenForDrag()` (close, drag-to-close) deliberately don't
+   * check this — direct user actions with their own feedback, not auto-hide.
+   */
   hideControls(): void {
-    if (!this.dom || this.autoHidden || this.isControlActive()) return;
+    if (!this.dom || this.autoHidden || this.isControlActive() || this.autoHideDelay === false)
+      return;
     this.autoHidden = true;
     this.dom.dialog.classList.add('shoji-controls-hidden');
     this.bus.emit('controls:hide', {});
@@ -964,6 +996,19 @@ export class Gallery {
     this.bus.emit('controls:hide', {});
   }
 
+  /**
+   * DESIGN.md §2.4/§2.8 — `GestureController`'s live vertical-drag cue: hide
+   * past the same distance a release would close, reveal again on retreat.
+   * `hidden: false` only reveals if visible when *this* gesture started
+   * (`controlsHiddenAtGestureStart`) — shouldn't resurrect controls already
+   * separately hidden (idle, or `autoHideDelay: 0`) before the drag began.
+   */
+  private setControlsHiddenForDrag(hidden: boolean): void {
+    this.controlsHiddenByDrag = hidden;
+    if (hidden) this.forceHideControls();
+    else if (!this.controlsHiddenAtGestureStart) this.showControls();
+  }
+
   /** `item.width`/`height`, else origin's `naturalWidth`/`naturalHeight` (accurate when `item.thumb` is unset). Feeds `computeTransform`'s letterbox-aware sizing. */
   private resolveAspectRatio(index: number, origin: HTMLElement | null): number | undefined {
     const item = this.itemList[index];
@@ -1009,6 +1054,7 @@ export class Gallery {
     }
     this.autoHidden = false;
     this.hoveredControlCount = 0;
+    this.controlsHiddenByDrag = false;
     this.dom?.dialog.classList.remove('shoji-controls-hidden');
     this.bus.emit('close', {});
     this.bus.emit('afterClose', {});

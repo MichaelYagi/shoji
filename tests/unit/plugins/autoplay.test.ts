@@ -1073,6 +1073,22 @@ describe('Autoplay — tap-to-toggle on an image slide', () => {
     gallery.destroy();
   });
 
+  it("respects autoHideDelay: false — tapping to pause must not hide the overlay when the host explicitly asked for it to stay always visible. A real bug, reported from real usage: only the idle timer checked autoHideDelay === false, so this plugin's own gallery.hideControls() call ignored it entirely.", () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoHideDelay: false });
+    gallery.open(0);
+    click(toggleButton());
+    expect(gallery.controlsHidden).toBe(false);
+
+    tap(dialog());
+    vi.advanceTimersByTime(300);
+
+    expect(gallery.controlsHidden).toBe(false); // still visible — autoHideDelay: false wins
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // pause itself still applies
+
+    gallery.destroy();
+  });
+
   it("does not re-hide the overlay if it was already hidden — this tap's own pointerdown already revealed it for free, nothing left to toggle", () => {
     vi.useFakeTimers();
     const gallery = makeGallery();

@@ -34,6 +34,11 @@ function dialog(): HTMLElement {
   return document.querySelector('.shoji-dialog') as HTMLElement;
 }
 
+/** Vertical-drag-to-close feedback (translateY/scale/opacity) applies here, not to dialog() — the toolbar/nav/counter/caption are siblings of this, not descendants, so they stay put while the image moves. */
+function slidesContainer(): HTMLElement {
+  return document.querySelector('.shoji-slides') as HTMLElement;
+}
+
 /** With preload: 0 there's exactly one `.shoji-slide` (structural offset 0) — the same element the gesture drag settle animation waits on. */
 function slideRoot(): HTMLElement {
   return document.querySelector('.shoji-slide') as HTMLElement;
@@ -161,7 +166,7 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     gallery.destroy();
   });
 
-  it('a completed vertical drag eases the dialog back to neutral concurrently with closing, instead of snapping it instantly first — a real bug, reported from real usage: an instant reset read as the photo popping back to fully visible for a beat before the zoom-out took over', () => {
+  it('a completed vertical drag eases the image back to neutral concurrently with closing, instead of snapping it instantly first — a real bug, reported from real usage: an instant reset read as the photo popping back to fully visible for a beat before the zoom-out took over', () => {
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', '0');
     document.body.appendChild(marker);
@@ -173,9 +178,9 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     // clearVerticalDragFeedback(true) — a real CSS transition, not an
     // instant '' reset — transform/opacity still end up back at neutral
     // ('', the inline-cleared state), just eased there rather than snapped.
-    expect(dialog().style.transition).toContain('var(--shoji-momentum-easing)');
-    expect(dialog().style.transform).toBe('');
-    expect(dialog().style.opacity).toBe('');
+    expect(slidesContainer().style.transition).toContain('var(--shoji-momentum-easing)');
+    expect(slidesContainer().style.transform).toBe('');
+    expect(slidesContainer().style.opacity).toBe('');
 
     marker.remove();
     gallery.destroy();
@@ -220,7 +225,7 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
     firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
     firePointer(d, 'pointermove', { clientY: 120, timeStamp: 20 }); // well past swipeThreshold
-    expect(d.style.transform).toBe(''); // no live feedback at all while suspended
+    expect(slidesContainer().style.transform).toBe(''); // no live feedback at all while suspended
     firePointer(d, 'pointerup', { clientY: 120, timeStamp: 30 });
 
     expect(onClose).not.toHaveBeenCalled();
@@ -238,12 +243,12 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(dialog().closest('.shoji-outer')?.classList.contains('shoji-open')).toBe(true);
-    expect(dialog().style.opacity).toBe('');
-    expect(dialog().style.transform).toBe('');
+    expect(slidesContainer().style.opacity).toBe('');
+    expect(slidesContainer().style.transform).toBe('');
     gallery.destroy();
   });
 
-  it('applies live opacity/scale feedback to the dialog while a vertical drag is in progress', () => {
+  it('applies live opacity/scale feedback to the image (.shoji-slides), not the dialog, while a vertical drag is in progress — requested directly: the toolbar/nav/counter/caption should stay anchored in place while the photo is dragged away, not move with it', () => {
     const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
     gallery.open(0);
 
@@ -252,11 +257,102 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
     firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 }); // locks, dragStartDistance=11 (delta 0 at the lock event itself)
     firePointer(d, 'pointermove', { clientY: 80, timeStamp: 20 }); // post-lock delta=69
 
-    expect(d.style.transform).toContain('translateY(');
-    expect(Number(d.style.opacity)).toBeLessThan(1);
+    expect(slidesContainer().style.transform).toContain('translateY(');
+    expect(Number(slidesContainer().style.opacity)).toBeLessThan(1);
+    // The dialog itself (and thus the toolbar/nav/counter/caption, its
+    // direct children — .shoji-slides is a sibling, not their ancestor)
+    // never gets a transform/opacity from this at all.
+    expect(d.style.transform).toBe('');
+    expect(d.style.opacity).toBe('');
 
     // release short of the threshold so the test doesn't also close the gallery
     firePointer(d, 'pointerup', { clientY: 80, timeStamp: 20 });
+    gallery.destroy();
+  });
+
+  it('hides controls once a vertical drag crosses the same distance a release would complete the close — a live "let go now and this closes" cue', () => {
+    const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
+    gallery.open(0);
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 }); // locks
+    firePointer(d, 'pointermove', { clientY: 30, timeStamp: 20 }); // under the default 50px threshold
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(false);
+
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 30 }); // delta from the lock point (11) is 59 — now past it
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(true);
+
+    firePointer(d, 'pointerup', { clientY: 15, timeStamp: 40 }); // release back under threshold — not completed
+    gallery.destroy();
+  });
+
+  it('reveals controls again if the drag retreats back under the threshold before release, without closing', () => {
+    const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
+    gallery.open(0);
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // delta 59 — past threshold
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(true);
+
+    firePointer(d, 'pointermove', { clientY: 20, timeStamp: 30 }); // delta 9 — back under it, still dragging
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(false);
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 }); // slow release, well under threshold — not completed
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open
+    gallery.destroy();
+  });
+
+  it('does not resurrect controls that were already, permanently hidden before the drag started (autoHideDelay: 0) just because the drag retreated back under the threshold', () => {
+    // autoHideDelay: 0 specifically, not gallery.hideControls() — any
+    // ordinary activity (including this same drag's own pointerdown)
+    // already re-reveals a merely idle-hidden gallery via the existing,
+    // separate auto-hide "any interaction reveals controls" behavior
+    // (DESIGN.md §2.8) before this feature's own threshold logic ever runs.
+    // 0 is the one mode where that reveal is itself suppressed, so controls
+    // genuinely stay hidden through pointerdown — the actual scenario
+    // `controlsHiddenAtGestureStart` exists to respect.
+    const gallery = new Gallery(document.body, { items: items(2), preload: 0, autoHideDelay: 0 });
+    gallery.open(0);
+    const d = dialog();
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(true);
+
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // delta 59 — past threshold
+    firePointer(d, 'pointermove', { clientY: 20, timeStamp: 30 }); // delta 9 — back under it
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(true); // still hidden — was hidden before this gesture too
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 });
+    gallery.destroy();
+  });
+
+  it('respects a custom swipeThreshold for the controls-hide cue too, not just the hardcoded default', () => {
+    const gallery = new Gallery(document.body, {
+      items: items(2),
+      preload: 0,
+      gestures: { swipeThreshold: 100 },
+    });
+    gallery.open(0);
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // delta 59 — past the default 50, under the custom 100
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(false);
+
+    firePointer(d, 'pointermove', { clientY: 115, timeStamp: 30 }); // delta 104 — now past the custom threshold
+
+    expect(d.classList.contains('shoji-controls-hidden')).toBe(true);
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 });
     gallery.destroy();
   });
 
