@@ -18,6 +18,7 @@ vi.mock('../../src/core/zoomTransition', async (importOriginal) => {
     zoomIn: vi.fn(actual.zoomIn),
     zoomOut: vi.fn(actual.zoomOut),
     containedBox: actual.containedBox,
+    waitForTransitionEnd: actual.waitForTransitionEnd,
   };
 });
 
@@ -66,10 +67,15 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
-function fireTransitionEnd(el: Element): void {
+function fireTransitionEnd(el: Element, propertyName = 'transform'): void {
   const event = new Event('transitionend') as Event & { propertyName?: string };
-  Object.defineProperty(event, 'propertyName', { value: 'transform' });
+  Object.defineProperty(event, 'propertyName', { value: propertyName });
   el.dispatchEvent(event);
+}
+
+/** close()'s controls-fade-first step (Gallery.ts's hideControlsForClose) waits on this element's own 'opacity' transitionend before the zoom-out animation ever starts — fire it first in any test that closes past a real origin/zoom-out. */
+function fireControlsFadeEnd(): void {
+  fireTransitionEnd(document.querySelector('.shoji-toolbar')!, 'opacity');
 }
 
 // preload: 0 keeps the pool to a single slide-media element, so
@@ -156,6 +162,7 @@ describe('Gallery — zoom transition origin lookup', () => {
     expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
 
     gallery.close();
+    fireControlsFadeEnd(); // controls fade out first
     fireTransitionEnd(activeMedia()); // let the deferred close actually finish
 
     gallery.open(0);
@@ -378,6 +385,7 @@ describe('Gallery — no known dimensions means no guessing (open placeholder AN
     await flush(); // the real image finishes decoding — isActiveReady() becomes true
 
     gallery.close();
+    fireControlsFadeEnd(); // controls fade out first, before the zoom-out this asserts on
 
     expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
 
@@ -407,6 +415,8 @@ describe('Gallery — deferred close animation', () => {
     gallery.close();
     expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open, mid-animation
 
+    fireControlsFadeEnd(); // controls fade out first
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open — the zoom-out itself hasn't ended yet
     fireTransitionEnd(media);
     expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull(); // now finished
 
@@ -422,6 +432,7 @@ describe('Gallery — deferred close animation', () => {
     gallery.close(); // should not re-trigger
     expect(closeHandler).toHaveBeenCalledTimes(1);
 
+    fireControlsFadeEnd();
     fireTransitionEnd(media);
     gallery.destroy();
   });
@@ -460,5 +471,109 @@ describe('Gallery — deferred close animation', () => {
 
     fireTransitionEnd(media); // the original zoomOut's listener may still be attached
     expect(afterClose).toHaveBeenCalledTimes(1); // finishClose() is idempotent — no second call
+  });
+});
+
+describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)', () => {
+  function openGallery(count = 3) {
+    const el = document.createElement('div');
+    el.innerHTML = Array.from(
+      { length: count },
+      (_, i) =>
+        `<a href="${i}.jpg" data-shoji-id="item-${i}" data-shoji-width="800" data-shoji-height="600"><img src="thumb-${i}.jpg"></a>`,
+    ).join('');
+    document.body.appendChild(el);
+
+    const gallery = new Gallery(el, { preload: 0 });
+    gallery.open(0);
+    return { gallery, media: activeMedia() };
+  }
+
+  function dialog(): HTMLElement {
+    return document.querySelector('.shoji-dialog') as HTMLElement;
+  }
+
+  it('hides controls immediately on close(), before the zoom-out animation starts', () => {
+    const { gallery } = openGallery();
+
+    gallery.close();
+
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
+    expect(zoomTransition.zoomOut).not.toHaveBeenCalled(); // not yet — waiting on the controls fade
+
+    gallery.destroy();
+  });
+
+  it('starts the zoom-out only once the controls-fade transitionend fires', () => {
+    const { gallery, media } = openGallery();
+
+    gallery.close();
+    expect(zoomTransition.zoomOut).not.toHaveBeenCalled();
+
+    fireControlsFadeEnd();
+    expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('still hides controls on close(), bypassing the hover guard, even while a toolbar control is actively hovered — the single most common close path (clicking the close button) is exactly this case', () => {
+    const { gallery, media } = openGallery();
+    document.querySelector('.shoji-toolbar-right')!.dispatchEvent(new PointerEvent('pointerenter'));
+
+    gallery.close();
+
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
+
+    fireControlsFadeEnd();
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('skips the wait entirely and starts the zoom-out immediately if controls are already hidden (e.g. idle auto-hide already ran)', () => {
+    const { gallery, media } = openGallery();
+    gallery.hideControls();
+    vi.mocked(zoomTransition.zoomOut).mockClear(); // isolate this test from hideControls() itself, which never calls it
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1); // no wait needed — already hidden
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('regression: moving the mouse during the close sequence does not re-show the just-hidden controls — onActivity() (pointermove/pointerdown/etc.) stays wired until finishClose(), same as any other open-state activity listener', () => {
+    const { gallery, media } = openGallery();
+
+    gallery.close();
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
+
+    document
+      .querySelector('.shoji-outer')!
+      .dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true); // still hidden — activity during close is a no-op
+
+    fireControlsFadeEnd();
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('regression: same as above but for touch — onActivity() is one shared handler for pointermove/pointerdown/touchstart/wheel/focusin alike, so a touch tap/drag during close is equally covered, not mouse-specific', () => {
+    const { gallery, media } = openGallery();
+
+    gallery.close();
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
+
+    document
+      .querySelector('.shoji-outer')!
+      .dispatchEvent(new Event('touchstart', { bubbles: true }));
+
+    expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
+
+    fireControlsFadeEnd();
+    fireTransitionEnd(media);
+    gallery.destroy();
   });
 });

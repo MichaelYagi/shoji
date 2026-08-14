@@ -14,6 +14,15 @@ still include breaking changes).
   override the full `--shoji-color-backdrop` CSS value. Left unset, nothing
   changes from before.
 
+### Changed
+
+- Closing the lightbox now fades the toolbar/nav/counter/caption out first,
+  before the photo animates back to its thumbnail — previously they stayed
+  at full opacity for the whole zoom-out animation, then vanished together
+  with everything else in one abrupt cut once it finished. Moving the mouse
+  (or touching the screen) during that fade no longer brings the controls
+  back mid-close.
+
 ### Fixed
 
 - Completing a horizontal mouse drag to navigate to the next/previous slide

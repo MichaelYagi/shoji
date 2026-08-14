@@ -48,17 +48,34 @@ test("close() actually clears the zoom-out transform — doesn't leave it stuck 
       const outers = document.querySelectorAll('.shoji-outer');
       const myOuter = outers[outers.length - 1] as HTMLElement;
       const media = myOuter.querySelector('.shoji-slide-media') as HTMLElement;
-      const settle = () =>
+      const settle = (fallbackMs = 500) =>
         new Promise<void>((resolve) => {
           media.addEventListener('transitionend', () => resolve(), { once: true });
-          setTimeout(resolve, 500);
+          setTimeout(resolve, fallbackMs);
         });
 
       gallery.open(0);
       await settle();
 
       gallery.close();
-      await settle();
+      // close() now fades controls out first (DESIGN.md §2.6a), then runs
+      // the zoom-out — two sequential ~--shoji-duration (300ms) animations,
+      // not one, each with its own waitForTransitionEnd fallback padding
+      // (duration + 100ms) — up to ~800ms theoretical worst case, so this
+      // needs comfortably more than double the single-animation margin used
+      // above, not just double.
+      await settle(1500);
+      // This test's own settle() listener is registered on `media` well
+      // before zoomOut()'s *own* internal transitionend listener (the one
+      // that actually runs clearInlineTransform) ever gets added — that
+      // only happens once zoomOut() itself starts, after the controls-fade
+      // delay. Confirmed directly: two listeners on the same native
+      // transitionend, registered at different times, don't reliably run
+      // as one tight synchronous batch — this test's own `await settle()`
+      // continuation can resume *before* zoomOut's later-registered
+      // listener gets its turn, even for that same event. A microtask-scale
+      // buffer is enough to let it run.
+      await new Promise((r) => setTimeout(r, 0));
       const transformAfterClose = media.style.transform;
 
       gallery.destroy();

@@ -19,6 +19,8 @@ export interface LightboxDom {
   prevButton: HTMLButtonElement;
   nextButton: HTMLButtonElement;
   captionToggleButton: HTMLButtonElement; // DESIGN.md §2.3a
+  /** The `.shoji-toolbar` wrapper itself — always present, unlike its slots' individual contents, so it's the one reliable element to key a controls-fade `transitionend` wait off of (Gallery.ts's close()). */
+  toolbar: HTMLElement;
   /** DESIGN.md §3 — `ctx.ui.toolbar(slot, ...)` inserts into these; close lives in `right`. */
   toolbarLeft: HTMLElement;
   toolbarCenter: HTMLElement;
@@ -109,6 +111,7 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
     prevButton,
     nextButton,
     captionToggleButton,
+    toolbar,
     toolbarLeft,
     toolbarCenter,
     toolbarRight,

@@ -148,15 +148,23 @@ function computeTransform(
 }
 
 /**
- * Waits for `target`'s own transform transition to end (with a safety-net
- * timeout in case transitionend never fires — an interrupted/removed
- * element, or a browser quirk) then calls `cb` exactly once. Exported: the
+ * Waits for `target`'s own transition (on `property`, default `'transform'`)
+ * to end (with a safety-net timeout in case transitionend never fires — an
+ * interrupted/removed element, a browser quirk, or `--shoji-duration: 0ms`
+ * under `prefers-reduced-motion`, which some browsers never fire a real
+ * transitionend for at all) then calls `cb` exactly once. Exported: the
  * gesture-driven drag-to-navigate/drag-to-close settle animations (§2.4,
  * `Gallery.ts`) reuse this same wait-with-fallback logic rather than
  * duplicating it — same instant-jump-then-transition FLIP family of moves
  * as the zoom transition, just on a different element/property pairing.
+ * `close()`'s own controls-fade-before-zoom-out sequencing (§2.6a) reuses it
+ * a second way, waiting on `opacity` instead.
  */
-export function waitForTransitionEnd(target: HTMLElement, cb: () => void): void {
+export function waitForTransitionEnd(
+  target: HTMLElement,
+  cb: () => void,
+  property = 'transform',
+): void {
   const durationMs = parseCssTime(getComputedStyle(target).transitionDuration);
   let done = false;
   const finish = (): void => {
@@ -166,8 +174,7 @@ export function waitForTransitionEnd(target: HTMLElement, cb: () => void): void 
     cb();
   };
   const onEnd = (event: Event): void => {
-    if (event.target === target && (event as TransitionEvent).propertyName === 'transform')
-      finish();
+    if (event.target === target && (event as TransitionEvent).propertyName === property) finish();
   };
   target.addEventListener('transitionend', onEnd);
   setTimeout(finish, durationMs + 100);

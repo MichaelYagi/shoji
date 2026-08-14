@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { TRANSITION_PRESETS } from '../transitions/presets';
 import { SlideTransition } from '../transitions/SlideTransition';
-import { zoomIn, zoomOut } from './zoomTransition';
+import { zoomIn, zoomOut, waitForTransitionEnd } from './zoomTransition';
 
 function itemKey(item: GalleryItem | GalleryItemInput): string {
   return item.id ?? item.src;
@@ -171,9 +171,18 @@ export class Gallery {
     if (this.closable && isBackdropClick(event)) this.close();
   };
 
-  /** DESIGN.md §2.8 — any interaction re-shows controls, restarts the idle clock. `autoHideDelay: 0` = "never show controls" — a no-op here. */
+  /**
+   * DESIGN.md §2.8 — any interaction re-shows controls, restarts the idle
+   * clock. `autoHideDelay: 0` = "never show controls" — a no-op here.
+   * Also a no-op once `isClosing` — a real bug, reported from real usage:
+   * moving the mouse during close()'s own controls-fade-then-zoom-out
+   * sequence (§2.6a) re-showed the just-hidden controls mid-animation, since
+   * these same activity listeners stay wired for the whole close sequence,
+   * not torn down until finishClose(). Nothing to reveal controls *for*
+   * once closing has actually started.
+   */
   private readonly onActivity = (): void => {
-    if (this.autoHideDelay === 0) return;
+    if (this.autoHideDelay === 0 || this.isClosing) return;
     this.showControls();
     this.scheduleAutoHide();
   };
@@ -901,6 +910,7 @@ export class Gallery {
     // instant), so nothing else stops a viewer-started video just because
     // the lightbox is now hidden.
     pauseMedia(media ?? null);
+
     const origin = this.getOriginElement(this.activeIndex);
     const naturalSize = this.resolveNaturalSize(this.activeIndex);
     // Real content already rendered doesn't need naturalSize at all —
@@ -910,11 +920,36 @@ export class Gallery {
     // nothing but a guessed target to shrink toward — same "don't guess"
     // reasoning open() above already applies to its own animation.
     if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
+      // Controls fade out *first* — only worth sequencing here, where a
+      // photo is actually visibly shrinking; the no-zoom-out branch below
+      // vanishes everything at once regardless, so it stays synchronous.
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
-      zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
+      this.hideControlsForClose(() => {
+        zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
+      });
     } else {
       this.finishClose();
     }
+  }
+
+  /**
+   * Controls fade out first, then `cb` (the zoom-out animation) runs —
+   * previously both ran at once, chrome sat motionless over the shrinking
+   * photo, then everything vanished together at the end. Bypasses
+   * `hideControls()`'s `isControlActive()` hover guard on purpose: the most
+   * common close path (clicking close) is hovering a control at this exact
+   * instant, and a deliberate close should hide regardless. No-op to `cb`
+   * if already hidden.
+   */
+  private hideControlsForClose(cb: () => void): void {
+    if (!this.dom || this.autoHidden) {
+      cb();
+      return;
+    }
+    this.autoHidden = true;
+    this.dom.dialog.classList.add('shoji-controls-hidden');
+    this.bus.emit('controls:hide', {});
+    waitForTransitionEnd(this.dom.toolbar, cb, 'opacity');
   }
 
   /** `item.width`/`height`, else origin's `naturalWidth`/`naturalHeight` (accurate when `item.thumb` is unset). Feeds `computeTransform`'s letterbox-aware sizing. */
