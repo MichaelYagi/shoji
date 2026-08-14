@@ -327,6 +327,14 @@ export const Zoom: ShojiPlugin = {
       ctx.ui.toolbar('right', button),
     );
 
+    /** All three zoom buttons are no-ops on a video slide — `getImg()` returns null, so `apply()`/`ensureNatural()` bail out immediately. Hidden rather than left clickable-but-dead. */
+    function updateButtonVisibility(): void {
+      const isVideo = !!gallery.items[gallery.currentIndex]?.video;
+      zoomInBtn.hidden = isVideo;
+      zoomOutBtn.hidden = isVideo;
+      actualSizeBtn.hidden = isVideo;
+    }
+
     // w/s zoom in/out, same step as the toolbar buttons — both cases
     // registered explicitly (registerShortcut matches event.key verbatim,
     // no case-insensitive matching of its own) so Shift/CapsLock still work.
@@ -340,6 +348,7 @@ export const Zoom: ShojiPlugin = {
     const offOpen = ctx.on('afterOpen', () => {
       reset();
       markEnabled();
+      updateButtonVisibility();
     });
     // Un-animated, and on beforeSlide rather than only afterSlide below:
     // SlideManager.render() (called synchronously between the two) reuses a
@@ -356,6 +365,7 @@ export const Zoom: ShojiPlugin = {
     const offSlide = ctx.on('afterSlide', () => {
       reset();
       markEnabled();
+      updateButtonVisibility();
     });
     // Fires synchronously, before Gallery.close() measures the active
     // media's rect to compute the zoom-out-to-thumbnail animation — reset
@@ -368,6 +378,7 @@ export const Zoom: ShojiPlugin = {
     const offBeforeClose = ctx.on('beforeClose', () => reset());
     const unregisterGate = gallery.registerZoomGate(() => scale > ZOOM_EPSILON);
     markEnabled(); // covers the (unusual but possible) case of the gallery already being open when this plugin initializes
+    updateButtonVisibility();
 
     return () => {
       for (const remove of removeButtons) remove();

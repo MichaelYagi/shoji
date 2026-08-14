@@ -21,6 +21,10 @@ still include breaking changes).
   excluded from the gesture engine's drag recognition, so the drag hijacked
   native text selection. Captions are now excluded, same as buttons/links/
   form controls already were.
+- The Zoom plugin's three toolbar buttons (zoom in, zoom out, actual size)
+  did nothing on a video slide, with no indication why — clicking them was a
+  silent no-op. They're now hidden entirely whenever the active slide is a
+  video, and reappear when navigating back to a photo slide.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 

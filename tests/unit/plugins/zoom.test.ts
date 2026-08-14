@@ -563,6 +563,60 @@ describe("Zoom — transition (discrete jumps animate, continuous gestures don't
   });
 });
 
+describe("Zoom — buttons hidden on video slides (all three zoom actions are no-ops there: getImg() returns null whenever the active slide isn't an <img>)", () => {
+  const videoItems: GalleryItem[] = [
+    { id: 'a', src: 'a.jpg' },
+    { id: 'v', src: 'v.mp4', video: { provider: 'html5' } },
+  ];
+
+  it('hides all three buttons when opening directly on a video slide', async () => {
+    const gallery = makeGallery({ items: videoItems });
+    gallery.open(1);
+    await flushSlideLoad();
+
+    expect(button('Zoom in').hidden).toBe(true);
+    expect(button('Zoom out').hidden).toBe(true);
+    expect(button('Actual size').hidden).toBe(true);
+    gallery.destroy();
+  });
+
+  it('shows the buttons again navigating from a video slide back to a photo slide', async () => {
+    const gallery = makeGallery({ items: videoItems });
+    gallery.open(1);
+    await flushSlideLoad();
+
+    gallery.prev();
+    await flushSlideLoad();
+
+    expect(button('Zoom in').hidden).toBe(false);
+    expect(button('Zoom out').hidden).toBe(false);
+    expect(button('Actual size').hidden).toBe(false);
+    gallery.destroy();
+  });
+
+  it('hides the buttons navigating from a photo slide to a video slide', async () => {
+    const gallery = makeGallery({ items: videoItems });
+    gallery.open(0);
+    await flushSlideLoad();
+    expect(button('Zoom in').hidden).toBe(false);
+
+    gallery.next();
+    await flushSlideLoad();
+
+    expect(button('Zoom in').hidden).toBe(true);
+    gallery.destroy();
+  });
+
+  it('a photo-only gallery never hides the buttons', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    expect(button('Zoom in').hidden).toBe(false);
+    gallery.destroy();
+  });
+});
+
 describe('Zoom — cleanup', () => {
   it('destroy() removes all three toolbar buttons', () => {
     const gallery = makeGallery();
