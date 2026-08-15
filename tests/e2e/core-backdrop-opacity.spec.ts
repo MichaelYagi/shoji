@@ -12,8 +12,10 @@ import path from 'node:path';
  * multiplicative `opacity` on top of that — could only ever reach 0.92, never
  * true 1. Fixed in `shoji.css` by splitting the default color into a fully
  * opaque hue (`#000000` / `#ffffff`) with the real alpha moved entirely into
- * `--shoji-backdrop-opacity` (default `0.92` dark / `0.96` light, preserving
- * the exact same default look) — now the option's `1` is honest.
+ * `--shoji-backdrop-opacity` — now the option's `1` is honest.
+ * `--shoji-backdrop-opacity`'s own default was later changed to `1` too
+ * (dark and light alike, requested directly), so the unset default and an
+ * explicit `backdropOpacity: 1` now render identically.
  */
 const corePath = () => '/@fs' + path.join(process.cwd(), 'src/core/index.ts').replace(/\\/g, '/');
 
@@ -44,14 +46,12 @@ test("backdropOpacity: 1 renders as genuinely, fully opaque — not capped at th
   await expect(backdrop).toHaveCSS('background-color', 'rgb(0, 0, 0)');
 });
 
-test('default (no backdropOpacity given) renders the same 0.92 look as before this option existed', async ({
-  page,
-}) => {
+test('default (no backdropOpacity given) renders fully opaque', async ({ page }) => {
   await page.goto('/pages/e2e-plugins.html');
   await openGallery(page, {});
 
   const backdrop = page.locator('.shoji-backdrop').last();
-  await expect(backdrop).toHaveCSS('opacity', '0.92');
+  await expect(backdrop).toHaveCSS('opacity', '1');
 });
 
 test('backdropOpacity: 0.3 renders visibly lighter than the default', async ({ page }) => {

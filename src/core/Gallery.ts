@@ -982,6 +982,11 @@ export class Gallery {
     if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
       this.forceHideControls();
+      // Starts at the same instant as the zoom-out and the controls fade —
+      // see the comment on .shoji-backdrop's own transition (shoji.css) for
+      // why this can't just be left to the instant display:none cut at the
+      // end of finishClose().
+      if (this.dom) this.dom.backdrop.style.opacity = '0';
       zoomOut({ origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag }, () =>
         this.finishClose(),
       );
@@ -1060,6 +1065,9 @@ export class Gallery {
     document.removeEventListener('keydown', this.onKeydown);
     this.focusTrap.deactivate();
     this.dom?.outer.classList.remove('shoji-open');
+    // Cleared, not left at '0' — a fresh open() must start fully opaque
+    // again, not still faded out from the last close.
+    if (this.dom) this.dom.backdrop.style.opacity = '';
     if (this.autoHideTimer !== null) {
       clearTimeout(this.autoHideTimer);
       this.autoHideTimer = null;

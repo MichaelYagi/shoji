@@ -75,35 +75,9 @@ describe('Gallery lifecycle', () => {
   });
 });
 
-describe('Gallery — body scroll lock', () => {
+describe('Gallery — page scroll lock', () => {
   afterEach(() => {
-    document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
-  });
-
-  it('locks document.body scrolling while open, restores it on close', () => {
-    const gallery = new Gallery(document.createElement('div'));
-
-    gallery.open();
-    expect(document.body.style.overflow).toBe('hidden');
-
-    gallery.close();
-    expect(document.body.style.overflow).toBe('');
-
-    gallery.destroy();
-  });
-
-  it('restores the exact prior overflow value, not just clears it', () => {
-    document.body.style.overflow = 'scroll';
-    const gallery = new Gallery(document.createElement('div'));
-
-    gallery.open();
-    expect(document.body.style.overflow).toBe('hidden');
-
-    gallery.close();
-    expect(document.body.style.overflow).toBe('scroll');
-
-    gallery.destroy();
   });
 
   it('two galleries open at once: closing one does not unlock while the other is still open', () => {
@@ -112,13 +86,13 @@ describe('Gallery — body scroll lock', () => {
 
     a.open();
     b.open();
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     a.close();
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     b.close();
-    expect(document.body.style.overflow).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
 
     a.destroy();
     b.destroy();
@@ -127,13 +101,13 @@ describe('Gallery — body scroll lock', () => {
   it('destroy() while open also unlocks', () => {
     const gallery = new Gallery(document.createElement('div'));
     gallery.open();
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     gallery.destroy();
-    expect(document.body.style.overflow).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
   });
 
-  it("regression: also locks <html>'s own overflow (both axes, the shorthand — not just overflow-x), not just body's. Two real bugs found in sequence here: (1) rotating a photo on a narrow mobile viewport grew window.innerWidth itself — mobile browsers decide whether to widen the layout viewport past device-width by looking at <html>'s own overflow-x, not at what's already clipped further down the tree; (2) locking overflow-x alone (the first fix) silently promoted <html>'s overflow-y from 'visible' to 'auto' per spec (mixing hidden+visible isn't allowed), revealing a real scrollbar around the lightbox that wasn't there before — only the full shorthand avoids that promotion. jsdom doesn't expand the shorthand into readable overflowX/overflowY getters, so this only checks the shorthand property itself; the scrollbar half was only actually observable in a real browser, see DESIGN.md §2.6a.", () => {
+  it("locks <html>'s own overflow (both axes, the shorthand — not just overflow-x) while open, restores it on close. Two real bugs found in sequence here: (1) rotating a photo on a narrow mobile viewport grew window.innerWidth itself — mobile browsers decide whether to widen the layout viewport past device-width by looking at <html>'s own overflow-x, not at what's already clipped further down the tree; (2) locking overflow-x alone (the first fix) silently promoted <html>'s overflow-y from 'visible' to 'auto' per spec (mixing hidden+visible isn't allowed), revealing a real scrollbar around the lightbox that wasn't there before — only the full shorthand avoids that promotion. jsdom doesn't expand the shorthand into readable overflowX/overflowY getters, so this only checks the shorthand property itself; the scrollbar half was only actually observable in a real browser, see DESIGN.md §2.6a. (`document.body`'s own overflow used to be locked too — removed once it turned out to be both unnecessary for blocking scroll and the cause of a real margin-collapsing bug, see DESIGN.md §2.6a.)", () => {
     const gallery = new Gallery(document.createElement('div'));
 
     gallery.open();
@@ -156,6 +130,20 @@ describe('Gallery — body scroll lock', () => {
     expect(document.documentElement.style.overflow).toBe('scroll');
 
     gallery.destroy();
+  });
+
+  it('does not touch document.body.style.overflow at all — locking <html> alone is sufficient to block scrolling, and touching body was what caused the margin-collapsing bug', () => {
+    document.body.style.overflow = 'visible';
+    const gallery = new Gallery(document.createElement('div'));
+
+    gallery.open();
+    expect(document.body.style.overflow).toBe('visible');
+
+    gallery.close();
+    expect(document.body.style.overflow).toBe('visible');
+
+    gallery.destroy();
+    document.body.style.overflow = '';
   });
 });
 

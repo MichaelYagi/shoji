@@ -28,6 +28,10 @@ still include breaking changes).
 
 ### Changed
 
+- The backdrop is now fully opaque by default (`--shoji-backdrop-opacity: 1`,
+  both themes), rather than the previous ~92%/96% translucent look. A host
+  that wants the old translucency back can set it via `backdropOpacity`
+  (`GalleryOptions`) or the custom property directly.
 - Closing the lightbox now starts fading the toolbar/nav/counter/caption out
   at the same instant the photo starts animating back to its thumbnail,
   instead of one strictly after the other — previously the fade ran to
@@ -103,6 +107,19 @@ still include breaking changes).
   reflows in either direction. Scoped to the lock itself, not set
   permanently — host page layout is unaffected while the lightbox is
   closed, and a page that never had a scrollbar gets no padding at all.
+- The backdrop had no fade of its own — closing cut it from fully visible
+  to fully gone in a single frame the instant the photo finished shrinking,
+  reading as a flash of the page behind it. It now fades out over the same
+  duration as the photo and the controls, starting at the same instant.
+- Opening or closing the lightbox could visibly shift the page vertically,
+  independent of the scrollbar-width issue above and not fixed by it —
+  reproducible even on pages that fix couldn't touch. The scroll lock set
+  `document.body`'s own `overflow` to `hidden`, which blocks top-margin
+  collapsing between `body` and its first child; while locked, that child
+  rendered pushed down by its own margin instead of sharing `body`'s, and
+  snapped back up the instant the lock released. `document.body`'s
+  `overflow` is no longer touched at all — locking `<html>`'s own `overflow`
+  (already in place) is sufficient on its own to block scrolling.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 

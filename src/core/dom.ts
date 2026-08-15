@@ -12,6 +12,7 @@ export interface LightboxLabels {
 
 export interface LightboxDom {
   outer: HTMLElement;
+  backdrop: HTMLElement;
   dialog: HTMLElement;
   counter: HTMLElement;
   caption: HTMLElement;
@@ -102,6 +103,7 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
 
   return {
     outer,
+    backdrop,
     dialog,
     counter,
     caption,

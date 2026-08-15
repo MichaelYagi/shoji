@@ -36,14 +36,10 @@
   --shoji-color-backdrop: #000000;
   --shoji-color-toolbar-bg: rgba(20, 20, 22, 0.85);
   --shoji-color-disabled: rgba(245, 245, 245, 0.35);
-  /* Real alpha: 1 = fully opaque, 0 = fully transparent. Default 0.92 matches
-     this theme's previous baked-in rgba(0, 0, 0, 0.92) exactly, so nothing
-     changes visually out of the box — only the *meaning* of "1" changed, from
-     "unchanged from whatever the color's own alpha happened to be" (never
-     reachable as true black) to real, honest opacity. Settable directly via
-     GalleryOptions.backdropOpacity (Gallery.ts) without needing to know or
-     override the full color value. */
-  --shoji-backdrop-opacity: 0.92;
+  /* Real alpha: 1 = fully opaque, 0 = fully transparent. Settable directly
+     via GalleryOptions.backdropOpacity (Gallery.ts) without needing to know
+     or override the full color value. */
+  --shoji-backdrop-opacity: 1;
 
   --shoji-focus-ring: 2px solid var(--shoji-color-accent);
   --shoji-progress: var(--shoji-color-accent);
@@ -86,7 +82,6 @@
   --shoji-color-bg: #fafafa;
   --shoji-color-fg: #111111;
   --shoji-color-backdrop: #ffffff;
-  --shoji-backdrop-opacity: 0.96;
   --shoji-color-toolbar-bg: rgba(255, 255, 255, 0.9);
   --shoji-color-disabled: rgba(17, 17, 17, 0.35);
 }
@@ -115,6 +110,15 @@
   z-index: var(--shoji-z-backdrop);
   background: var(--shoji-color-backdrop);
   opacity: var(--shoji-backdrop-opacity);
+  /* A real bug: without this, the backdrop had no transition of its own at
+     all — .shoji-outer (backdrop included) goes display:none in one
+     instant step once the zoom-out settles, so the still-fully-dark
+     backdrop behind the shrinking photo would snap straight to fully
+     visible-page-behind-it in a single frame, reading as a flash right as
+     the close finishes. Gallery.ts's beginClose() now starts this fade at
+     the same moment as the zoom-out and the controls fade, so all three
+     finish together instead of the backdrop cutting out abruptly at the end. */
+  transition: opacity var(--shoji-duration) var(--shoji-easing);
 }
 
 .shoji-dialog {

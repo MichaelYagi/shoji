@@ -1,6 +1,5 @@
 /** DESIGN.md §2.6a — reference-counted page scroll lock. */
 let lockCount = 0;
-let savedOverflow = '';
 let savedHtmlOverflow = '';
 let savedHtmlPaddingRight = '';
 
@@ -39,8 +38,26 @@ export function lockBodyScroll(): void {
       document.documentElement.style.paddingRight = `${currentPaddingRight + scrollbarWidth}px`;
     }
 
-    savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // A real bug: `document.body.style.overflow = 'hidden'` (this function's
+    // original, and until now only, scroll-blocking mechanism) was still
+    // set here alongside <html>'s own below — redundant, and not harmless:
+    // any value of `overflow` other than `visible` makes an element
+    // establish a new block-formatting context, which blocks top-margin
+    // collapsing between it and its first child. Confirmed directly via
+    // real-browser instrumentation: with body's overflow locked, an h1
+    // immediately inside it rendered `bodyMarginTop + h1's own default
+    // margin-top` below the viewport top (its margin no longer collapsing
+    // into body's own); the instant `unlockBodyScroll()` restored body's
+    // overflow, collapsing resumed and the h1 snapped back up by its own
+    // margin's worth — reading as the page shifting upward right as the
+    // lightbox closes, on *any* page where the first child's margin would
+    // otherwise collapse with body's (essentially any page without padding/
+    // border on body itself — not a corner case). <html>'s own overflow:
+    // hidden below is sufficient on its own to block user-driven scrolling
+    // (wheel/touch/keyboard) — confirmed directly — since it's the real
+    // scrolling element in standards mode; body's lock was never adding
+    // independent protection, only this side effect.
+    //
     // <html>'s own overflow, not just body's — mobile viewport-widening
     // bug, see DESIGN.md §2.6a. Both axes, not just overflow-x: setting
     // only one non-'visible' axis forces the browser to silently promote
@@ -56,7 +73,6 @@ export function lockBodyScroll(): void {
 export function unlockBodyScroll(): void {
   lockCount = Math.max(0, lockCount - 1);
   if (lockCount === 0) {
-    document.body.style.overflow = savedOverflow;
     document.documentElement.style.overflow = savedHtmlOverflow;
     document.documentElement.style.paddingRight = savedHtmlPaddingRight;
   }
