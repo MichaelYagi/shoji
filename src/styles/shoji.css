@@ -555,6 +555,21 @@
   cursor: auto !important;
 }
 
+/* A real bug, reported from real usage: dragging past the close threshold
+   (GestureController's live controls-hide cue, §2.4/§2.8) reuses this same
+   `.shoji-controls-hidden` class, so the cursor vanished along with the
+   toolbar/nav/counter/caption — disorienting mid-drag, when the pointer is
+   actively moving and the viewer needs to see it. `cursor: none` only makes
+   sense for an idle/inactive hide; a drag is the opposite of idle. Not
+   reusing `.shoji-cursor-visible` here — that class is a *permanent* marker
+   for `autoHideDelay: 0`, and toggling it on/off with the drag would
+   incorrectly clear it once the drag ends even when that permanent mode is
+   also active. */
+.shoji-controls-hidden-for-drag.shoji-controls-hidden,
+.shoji-controls-hidden-for-drag.shoji-controls-hidden * {
+  cursor: auto !important;
+}
+
 .shoji-live-region {
   position: absolute;
   width: 1px;

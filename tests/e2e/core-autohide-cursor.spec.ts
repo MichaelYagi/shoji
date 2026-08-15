@@ -97,6 +97,43 @@ test('autoHideDelay: 0 hides the toolbar but leaves the cursor alone — unlike 
 });
 
 /**
+ * DESIGN.md §2.4/§2.8 — a real bug, reported from real usage: dragging past
+ * the close threshold hides controls the same way idle auto-hide does
+ * (`.shoji-controls-hidden`), which also hides the cursor — but a drag is
+ * active pointer movement, the opposite of idle, and losing the cursor
+ * mid-drag is disorienting. Real CSS specificity
+ * (`.shoji-controls-hidden-for-drag` overriding `.shoji-controls-hidden`'s
+ * own `cursor: none !important`), not verifiable from a jsdom unit test.
+ */
+test('the cursor stays visible once a vertical drag crosses the close threshold, even though controls hide', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  const dialog = page.locator('.shoji-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveCSS('cursor', /^(?!none$)/);
+
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const box = (await media.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const startY = box.y + box.height * 0.3;
+
+  await page.mouse.move(x, startY);
+  await page.mouse.down();
+  await page.mouse.move(x, startY + 70, { steps: 5 }); // past the default 50px threshold
+
+  await expect(dialog).toHaveClass(/shoji-controls-hidden/); // the toolbar/nav did hide
+  await expect(dialog).toHaveCSS('cursor', /^(?!none$)/); // but the cursor did not
+
+  await page.mouse.move(x, startY + 20, { steps: 5 }); // back under the threshold, not completed
+  await page.mouse.up();
+
+  await expect(dialog).not.toHaveClass(/shoji-controls-hidden/);
+  await expect(dialog).toHaveCSS('cursor', /^(?!none$)/);
+});
+
+/**
  * DESIGN.md §2.8 — `autoHideDelay: false` is the real "always visible"
  * value (the opposite of `0`, which hides permanently): the idle timer
  * never arms at all, so controls simply never auto-hide, no matter how

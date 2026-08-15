@@ -236,6 +236,47 @@ describe('Autoplay — button & basic timing', () => {
   });
 });
 
+describe('Autoplay — vertical drag-to-close threshold', () => {
+  it('pauses the slideshow the instant a vertical drag crosses the close threshold, and resumes it if the drag retreats back under it without closing', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 }); // locks
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // delta 59 — past the default 50px threshold
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // paused by the drag
+
+    firePointer(d, 'pointermove', { clientY: 20, timeStamp: 30 }); // delta 9 — back under it, still dragging
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // resumed
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 }); // slow release, not completed
+    gallery.destroy();
+  });
+
+  it('does not resume a slideshow that was already stopped before the drag started, just because the drag retreats back under the threshold', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0); // never started — playing stays false the whole time
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // past threshold
+    firePointer(d, 'pointermove', { clientY: 20, timeStamp: 30 }); // back under it
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // still not playing
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 });
+    gallery.destroy();
+  });
+});
+
 describe('Autoplay — video-aware behavior', () => {
   it('arriving at a video slide plays it instead of starting a fixed-interval timer', async () => {
     vi.useFakeTimers();

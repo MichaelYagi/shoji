@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../src/core';
 import type { GalleryItem } from '../../src/core/types';
+import * as zoomTransition from '../../src/core/zoomTransition';
 
 const DEFAULT_RECT: DOMRect = {
   top: 0,
@@ -163,25 +164,107 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(dialog().closest('.shoji-outer')?.classList.contains('shoji-open')).toBe(false);
+    // A completed drag-close never explicitly un-hides (nothing left to
+    // reveal) — the cursor-visible-during-drag marker must still be
+    // cleaned up by finishClose(), not left stuck for the next open().
+    expect(dialog().classList.contains('shoji-controls-hidden-for-drag')).toBe(false);
     gallery.destroy();
   });
 
-  it('a completed vertical drag eases the image back to neutral concurrently with closing, instead of snapping it instantly first — a real bug, reported from real usage: an instant reset read as the photo popping back to fully visible for a beat before the zoom-out took over', () => {
+  it("bakes the drag's exact appearance onto the photo itself and resets .shoji-slides to neutral instantly, instead of freezing the transform on .shoji-slides for the whole close — a real bug, reported from real usage: freezing it on the container split the close motion across two elements (a static frozen container plus a photo separately easing in from a standing start), which read as a visible pause partway through, worse the smaller the drag. Baking it onto the photo means only one thing ever animates, continuous from exactly where the drag left off.", () => {
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', '0');
     document.body.appendChild(marker);
-    const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
+    const gallery = new Gallery(document.body, {
+      items: [
+        { id: '0', src: '0.jpg', width: 800, height: 600 },
+        { id: '1', src: '1.jpg', width: 800, height: 600 },
+      ],
+      preload: 0,
+    });
     gallery.open(0);
+    const media = document.querySelector('.shoji-slide-media') as HTMLElement;
 
     dragVertical(120);
 
-    // clearVerticalDragFeedback(true) — a real CSS transition, not an
-    // instant '' reset — transform/opacity still end up back at neutral
-    // ('', the inline-cleared state), just eased there rather than snapped.
-    expect(slidesContainer().style.transition).toContain('var(--shoji-momentum-easing)');
+    // .shoji-slides carries nothing at all — the drag's appearance has
+    // been handed off to `media` instead, not left frozen here.
     expect(slidesContainer().style.transform).toBe('');
     expect(slidesContainer().style.opacity).toBe('');
 
+    // `media` (the photo itself) is what's animating — zoomOut()'s own
+    // transition, already running toward the thumbnail.
+    expect(media.style.transition).toContain('var(--shoji-duration)');
+    expect(media.style.transform).not.toBe('');
+
+    // Once that transition finishes and the dialog is hidden, media's own
+    // inline styles are cleaned up too.
+    fireTransitionEnd(media);
+    expect(media.style.transform).toBe('');
+    expect(media.style.opacity).toBe('');
+
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it('does not clamp the close-start position baked onto the photo — a real bug, reported from real usage and confirmed on video: an earlier version clamped translateY to the same 160px the dim/scale feedback ramps over, to bound how far away the close animation could start. Clamping is itself an instant correction: for a drag past that distance, release visibly snapped the photo from wherever it actually was back to the clamped point, before the real shrink-to-thumbnail motion continued from there — reading as "jumps to a small image in the middle of the screen." The close must continue from exactly where the drag left off, however far that is, with no recentering step.', () => {
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', '0');
+    document.body.appendChild(marker);
+    const gallery = new Gallery(document.body, {
+      items: [
+        { id: '0', src: '0.jpg', width: 800, height: 600 },
+        { id: '1', src: '1.jpg', width: 800, height: 600 },
+      ],
+      preload: 0,
+    });
+    gallery.open(0);
+    // Stubbed so real zoomOut()'s own DOM/transition side effects don't run
+    // — this test only cares what Gallery hands zoomOut() as `dragStart`,
+    // covered for real (including zoomOut()'s own handling of it) by the
+    // "bakes the drag's exact appearance" test above, and by e2e.
+    const zoomOutSpy = vi.spyOn(zoomTransition, 'zoomOut').mockImplementation(() => {});
+
+    dragVertical(600); // well past the old, now-removed 160px clamp
+
+    const dragStart = zoomOutSpy.mock.calls[0]![0].dragStart!;
+    expect(dragStart.translateY).toBe(589); // the raw delta, unclamped
+    expect(dragStart.scale).toBeCloseTo(0.85); // scale/opacity still ramp-capped, unrelated to the removed translate clamp
+
+    zoomOutSpy.mockRestore();
+    marker.remove();
+    gallery.destroy();
+  });
+
+  it("keeps the drag's own shrink (scale) as zoomOut()'s dragStart instead of snapping it back to full size on release — a real bug, reported from real usage: dropping it instantly visibly popped the photo back toward full size for a frame before the real close animation took over", () => {
+    const marker = document.createElement('div');
+    marker.setAttribute('data-shoji-id', '0');
+    document.body.appendChild(marker);
+    const gallery = new Gallery(document.body, {
+      items: [
+        { id: '0', src: '0.jpg', width: 800, height: 600 },
+        { id: '1', src: '1.jpg', width: 800, height: 600 },
+      ],
+      preload: 0,
+    });
+    gallery.open(0);
+    const zoomOutSpy = vi.spyOn(zoomTransition, 'zoomOut').mockImplementation(() => {});
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 }); // locks
+    firePointer(d, 'pointermove', { clientY: 100, timeStamp: 20 }); // delta 89, under the cap
+
+    const liveScale = slidesContainer().style.transform.match(/scale\(([^)]+)\)/)?.[1];
+    expect(liveScale).toBeTruthy();
+
+    firePointer(d, 'pointerup', { clientY: 100, timeStamp: 30 });
+
+    // Same scale value carried straight through as zoomOut()'s dragStart —
+    // not stripped back out at the instant of release.
+    expect(zoomOutSpy.mock.calls[0]![0].dragStart!.scale).toBe(Number(liveScale));
+
+    zoomOutSpy.mockRestore();
     marker.remove();
     gallery.destroy();
   });
@@ -305,6 +388,25 @@ describe('Gallery — gesture engine wiring (DESIGN.md §2.4)', () => {
 
     firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 }); // slow release, well under threshold — not completed
     expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open
+    gallery.destroy();
+  });
+
+  it("marks the dialog with a dedicated class while controls are hidden for a drag, distinct from an idle/inactive hide — a real bug, reported from real usage: crossing the close threshold hid the cursor along with the toolbar (shoji.css's .shoji-controls-hidden rule), disorienting mid-drag, when the pointer is actively moving and the viewer most needs to see it. Cleared again on retreat, not left stuck.", () => {
+    const gallery = new Gallery(document.body, { items: items(2), preload: 0 });
+    gallery.open(0);
+
+    const d = dialog();
+    firePointer(d, 'pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+    firePointer(d, 'pointermove', { clientY: 11, timeStamp: 10 });
+    expect(d.classList.contains('shoji-controls-hidden-for-drag')).toBe(false);
+
+    firePointer(d, 'pointermove', { clientY: 70, timeStamp: 20 }); // delta 59 — past threshold
+    expect(d.classList.contains('shoji-controls-hidden-for-drag')).toBe(true);
+
+    firePointer(d, 'pointermove', { clientY: 20, timeStamp: 30 }); // delta 9 — back under it
+    expect(d.classList.contains('shoji-controls-hidden-for-drag')).toBe(false);
+
+    firePointer(d, 'pointerup', { clientY: 20, timeStamp: 5030 }); // not completed
     gallery.destroy();
   });
 

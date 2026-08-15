@@ -121,3 +121,47 @@ test('a double-click to zoom does not also pause the slideshow — the first hal
   await page.waitForTimeout(500);
   await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
 });
+
+/**
+ * DESIGN.md §2.6a/§2.8 — a real bug, reported from real usage: the progress
+ * bar stayed fully visible through the entire close animation, unlike the
+ * toolbar/nav/counter/caption, which all fade out first. It lived outside
+ * `.shoji-controls-hidden`'s CSS selector list (autoplay.css is a separate
+ * stylesheet from core's shoji.css, easy to miss when that list grows) —
+ * fixed by adding it there instead of only its own `[hidden]` rule.
+ */
+test('the progress bar fades out with the rest of the controls when the close animation starts, instead of staying visible through it', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html?interval=60000'); // long enough it never advances mid-test
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+
+  const progress = page.locator('.shoji-autoplay-progress');
+  await expect(progress).toBeVisible();
+  await expect(progress).toHaveCSS('opacity', '1');
+
+  await page.locator('.shoji-close').click();
+
+  // Checked synchronously, right after the click, not via toHaveCSS polling
+  // on the interpolating opacity value — same reasoning as
+  // core-close-controls-fade.spec.ts's own tests: the whole close sequence
+  // can finish faster than a poll reliably samples, passing straight
+  // through the fade and landing back on a fully-closed, reset state
+  // (.shoji-controls-hidden removed again by finishClose(), progress bar
+  // hidden by Autoplay's own close listener) between polls — flakily
+  // reading as "never faded." The class is the deterministic signal.
+  const controlsHiddenRightAfterClick = await progress.evaluate(
+    (el) => el.closest('.shoji-dialog')!.classList.contains('shoji-controls-hidden'),
+  );
+  expect(controlsHiddenRightAfterClick).toBe(true);
+
+  // A real opacity sample too, partway through the fade (well under its
+  // 300ms duration and the close sequence's ~600-700ms total) — confirms
+  // the progress bar's own CSS actually responds to the class landing,
+  // not just that the class itself landed on the dialog.
+  await page.waitForTimeout(100);
+  const midFadeOpacity = await progress.evaluate((el) => Number(getComputedStyle(el).opacity));
+  expect(midFadeOpacity).toBeLessThan(1);
+});

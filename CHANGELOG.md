@@ -20,6 +20,11 @@ still include breaking changes).
   `mobileSettings.controls: false`), not just the idle timer. (`0` remains
   its own, different mode — hidden immediately and permanently, not
   "disabled" — this is the setting that was actually missing.)
+- `dragCloseThreshold` event — fires whenever a vertical drag crosses (or
+  retreats back under) the same distance a release would complete the
+  close. The Autoplay plugin now uses it to pause the slideshow the instant
+  that threshold is crossed and resume it if the drag retreats back under it
+  without closing.
 
 ### Changed
 
@@ -62,6 +67,27 @@ still include breaking changes).
   did nothing on a video slide, with no indication why — clicking them was a
   silent no-op. They're now hidden entirely whenever the active slide is a
   video, and reappear when navigating back to a photo slide.
+- A completed drag-close no longer lands off the thumbnail — it now lands
+  exactly where a button-close does. Two compounding causes: the drag's own
+  live feedback was easing back to neutral concurrently with the zoom-out's
+  own animation, and even once that was fixed, the drag's live scale
+  feedback was independently distorting the zoom-out's landing position
+  (not its size, which always matched).
+- The Autoplay plugin's progress bar stayed fully visible through the entire
+  close animation instead of fading out with the rest of the controls.
+- Drag-to-close now animates as one continuous motion picking up exactly
+  from wherever the drag left off, however far that was — previously,
+  releasing a long drag could visibly pop the photo, briefly pause partway
+  through the shrink, or (dragged far enough) snap to a small, centered-
+  looking position for a frame before the real close animation continued.
+  The drag's own appearance now carries straight into the close animation
+  on the photo itself, instead of being frozen on a separate container the
+  photo then had to catch up to, with no artificial cap on the starting
+  position.
+- The mouse cursor no longer disappears when dragging past the point where
+  Shoji would close the gallery on release — it stayed visible everywhere
+  else during a drag, just not there, since that moment reused the same
+  mechanism idle auto-hide uses to hide the cursor along with the toolbar.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 

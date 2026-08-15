@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import path from 'node:path';
 
 const corePath = () => '/@fs' + path.join(process.cwd(), 'src/core/index.ts').replace(/\\/g, '/');
@@ -69,14 +69,17 @@ test('completing a vertical drag still closes the gallery — the fix only suppr
  * vertical swipe-to-close visibly popped the photo back to fully opaque/
  * full-size for a beat before the separate zoom-out-to-thumbnail animation
  * took over — instead of one continuous fade/shrink. The drag's own live
- * feedback (translateY/scale/opacity on `.shoji-slides`, requested directly
- * to move here from `.shoji-dialog` so the toolbar/nav/counter/caption stay
- * anchored in place instead of moving with the photo) used to reset
- * instantly to neutral on release, before the zoom-out even started. Now it
- * eases back to neutral concurrently with the zoom-out instead of snapping
- * first. This can't fully verify the visual result is *smooth* (that needs
- * a human or a screenshot diff), but it confirms the specific regression —
- * an instant, full-opacity frame right after release — doesn't recur.
+ * feedback (translateY/scale/opacity, requested directly to apply to
+ * `.shoji-slides` rather than `.shoji-dialog` so the toolbar/nav/counter/
+ * caption stay anchored in place instead of moving with the photo) used to
+ * reset instantly to neutral on release, before the zoom-out even started.
+ * It's now baked directly onto the photo itself (`.shoji-slide-media`) the
+ * instant the drag completes, and `.shoji-slides` resets to neutral in that
+ * same moment — so the photo's own opacity carries the dim straight through
+ * into the close animation, continuous, nothing to pop. This can't fully
+ * verify the visual result is *smooth* (that needs a human or a screenshot
+ * diff), but it confirms the specific regression — an instant, full-opacity
+ * frame right after release — doesn't recur.
  */
 test('completing a vertical drag does not pop the image back to full opacity before closing', async ({
   page,
@@ -85,7 +88,6 @@ test('completing a vertical drag does not pop the image back to full opacity bef
   await page.locator('#thumbs a[data-index="0"]').click();
   const dialog = page.locator('.shoji-dialog');
   await expect(dialog).toBeVisible();
-  const slides = page.locator('.shoji-slides').last();
 
   const media = page.locator('.shoji-slide-media:has(img)').first();
   const box = (await media.boundingBox())!;
@@ -100,10 +102,175 @@ test('completing a vertical drag does not pop the image back to full opacity bef
 
   // Immediately after release — before the dialog disappears — opacity
   // must not have snapped back to fully opaque.
-  const opacityRightAfterRelease = await slides.evaluate((el) => getComputedStyle(el).opacity);
+  const opacityRightAfterRelease = await media.evaluate((el) => getComputedStyle(el).opacity);
   expect(Number(opacityRightAfterRelease)).toBeLessThan(1);
 
   await expect(page.locator('.shoji-dialog')).toBeHidden();
+});
+
+/**
+ * Opens item 0, waits for the *open* zoom-in's own transition to settle
+ * (otherwise the listener below can catch that transitionend instead of the
+ * close's), arms a one-shot capture of `.shoji-slide-media`'s landing rect
+ * on the next 'transform' transitionend, runs `closeAction`, and returns
+ * that rect. `.shoji-slide-media` is usually larger than the photo actually
+ * rendered inside it (letterboxed to the photo's aspect ratio) — comparing
+ * its landed rect against the thumbnail's own rect directly isn't a fair
+ * apples-to-apples comparison, which is why the test below compares two
+ * landings measured this same way against each other instead.
+ */
+async function captureCloseLanding(
+  page: Page,
+  closeAction: () => Promise<void>,
+): Promise<{ left: number; top: number; width: number; height: number }> {
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  await media.evaluate(
+    (el) =>
+      new Promise<void>((resolve) => {
+        if (el.style.transform === '') return resolve();
+        el.addEventListener('transitionend', () => resolve(), { once: true });
+      }),
+  );
+  await media.evaluate((el) => {
+    (window as unknown as { __landing: DOMRect | null }).__landing = null;
+    el.addEventListener(
+      'transitionend',
+      (event: Event) => {
+        if ((event as TransitionEvent).propertyName !== 'transform') return;
+        (window as unknown as { __landing: DOMRect | null }).__landing =
+          el.getBoundingClientRect();
+      },
+      { once: true },
+    );
+  });
+  await closeAction();
+  await page.waitForFunction(
+    () => (window as unknown as { __landing: DOMRect | null }).__landing !== null,
+  );
+  return page.evaluate(() => (window as unknown as { __landing: DOMRect }).__landing);
+}
+
+/**
+ * DESIGN.md §2.4/§2.6a — a real bug, reported from real usage: a completed
+ * drag-close landed off the thumbnail, unlike a button-close (which always
+ * lands accurately). Two compounding causes, both fixed:
+ *
+ * 1. `.shoji-slides`' own drag transform used to ease back to neutral
+ *    *concurrently* with zoomOut()'s separate transition on `target` (a
+ *    descendant) — two transforms animating at once, while zoomOut()'s
+ *    landing math (`computeTransform`) assumed a static starting box. Fixed
+ *    by leaving `.shoji-slides`' transform exactly where the drag left it
+ *    for the whole close animation (reset only once the dialog is already
+ *    hidden), so zoomOut() is the only thing moving and its math holds.
+ * 2. Even static, the drag feedback's own *scale* term distorted the
+ *    landing position (size still matched, position didn't) — see
+ *    `zoomOut()`'s own `dragStart` handling (`zoomTransition.ts`): it
+ *    measures `target`'s natural box *before* jumping to the drag's last
+ *    appearance, so the landing math is never computed against an
+ *    already-scaled/translated starting point in the first place. (Two
+ *    earlier, now-superseded approaches lived here — dropping the scale
+ *    term at release, then compensating for a scaled ancestor
+ *    mathematically — see DESIGN.md §2.6a for that fuller history.)
+ */
+test("a completed vertical drag lands exactly where a button-close does — not offset by the drag's own live feedback", async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+
+  const buttonLanding = await captureCloseLanding(page, () =>
+    page.locator('.shoji-close').click(),
+  );
+  await expect(page.locator('.shoji-dialog')).toBeHidden();
+
+  const dragLanding = await captureCloseLanding(page, async () => {
+    const media = page.locator('.shoji-slide-media:has(img)').first();
+    const box = (await media.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const startY = box.y + box.height * 0.3;
+    const endY = startY + 200;
+    await page.mouse.move(x, startY);
+    await page.mouse.down();
+    await page.mouse.move(x, endY, { steps: 10 });
+    await page.mouse.up();
+  });
+
+  // A couple of px of tolerance for floating-point/CSSOM rounding, not a
+  // real allowance — the bug this guards against was off by dozens of
+  // pixels, and even the residual scale-composition error (fix #2 above)
+  // was off by ~60px, both far past this.
+  expect(Math.abs(dragLanding.left - buttonLanding.left)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.top - buttonLanding.top)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.width - buttonLanding.width)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.height - buttonLanding.height)).toBeLessThan(2);
+});
+
+/**
+ * DESIGN.md §2.4/§2.6a — a real bug, reported from real usage and confirmed
+ * on video: a version of this fix clamped the close-start position to the
+ * same 160px the live dim/scale feedback caps at, to bound how far away the
+ * close animation could start (a *previous* real bug, described in the
+ * comment this replaced — starting near a screen edge left a lot of room to
+ * drag, reading as unusually slow or pushing the photo off-screen). But
+ * clamping is itself an instant correction: released past that distance,
+ * the photo visibly snapped from wherever it actually was back to the
+ * clamped point, in a single frame, before the real shrink-to-thumbnail
+ * motion continued from there — read as "jumps to a small image in the
+ * middle of the screen." The clamp is gone entirely now: the close
+ * continues from exactly where the drag left off, however far that is.
+ */
+test('a very large vertical drag does not snap to a different position on release, and still lands accurately', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+
+  const buttonLanding = await captureCloseLanding(page, () =>
+    page.locator('.shoji-close').click(),
+  );
+  await expect(page.locator('.shoji-dialog')).toBeHidden();
+
+  const dragLanding = await captureCloseLanding(page, async () => {
+    const media = page.locator('.shoji-slide-media:has(img)').first();
+    const box = (await media.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const startY = box.y + box.height * 0.5;
+    // Well past the old, now-removed 160px clamp — but still a real,
+    // on-screen cursor position (never above box.y, the dialog's own top
+    // edge): a real mouse physically can't move past the top of the screen
+    // either, so overshooting past it here would test an impossible input,
+    // not a real one, and some browsers' drivers handle a negative/
+    // off-screen synthetic coordinate inconsistently (confirmed directly:
+    // Firefox's pointerup/onDragEnd handling diverged from Chromium's for
+    // one).
+    const endY = Math.max(box.y + 10, startY - 300);
+
+    await page.mouse.move(x, startY);
+    await page.mouse.down();
+    await page.mouse.move(x, endY, { steps: 10 });
+
+    // The live-dragged position, sampled right before release — this is
+    // what the close animation must continue from, with no snap.
+    const rectBeforeRelease = await media.evaluate((el) => el.getBoundingClientRect());
+
+    await page.mouse.up();
+
+    // Right at release, before the close animation itself even starts —
+    // must match the live-dragged position, not jump to a bounded/clamped
+    // one. A generous tolerance for cross-browser sub-pixel rendering
+    // differences, not a real allowance — the bug this guards against was
+    // a snap of hundreds of pixels (the gap between the raw drag distance
+    // and the old 160px clamp), far past this.
+    const rectAfterRelease = await media.evaluate((el) => el.getBoundingClientRect());
+    expect(Math.abs(rectAfterRelease.top - rectBeforeRelease.top)).toBeLessThan(10);
+    expect(Math.abs(rectAfterRelease.left - rectBeforeRelease.left)).toBeLessThan(10);
+  });
+
+  // Still lands exactly on the thumbnail despite the huge drag distance.
+  expect(Math.abs(dragLanding.left - buttonLanding.left)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.top - buttonLanding.top)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.width - buttonLanding.width)).toBeLessThan(2);
+  expect(Math.abs(dragLanding.height - buttonLanding.height)).toBeLessThan(2);
 });
 
 test('a plain click on the image (no drag at all) is unaffected — still does not close the gallery', async ({

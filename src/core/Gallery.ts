@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { TRANSITION_PRESETS } from '../transitions/presets';
 import { SlideTransition } from '../transitions/SlideTransition';
-import { zoomIn, zoomOut, waitForTransitionEnd } from './zoomTransition';
+import { zoomIn, zoomOut, waitForTransitionEnd, type FrozenDragTransform } from './zoomTransition';
 
 function itemKey(item: GalleryItem | GalleryItemInput): string {
   return item.id ?? item.src;
@@ -422,7 +422,7 @@ export class Gallery {
         next: () => this.navigate(this.nextIndex(), 1, false),
         prev: () => this.navigate(this.prevIndex(), -1, false),
         close: () => this.close(),
-        closeFromSwipe: () => this.closeFromSwipe(),
+        closeFromSwipe: (frozenDrag) => this.closeFromSwipe(frozenDrag),
         setControlsHiddenForDrag: (hidden) => this.setControlsHiddenForDrag(hidden),
         canClose: () => this.closable,
         onActivity: () => this.onActivity(),
@@ -934,16 +934,19 @@ export class Gallery {
   /**
    * DESIGN.md §2.4/§2.6a — same effect as `close()`, from a completed
    * vertical swipe. The drag already has its own closing motion in progress
-   * (live feedback easing back to neutral, `GestureController`) — sequencing
-   * a separate controls-fade pause in front of the zoom-out would interrupt
-   * it. Controls still hide, just concurrently, not blocking.
+   * — sequencing a separate controls-fade pause in front of the zoom-out
+   * would interrupt it. Controls still hide, just concurrently, not
+   * blocking. `frozenDrag` is threaded through to `zoomOut()`'s own
+   * `dragStart`, so the whole close continues as one motion from exactly
+   * where the drag left off (see `GestureController.
+   * takeFrozenDragTransform`).
    */
-  private closeFromSwipe(): void {
-    this.beginClose(false);
+  private closeFromSwipe(frozenDrag: FrozenDragTransform): void {
+    this.beginClose(false, frozenDrag);
   }
 
-  /** `waitForControlsFade` — true for `close()` (nothing else is animating, so fading first avoids stationary chrome over a shrinking photo); false for `closeFromSwipe()`, which already has a concurrent closing motion. */
-  private beginClose(waitForControlsFade: boolean): void {
+  /** `waitForControlsFade` — true for `close()` (nothing else is animating, so fading first avoids stationary chrome over a shrinking photo); false for `closeFromSwipe()`, which already has a concurrent closing motion. `frozenDrag` — see `closeFromSwipe()`'s doc comment; absent for a button-close, which has no drag to continue from. */
+  private beginClose(waitForControlsFade: boolean, frozenDrag?: FrozenDragTransform): void {
     if (this.destroyed || !this.opened || this.isClosing) return;
     this.bus.emit('beforeClose', {});
 
@@ -968,13 +971,13 @@ export class Gallery {
     // real content, no naturalSize to fall back on either) would have
     // nothing but a guessed target to shrink toward — same "don't guess"
     // reasoning open() above already applies to its own animation.
-    // closeFromSwipe(): target's current rect is still wherever the drag
-    // left it (its own reset eases back concurrently, not yet finished), so
-    // this naturally continues from that position instead of neutral.
     if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
       const runZoomOut = (): void => {
-        zoomOut({ origin, target: media, aspectRatio, naturalSize }, () => this.finishClose());
+        zoomOut(
+          { origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag },
+          () => this.finishClose(),
+        );
       };
       const alreadyHidden = this.autoHidden;
       this.forceHideControls();
@@ -1002,11 +1005,21 @@ export class Gallery {
    * `hidden: false` only reveals if visible when *this* gesture started
    * (`controlsHiddenAtGestureStart`) — shouldn't resurrect controls already
    * separately hidden (idle, or `autoHideDelay: 0`) before the drag began.
+   * `dragCloseThreshold` (bus event) fires on every crossing regardless of
+   * that guard — Autoplay (§4-autoplay) needs to know about the crossing
+   * itself, not just whether controls visibly moved.
    */
   private setControlsHiddenForDrag(hidden: boolean): void {
     this.controlsHiddenByDrag = hidden;
     if (hidden) this.forceHideControls();
     else if (!this.controlsHiddenAtGestureStart) this.showControls();
+    // A real bug, reported from real usage: `.shoji-controls-hidden` also
+    // hides the cursor (shoji.css) — fine for an idle/inactive hide, but
+    // this hide happens *during* an active drag, so the cursor vanished
+    // right when the viewer most needs to see it. This marker class scopes
+    // a cursor override to specifically this case (see shoji.css).
+    this.dom?.dialog.classList.toggle('shoji-controls-hidden-for-drag', hidden);
+    this.bus.emit('dragCloseThreshold', { hidden });
   }
 
   /** `item.width`/`height`, else origin's `naturalWidth`/`naturalHeight` (accurate when `item.thumb` is unset). Feeds `computeTransform`'s letterbox-aware sizing. */
@@ -1056,6 +1069,10 @@ export class Gallery {
     this.hoveredControlCount = 0;
     this.controlsHiddenByDrag = false;
     this.dom?.dialog.classList.remove('shoji-controls-hidden');
+    // A completed drag-close never calls setControlsHiddenForDrag(false)
+    // (nothing left to un-hide for) — clean up the marker here instead, so
+    // it can't linger into the next open().
+    this.dom?.dialog.classList.remove('shoji-controls-hidden-for-drag');
     this.bus.emit('close', {});
     this.bus.emit('afterClose', {});
   }

@@ -1,3 +1,10 @@
+/** The drag's exact on-screen appearance at the moment it completed a close — `translateY(px)`/`scale`/`opacity`, all as last shown live (translateY clamped, see `GestureController.takeFrozenDragTransform`). `zoomOut()` jumps `target` here instantly (after measuring its natural box — see `ZoomTransitionTarget.dragStart`) before transitioning away from it, so the close continues in one motion from exactly where the drag left off. */
+export interface FrozenDragTransform {
+  translateY: number;
+  scale: number;
+  opacity: number;
+}
+
 export interface ZoomTransitionTarget {
   /** The thumbnail element to animate to/from. */
   origin: HTMLElement;
@@ -7,6 +14,17 @@ export interface ZoomTransitionTarget {
   aspectRatio?: number;
   /** The real photo's true pixel size — `item.width`/`item.height` only, never the thumbnail's own natural size (would under-cap a large photo). Caps `containedBox` below at native resolution, mirroring `.shoji-slide-img`'s own `max-width/max-height: 100%`, instead of always growing toward filling the dialog. */
   naturalSize?: { width: number; height: number };
+  /**
+   * A completed drag-close's own last appearance (`GestureController.
+   * takeFrozenDragTransform`) — `zoomOut()` (the only consumer) jumps
+   * `target` here instantly, *after* measuring its natural box for the
+   * landing math, then transitions away from it. Order matters: applying
+   * this before measuring would make `effectiveTargetBox()` read the
+   * child `<img>`'s rect *already* shrunk by this scale, double-counting
+   * it once `zoomOut()`'s own transform (computed from that shrunk
+   * measurement) then wholesale replaces — not composes with — it.
+   */
+  dragStart?: FrozenDragTransform;
 }
 
 function prefersReducedMotion(): boolean {
@@ -209,11 +227,18 @@ export function waitForTransitionEnd(
  * open/close cycle since the stuck transform is never cleared either way.
  * `zoomIn`'s own `'none'` literal never hit this — a fixed string round-trips
  * through the CSSOM unchanged, unlike an arbitrary computed float.
+ *
+ * `opacity` is cleared unconditionally, same as `transition`/
+ * `transformOrigin` — a completed drag-close (`Gallery.beginClose`) bakes
+ * the drag's own dim onto `target` before this animation starts; nothing
+ * else in this codebase sets `.shoji-slide-media`'s opacity, so there's
+ * nothing else's value this could ever clobber.
  */
 function clearInlineTransform(target: HTMLElement, expectedTransform: string): void {
   target.style.transition = '';
   target.style.transformOrigin = '';
   target.style.willChange = '';
+  target.style.opacity = '';
   if (target.style.transform === expectedTransform) target.style.transform = '';
 }
 
@@ -257,13 +282,15 @@ export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransit
  * callers use this to know when it's safe to actually hide/finalize.
  */
 export function zoomOut(
-  { origin, target, aspectRatio, naturalSize }: ZoomTransitionTarget,
+  { origin, target, aspectRatio, naturalSize, dragStart }: ZoomTransitionTarget,
   onComplete: () => void,
 ): void {
   if (prefersReducedMotion()) {
     onComplete();
     return;
   }
+  // Measured before dragStart is ever applied to `target` — see
+  // ZoomTransitionTarget.dragStart's doc comment for why the order matters.
   const transform = computeTransform(origin, target, aspectRatio, naturalSize);
   if (!transform) {
     onComplete();
@@ -276,6 +303,21 @@ export function zoomOut(
   // sits from its own top-left corner.
   target.style.transformOrigin = 'center';
   target.style.willChange = 'transform'; // see zoomIn's doc comment on this line
+  if (dragStart) {
+    // Instant jump to exactly where the drag left off — same FLIP
+    // technique `zoomIn()` uses to jump onto origin's box before
+    // transitioning away from it, just jumping to wherever the drag left
+    // off instead of a fixed point. translate3d/scale3d (not the 2D forms),
+    // matching the landing transform's own function list below — mismatched
+    // function types between the transition's start/end values force the
+    // browser into matrix-decomposition interpolation instead of simple
+    // per-parameter interpolation, and lose the GPU-compositing path this
+    // codebase otherwise always uses for this element (DESIGN.md §2.3b).
+    target.style.transition = 'none';
+    target.style.transform = `translate3d(0px, ${dragStart.translateY}px, 0px) scale3d(${dragStart.scale}, ${dragStart.scale}, 1)`;
+    target.style.opacity = String(dragStart.opacity);
+    void target.offsetHeight; // commit the jump before transitioning away from it
+  }
   target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;
   target.style.transform = transform;

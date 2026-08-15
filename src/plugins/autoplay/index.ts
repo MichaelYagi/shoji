@@ -84,6 +84,7 @@ export const Autoplay: ShojiPlugin = {
     let currentVideo: PlayableMedia | null = null;
     let awaitingProviderVideo = false;
     let pendingTapTimer: ReturnType<typeof setTimeout> | null = null;
+    let wasPlayingBeforeDrag = false;
 
     // A real bug, regression: this used to capture gallery.getActiveMedia()
     // once here and listen on that node directly, back when a pool slot's
@@ -380,6 +381,24 @@ export const Autoplay: ShojiPlugin = {
     });
     const offDoubleTap = ctx.on('doubleTap', () => clearPendingTap());
 
+    /**
+     * Pauses the slideshow the instant a vertical drag crosses the close
+     * threshold, mirroring the controls' own live hide cue
+     * (`dragCloseThreshold`) — asked for directly, otherwise the
+     * interval/video kept running mid-drag. Resumes only if *this*
+     * crossing paused it — a manual pause (toolbar, mid-drag tap) must
+     * stay paused even if the drag retreats back under the threshold.
+     */
+    const offDragThreshold = ctx.on('dragCloseThreshold', ({ hidden }) => {
+      if (hidden) {
+        wasPlayingBeforeDrag = playing;
+        if (playing) stop();
+      } else if (wasPlayingBeforeDrag) {
+        wasPlayingBeforeDrag = false;
+        start();
+      }
+    });
+
     button.addEventListener('click', toggle);
 
     // 'right' — clusters immediately before the close button, per DESIGN.md §3.1.
@@ -440,6 +459,7 @@ export const Autoplay: ShojiPlugin = {
       offClose();
       offTap();
       offDoubleTap();
+      offDragThreshold();
     };
   },
 };

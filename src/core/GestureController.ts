@@ -4,7 +4,7 @@ import {
   type GestureEngineOptions,
 } from '../gestures/GestureEngine';
 import type { SlideManager } from './SlideManager';
-import { waitForTransitionEnd } from './zoomTransition';
+import { waitForTransitionEnd, type FrozenDragTransform } from './zoomTransition';
 
 /** DESIGN.md §2.4 — the drag-released settle easing, distinct from `--shoji-easing`'s open/close/zoom curve. */
 const DRAG_SETTLE_TRANSITION = 'transform var(--shoji-duration) var(--shoji-momentum-easing)';
@@ -40,8 +40,8 @@ export interface GestureControllerHost {
   next(): void;
   prev(): void;
   close(): void;
-  /** Same effect as `close()`, but for a completed vertical swipe specifically — the drag's own live feedback is already easing back to neutral, so this skips sequencing a second, separate controls-fade pause in front of the zoom-out (see `finishVerticalDrag`). */
-  closeFromSwipe(): void;
+  /** Same effect as `close()`, but for a completed vertical swipe — skips the separate controls-fade pause in front of the zoom-out (see `finishVerticalDrag`). */
+  closeFromSwipe(frozenDrag: FrozenDragTransform): void;
   /** Live, reversible — crossing the close threshold mid-drag hides the toolbar/nav/counter/caption (a "let go now and this closes" cue); dragging back under it before release reveals them again. See `applyVerticalDragFeedback`. */
   setControlsHiddenForDrag(hidden: boolean): void;
   /** `closable: false` (GalleryOptions) — false suspends vertical drag-to-close entirely: no live feedback, release never calls `close()`. */
@@ -74,6 +74,7 @@ export class GestureController {
   /** Same distance `GestureEngine` itself uses to decide a release would complete the close — reused here so the live controls-hide cue in `applyVerticalDragFeedback` actually means what it visually claims. */
   private readonly controlsHideThreshold: number;
   private controlsHiddenForDrag = false;
+  private lastDragDelta = 0;
 
   constructor(
     private readonly host: GestureControllerHost,
@@ -173,6 +174,7 @@ export class GestureController {
   private applyVerticalDragFeedback(delta: number): void {
     const progress = Math.min(Math.abs(delta) / VERTICAL_FEEDBACK_DISTANCE, 1);
     const slides = this.host.slides.element;
+    this.lastDragDelta = delta;
     slides.style.transition = '';
     slides.style.transform = `translateY(${delta}px) scale(${1 - progress * 0.15})`;
     slides.style.opacity = String(1 - progress * 0.6);
@@ -199,14 +201,7 @@ export class GestureController {
     const wasHiddenForDrag = this.controlsHiddenForDrag;
     this.controlsHiddenForDrag = false;
     if (completed && this.host.canClose()) {
-      // Eases back to neutral *concurrently* with the zoom-out, not snapped
-      // instantly first — a real bug, reported from real usage: an instant
-      // reset read as the photo popping back to full visibility for a beat
-      // before shrinking, not one continuous close. closeFromSwipe() (not
-      // close()) skips its own controls-fade pause in front of the zoom-out
-      // for the same reason — this drag already has a closing motion going.
-      this.clearVerticalDragFeedback(true);
-      this.host.closeFromSwipe();
+      this.host.closeFromSwipe(this.takeFrozenDragTransform());
     } else {
       // Not completed, or closable: false suspended the drag entirely (no
       // feedback was ever applied by onDragMove) — either way, a clean
@@ -217,5 +212,35 @@ export class GestureController {
       // swipeVelocity deciding "not completed" past this threshold).
       if (wasHiddenForDrag) this.host.setControlsHiddenForDrag(false);
     }
+  }
+
+  /**
+   * Reads the drag's last live appearance, instantly resets `.shoji-slides`
+   * back to neutral (nothing left on it to visibly snap — `Gallery` bakes
+   * these same values onto the photo itself in the same synchronous tick,
+   * so the rendered result is unchanged, just re-homed), and returns them
+   * for that hand-off. Translate is the raw, unclamped drag distance —
+   * requested directly: the close animation must continue from exactly
+   * where the drag left off, full stop, not recenter first. (A previous
+   * version clamped this to the same 160px the dim/scale feedback ramps
+   * over, to bound how far away the close animation could start — but
+   * clamping is itself an instant correction: for any drag past that
+   * distance, release visibly snapped the photo from wherever it actually
+   * was back to the clamped point, before the real shrink-to-thumbnail
+   * motion continued from there. That snap — not the shrink itself — is
+   * what reads as "jumps to a small image in the middle of the screen."
+   * Reported from real usage, confirmed on video: released past the clamp,
+   * the photo visibly jumped from off-screen back to near-center in a
+   * single frame.)
+   */
+  private takeFrozenDragTransform(): FrozenDragTransform {
+    const progress = Math.min(Math.abs(this.lastDragDelta) / VERTICAL_FEEDBACK_DISTANCE, 1);
+    const frozen: FrozenDragTransform = {
+      translateY: this.lastDragDelta,
+      scale: 1 - progress * 0.15,
+      opacity: 1 - progress * 0.6,
+    };
+    this.clearVerticalDragFeedback(false);
+    return frozen;
   }
 }

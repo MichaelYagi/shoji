@@ -378,6 +378,24 @@ describe('zoomTransition', () => {
       expect(target.style.transform).toBe(''); // cleaned up
     });
 
+    it("clears a baked-in opacity (a completed drag-close's own dim, Gallery.beginClose) once the transition ends, same as transform/transition/transformOrigin", () => {
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+      target.style.opacity = '0.7'; // baked in before zoomOut() runs, as Gallery.beginClose does
+
+      zoomOut({ origin, target }, () => {});
+      expect(target.style.opacity).toBe('0.7'); // untouched while the transition is still running
+
+      const event = new Event('transitionend') as Event & { propertyName?: string };
+      Object.defineProperty(event, 'propertyName', { value: 'transform' });
+      target.dispatchEvent(event);
+
+      expect(target.style.opacity).toBe('');
+    });
+
     it("regression: does not clobber another plugin's transform set between zoomOut() starting and its cleanup firing", () => {
       mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
       mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
