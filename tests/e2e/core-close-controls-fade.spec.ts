@@ -5,12 +5,15 @@ import { test, expect } from '@playwright/test';
  * the controls (toolbar/nav/counter/caption) at full opacity for the entire
  * zoom-out-to-thumbnail animation, then vanish everything together in one
  * abrupt cut once it finished — the stationary chrome visually clashed with
- * the shrinking photo underneath it. Controls now fade out first; the
- * zoom-out only starts once that fade genuinely finishes. Unit tests
- * (`tests/unit/gallery-zoom.test.ts`) cover the JS-level sequencing with
- * synthetic events; this confirms the real CSS actually produces it.
+ * the shrinking photo underneath it. Controls now start fading out at the
+ * same instant the photo starts shrinking, not one strictly after the other
+ * (an intermediate version sequenced the fade before the zoom-out, but that
+ * read as two separate steps rather than one motion — see DESIGN.md).
+ * Unit tests (`tests/unit/gallery-zoom.test.ts`) cover the JS-level
+ * sequencing with synthetic events; this confirms the real CSS actually
+ * produces it.
  */
-test('closing fades the toolbar out before the photo starts visibly shrinking toward its thumbnail', async ({
+test('closing hides the toolbar and starts the photo shrinking toward its thumbnail at the same time', async ({
   page,
 }) => {
   await page.goto('/pages/e2e-plugins.html');
@@ -36,7 +39,7 @@ test('closing fades the toolbar out before the photo starts visibly shrinking to
     stillOpen: !!el.closest('.shoji-outer.shoji-open'),
   }));
   expect(stateRightAfterClick.controlsHidden).toBe(true);
-  expect(stateRightAfterClick.stillOpen).toBe(true); // the zoom-out hasn't finished (or even started) yet
+  expect(stateRightAfterClick.stillOpen).toBe(true); // the zoom-out has started but hasn't finished yet
 
   // Eventually the whole thing closes.
   await expect(page.locator('.shoji-outer.shoji-open')).toHaveCount(0);

@@ -97,7 +97,7 @@
       ];
       const photoTiles = COLORS.map(
         (color, i) => `
-          <a href="${svgDataUri(`Photo ${i + 1}`, color)}">
+          <a href="${svgDataUri(`Photo ${i + 1}`, color)}" data-shoji-width="800" data-shoji-height="600">
             <img src="${svgDataUri(`Photo ${i + 1}`, color)}" alt="Photo ${i + 1}">
           </a>`,
       ).join('');
@@ -105,14 +105,16 @@
       // Same two video items as the video-and-events.html example — plain
       // HTML5 markup (auto-detected, no attribute needed) and a
       // data-shoji-video URL for YouTube. Selector mode, so these are real
-      // markup the gallery scans, not an items array.
+      // markup the gallery scans, not an items array. data-shoji-width/
+      // height matter here too — the open animation is skipped for a video
+      // slide exactly the same way as a photo slide without them.
       const videoTiles = `
-        <a href="assets/storm.mp4">
+        <a href="assets/storm.mp4" data-shoji-width="800" data-shoji-height="600">
           <video poster="${svgDataUri('Storm.mp4', '#8e44ad')}">
             <source src="assets/storm.mp4" type="video/mp4" />
           </video>
         </a>
-        <a data-shoji-video="https://youtu.be/dQw4w9WgXcQ">
+        <a data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-width="800" data-shoji-height="600">
           <img src="${svgDataUri('YouTube', '#c0392b')}" alt="YouTube video" />
         </a>`;
 
@@ -147,12 +149,12 @@
   autoplay: { interval: 1500 }, // default is 5000ms; doesn't apply to video slides
 });</code></pre>
     <p>The two video items at the end of the strip — plain HTML5 markup, then a YouTube link:</p>
-    <pre><code>&lt;a href="clip.mp4"&gt;
+    <pre><code>&lt;a href="clip.mp4" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;video poster="clip-poster.jpg"&gt;
     &lt;source src="clip.mp4" type="video/mp4" /&gt;
   &lt;/video&gt;
 &lt;/a&gt;
-&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ"&gt;
+&lt;a data-shoji-video="https://youtu.be/dQw4w9WgXcQ" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;img src="yt-poster.jpg" alt="YouTube video" /&gt;
 &lt;/a&gt;</code></pre>
     <pre><code>/* Shoji only toggles the class — you decide what "active" looks like. */

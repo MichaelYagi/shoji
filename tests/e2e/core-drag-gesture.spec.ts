@@ -139,8 +139,7 @@ async function captureCloseLanding(
       'transitionend',
       (event: Event) => {
         if ((event as TransitionEvent).propertyName !== 'transform') return;
-        (window as unknown as { __landing: DOMRect | null }).__landing =
-          el.getBoundingClientRect();
+        (window as unknown as { __landing: DOMRect | null }).__landing = el.getBoundingClientRect();
       },
       { once: true },
     );
@@ -179,9 +178,7 @@ test("a completed vertical drag lands exactly where a button-close does — not 
 }) => {
   await page.goto('/pages/e2e-plugins.html');
 
-  const buttonLanding = await captureCloseLanding(page, () =>
-    page.locator('.shoji-close').click(),
-  );
+  const buttonLanding = await captureCloseLanding(page, () => page.locator('.shoji-close').click());
   await expect(page.locator('.shoji-dialog')).toBeHidden();
 
   const dragLanding = await captureCloseLanding(page, async () => {
@@ -225,9 +222,7 @@ test('a very large vertical drag does not snap to a different position on releas
 }) => {
   await page.goto('/pages/e2e-plugins.html');
 
-  const buttonLanding = await captureCloseLanding(page, () =>
-    page.locator('.shoji-close').click(),
-  );
+  const buttonLanding = await captureCloseLanding(page, () => page.locator('.shoji-close').click());
   await expect(page.locator('.shoji-dialog')).toBeHidden();
 
   const dragLanding = await captureCloseLanding(page, async () => {

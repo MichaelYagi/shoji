@@ -36,10 +36,32 @@
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
       }
 
+      // width/height on every item (all 800x600 here) — not just Layout's
+      // measure-free positioning, but required for the open animation and
+      // open-transition placeholder to show at all; see
+      // docs/guides/transitions.html#open-transition-sizing.
       const items = [
-        { id: 'p1', src: svgDataUri('Photo 1', '#c0392b'), caption: 'Sunset over the bay' },
-        { id: 'p2', src: svgDataUri('Photo 2', '#2980b9'), caption: 'Mountain trail' },
-        { id: 'p3', src: svgDataUri('Photo 3', '#27ae60'), caption: 'City lights' },
+        {
+          id: 'p1',
+          src: svgDataUri('Photo 1', '#c0392b'),
+          width: 800,
+          height: 600,
+          caption: 'Sunset over the bay',
+        },
+        {
+          id: 'p2',
+          src: svgDataUri('Photo 2', '#2980b9'),
+          width: 800,
+          height: 600,
+          caption: 'Mountain trail',
+        },
+        {
+          id: 'p3',
+          src: svgDataUri('Photo 3', '#27ae60'),
+          width: 800,
+          height: 600,
+          caption: 'City lights',
+        },
         {
           // Item shape for a video — provider: 'html5', src pointing at a
           // real file (assets/storm.mp4). No explicit `sources` needed here:
@@ -53,6 +75,8 @@
           src: 'assets/storm.mp4',
           video: { provider: 'html5' },
           poster: svgDataUri('Storm.mp4', '#8e44ad'),
+          width: 800,
+          height: 600,
           // Hidden by default on a video slide — click the toolbar's
           // caption-toggle button to reveal it (GalleryOptions.showVideoCaption
           // flips the default; see the Settings guide).
@@ -70,6 +94,8 @@
           src: 'https://youtu.be/dQw4w9WgXcQ',
           video: true,
           poster: svgDataUri('YouTube', '#c0392b'),
+          width: 800,
+          height: 600,
           caption: 'YouTube via video: true — id inferred from src',
         },
         {
@@ -80,6 +106,8 @@
           src: 'https://vimeo.com/167254041',
           video: true,
           poster: svgDataUri('Vimeo', '#1ab7ea'),
+          width: 800,
+          height: 600,
           caption: 'Vimeo via video: true — id inferred from src',
         },
       ];
@@ -152,6 +180,8 @@
           {
             id: `p${nextId}`,
             src: svgDataUri(`Photo ${nextId}`, color),
+            width: 800,
+            height: 600,
             caption: `Photo ${nextId}`,
           },
         ]);
@@ -164,9 +194,12 @@
     <p>The items array — three plain image items, then three video items:</p>
     <pre><code>const gallery = new Shoji('#gallery', {
   items: [
-    { id: 'p1', src: 'photo-1.jpg', caption: 'Sunset over the bay' },
-    { id: 'p2', src: 'photo-2.jpg', caption: 'Mountain trail' },
-    { id: 'p3', src: 'photo-3.jpg', caption: 'City lights' },
+    // width/height: the original's real pixel size — required (not just
+    // preferred) for the open animation and open-transition placeholder to
+    // show at all. See the Getting started guide's GalleryItem fields table.
+    { id: 'p1', src: 'photo-1.jpg', width: 1600, height: 1200, caption: 'Sunset over the bay' },
+    { id: 'p2', src: 'photo-2.jpg', width: 1600, height: 1200, caption: 'Mountain trail' },
+    { id: 'p3', src: 'photo-3.jpg', width: 1600, height: 1200, caption: 'City lights' },
     {
       id: 'v1',
       src: 'clip.mp4',
@@ -178,6 +211,8 @@
         { src: 'clip.mp4', type: 'video/mp4' },
       ],
       poster: 'clip-poster.jpg',
+      width: 1600,
+      height: 1200,
       caption: 'Sample video',
     },
     {
@@ -188,6 +223,8 @@
       src: 'https://youtu.be/dQw4w9WgXcQ',
       video: true,
       poster: 'yt-poster.jpg',
+      width: 1600,
+      height: 1200,
       caption: 'YouTube via video: true',
     },
     {
@@ -195,6 +232,8 @@
       src: 'https://vimeo.com/167254041',
       video: true,
       poster: 'vimeo-poster.jpg',
+      width: 1600,
+      height: 1200,
       caption: 'Vimeo via video: true',
     },
   ],
@@ -232,7 +271,7 @@ document.querySelectorAll('#gallery > a').forEach((el, i) => {
     </p>
     <pre><code>gallery.updateSlides([
   ...gallery.items,
-  { id: 'p4', src: 'photo-4.jpg', caption: 'Photo 4' },
+  { id: 'p4', src: 'photo-4.jpg', width: 1600, height: 1200, caption: 'Photo 4' },
 ]);</code></pre>
   </body>
 </html>

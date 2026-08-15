@@ -26,11 +26,17 @@
       array, no options object, no plugins. This is <code>selector</code> mode: Shoji scans
       <code>#gallery</code>'s direct children for <code>&lt;a href&gt;</code> elements, reads the
       nested <code>&lt;img&gt;</code> for the thumbnail, and wires click-to-open automatically.
+      <code>data-shoji-width</code>/<code>data-shoji-height</code> (the full image's real pixel
+      size) are optional too, but included below because without them Shoji skips the "grows out of
+      the thumbnail" open animation entirely — see
+      <a href="../guides/transitions.html#open-transition-sizing">Transitions</a>.
     </p>
 
     <div id="gallery" class="thumb-grid">
       <a
         href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nI2MwMzkyYicvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4xPC90ZXh0Pjwvc3ZnPg=="
+        data-shoji-width="800"
+        data-shoji-height="600"
       >
         <img
           src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nI2MwMzkyYicvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4xPC90ZXh0Pjwvc3ZnPg=="
@@ -39,6 +45,8 @@
       </a>
       <a
         href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI5ODBiOScvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4yPC90ZXh0Pjwvc3ZnPg=="
+        data-shoji-width="800"
+        data-shoji-height="600"
       >
         <img
           src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI5ODBiOScvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4yPC90ZXh0Pjwvc3ZnPg=="
@@ -47,6 +55,8 @@
       </a>
       <a
         href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI3YWU2MCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4zPC90ZXh0Pjwvc3ZnPg=="
+        data-shoji-width="800"
+        data-shoji-height="600"
       >
         <img
           src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzI3YWU2MCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz4zPC90ZXh0Pjwvc3ZnPg=="
@@ -55,6 +65,8 @@
       </a>
       <a
         href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzhlNDRhZCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz40PC90ZXh0Pjwvc3ZnPg=="
+        data-shoji-width="800"
+        data-shoji-height="600"
       >
         <img
           src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc4MDAnIGhlaWdodD0nNjAwJz48cmVjdCB3aWR0aD0nODAwJyBoZWlnaHQ9JzYwMCcgZmlsbD0nIzhlNDRhZCcvPjx0ZXh0IHg9JzQwMCcgeT0nMzAwJyBmb250LXNpemU9JzE2MCcgZmlsbD0nd2hpdGUnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGRvbWluYW50LWJhc2VsaW5lPSdtaWRkbGUnIGZvbnQtZmFtaWx5PSdzYW5zLXNlcmlmJz40PC90ZXh0Pjwvc3ZnPg=="
@@ -75,10 +87,10 @@
       external asset — copy the version below into your own project with real image paths instead:
     </p>
     <pre><code>&lt;div id="gallery"&gt;
-  &lt;a href="photo-1-full.jpg"&gt;&lt;img src="photo-1-thumb.jpg" alt="Photo 1"&gt;&lt;/a&gt;
-  &lt;a href="photo-2-full.jpg"&gt;&lt;img src="photo-2-thumb.jpg" alt="Photo 2"&gt;&lt;/a&gt;
-  &lt;a href="photo-3-full.jpg"&gt;&lt;img src="photo-3-thumb.jpg" alt="Photo 3"&gt;&lt;/a&gt;
-  &lt;a href="photo-4-full.jpg"&gt;&lt;img src="photo-4-thumb.jpg" alt="Photo 4"&gt;&lt;/a&gt;
+  &lt;a href="photo-1-full.jpg" data-shoji-width="800" data-shoji-height="600"&gt;&lt;img src="photo-1-thumb.jpg" alt="Photo 1"&gt;&lt;/a&gt;
+  &lt;a href="photo-2-full.jpg" data-shoji-width="800" data-shoji-height="600"&gt;&lt;img src="photo-2-thumb.jpg" alt="Photo 2"&gt;&lt;/a&gt;
+  &lt;a href="photo-3-full.jpg" data-shoji-width="800" data-shoji-height="600"&gt;&lt;img src="photo-3-thumb.jpg" alt="Photo 3"&gt;&lt;/a&gt;
+  &lt;a href="photo-4-full.jpg" data-shoji-width="800" data-shoji-height="600"&gt;&lt;img src="photo-4-thumb.jpg" alt="Photo 4"&gt;&lt;/a&gt;
 &lt;/div&gt;
 
 &lt;link rel="stylesheet" href="shoji.min.css" /&gt;

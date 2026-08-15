@@ -73,11 +73,6 @@ function fireTransitionEnd(el: Element, propertyName = 'transform'): void {
   el.dispatchEvent(event);
 }
 
-/** close()'s controls-fade-first step (Gallery.ts's hideControlsForClose) waits on this element's own 'opacity' transitionend before the zoom-out animation ever starts — fire it first in any test that closes past a real origin/zoom-out. */
-function fireControlsFadeEnd(): void {
-  fireTransitionEnd(document.querySelector('.shoji-toolbar')!, 'opacity');
-}
-
 // preload: 0 keeps the pool to a single slide-media element, so
 // `.shoji-slide-media` is unambiguous — with the default preload: 1, three
 // pooled elements exist and a plain querySelector would grab the "prev"
@@ -162,7 +157,6 @@ describe('Gallery — zoom transition origin lookup', () => {
     expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
 
     gallery.close();
-    fireControlsFadeEnd(); // controls fade out first
     fireTransitionEnd(activeMedia()); // let the deferred close actually finish
 
     gallery.open(0);
@@ -385,7 +379,6 @@ describe('Gallery — no known dimensions means no guessing (open placeholder AN
     await flush(); // the real image finishes decoding — isActiveReady() becomes true
 
     gallery.close();
-    fireControlsFadeEnd(); // controls fade out first, before the zoom-out this asserts on
 
     expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
 
@@ -413,9 +406,6 @@ describe('Gallery — deferred close animation', () => {
     const { gallery, media } = openGallery();
 
     gallery.close();
-    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open, mid-animation
-
-    fireControlsFadeEnd(); // controls fade out first
     expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull(); // still open — the zoom-out itself hasn't ended yet
     fireTransitionEnd(media);
     expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull(); // now finished
@@ -432,7 +422,6 @@ describe('Gallery — deferred close animation', () => {
     gallery.close(); // should not re-trigger
     expect(closeHandler).toHaveBeenCalledTimes(1);
 
-    fireControlsFadeEnd();
     fireTransitionEnd(media);
     gallery.destroy();
   });
@@ -474,7 +463,7 @@ describe('Gallery — deferred close animation', () => {
   });
 });
 
-describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)', () => {
+describe('Gallery — controls fade and zoom-out run concurrently on close (DESIGN.md §2.6a)', () => {
   function openGallery(count = 3) {
     const el = document.createElement('div');
     el.innerHTML = Array.from(
@@ -493,24 +482,12 @@ describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)'
     return document.querySelector('.shoji-dialog') as HTMLElement;
   }
 
-  it('hides controls immediately on close(), before the zoom-out animation starts', () => {
-    const { gallery } = openGallery();
+  it('hides controls and starts the zoom-out at the same time on close() — no wait between them', () => {
+    const { gallery, media } = openGallery();
 
     gallery.close();
 
     expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
-    expect(zoomTransition.zoomOut).not.toHaveBeenCalled(); // not yet — waiting on the controls fade
-
-    gallery.destroy();
-  });
-
-  it('starts the zoom-out only once the controls-fade transitionend fires', () => {
-    const { gallery, media } = openGallery();
-
-    gallery.close();
-    expect(zoomTransition.zoomOut).not.toHaveBeenCalled();
-
-    fireControlsFadeEnd();
     expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
 
     fireTransitionEnd(media);
@@ -525,19 +502,18 @@ describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)'
 
     expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
 
-    fireControlsFadeEnd();
     fireTransitionEnd(media);
     gallery.destroy();
   });
 
-  it('skips the wait entirely and starts the zoom-out immediately if controls are already hidden (e.g. idle auto-hide already ran)', () => {
+  it('starts the zoom-out immediately on close() even if controls were already hidden beforehand (e.g. idle auto-hide already ran) — same as the ordinary case, nothing extra to wait on either way', () => {
     const { gallery, media } = openGallery();
     gallery.hideControls();
     vi.mocked(zoomTransition.zoomOut).mockClear(); // isolate this test from hideControls() itself, which never calls it
 
     gallery.close();
 
-    expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1); // no wait needed — already hidden
+    expect(zoomTransition.zoomOut).toHaveBeenCalledTimes(1);
 
     fireTransitionEnd(media);
     gallery.destroy();
@@ -555,7 +531,6 @@ describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)'
 
     expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true); // still hidden — activity during close is a no-op
 
-    fireControlsFadeEnd();
     fireTransitionEnd(media);
     gallery.destroy();
   });
@@ -572,7 +547,6 @@ describe('Gallery — controls fade before zoom-out on close (DESIGN.md §2.6a)'
 
     expect(dialog().classList.contains('shoji-controls-hidden')).toBe(true);
 
-    fireControlsFadeEnd();
     fireTransitionEnd(media);
     gallery.destroy();
   });

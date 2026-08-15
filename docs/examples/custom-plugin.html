@@ -45,7 +45,12 @@
       ];
       document.querySelector('#gallery').innerHTML = PHOTOS.map(
         (p, i) => `
-          <a href="${svgDataUri(`Photo ${i + 1}`, p.color)}" data-shoji-metadata-id="${p.metadataId}">
+          <a
+            href="${svgDataUri(`Photo ${i + 1}`, p.color)}"
+            data-shoji-metadata-id="${p.metadataId}"
+            data-shoji-width="800"
+            data-shoji-height="600"
+          >
             <img src="${svgDataUri(`Photo ${i + 1}`, p.color)}" alt="Photo ${i + 1}">
           </a>`,
       ).join('');
@@ -80,13 +85,13 @@
 
     <h2>Code</h2>
     <p>The markup — any <code>data-shoji-*</code> attribute Shoji doesn't already know about:</p>
-    <pre><code>&lt;a href="photo-1-full.jpg" data-shoji-metadata-id="catalog-101"&gt;
+    <pre><code>&lt;a href="photo-1-full.jpg" data-shoji-metadata-id="catalog-101" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;img src="photo-1-thumb.jpg" alt="Photo 1"&gt;
 &lt;/a&gt;
-&lt;a href="photo-2-full.jpg" data-shoji-metadata-id="catalog-102"&gt;
+&lt;a href="photo-2-full.jpg" data-shoji-metadata-id="catalog-102" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;img src="photo-2-thumb.jpg" alt="Photo 2"&gt;
 &lt;/a&gt;
-&lt;a href="photo-3-full.jpg" data-shoji-metadata-id="catalog-103"&gt;
+&lt;a href="photo-3-full.jpg" data-shoji-metadata-id="catalog-103" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;img src="photo-3-thumb.jpg" alt="Photo 3"&gt;
 &lt;/a&gt;</code></pre>
     <p>The plugin — exactly what's running above, no options object needed:</p>

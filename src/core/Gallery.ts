@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { TRANSITION_PRESETS } from '../transitions/presets';
 import { SlideTransition } from '../transitions/SlideTransition';
-import { zoomIn, zoomOut, waitForTransitionEnd, type FrozenDragTransform } from './zoomTransition';
+import { zoomIn, zoomOut, type FrozenDragTransform } from './zoomTransition';
 
 function itemKey(item: GalleryItem | GalleryItemInput): string {
   return item.id ?? item.src;
@@ -928,25 +928,33 @@ export class Gallery {
   }
 
   close(): void {
-    this.beginClose(true);
+    this.beginClose();
   }
 
   /**
    * DESIGN.md §2.4/§2.6a — same effect as `close()`, from a completed
-   * vertical swipe. The drag already has its own closing motion in progress
-   * — sequencing a separate controls-fade pause in front of the zoom-out
-   * would interrupt it. Controls still hide, just concurrently, not
-   * blocking. `frozenDrag` is threaded through to `zoomOut()`'s own
+   * vertical swipe. `frozenDrag` is threaded through to `zoomOut()`'s own
    * `dragStart`, so the whole close continues as one motion from exactly
    * where the drag left off (see `GestureController.
    * takeFrozenDragTransform`).
    */
   private closeFromSwipe(frozenDrag: FrozenDragTransform): void {
-    this.beginClose(false, frozenDrag);
+    this.beginClose(frozenDrag);
   }
 
-  /** `waitForControlsFade` — true for `close()` (nothing else is animating, so fading first avoids stationary chrome over a shrinking photo); false for `closeFromSwipe()`, which already has a concurrent closing motion. `frozenDrag` — see `closeFromSwipe()`'s doc comment; absent for a button-close, which has no drag to continue from. */
-  private beginClose(waitForControlsFade: boolean, frozenDrag?: FrozenDragTransform): void {
+  /**
+   * `frozenDrag` — see `closeFromSwipe()`'s doc comment; absent for a
+   * button-close, which has no drag to continue from. Controls fade and the
+   * zoom-out run concurrently, both starting the instant `forceHideControls()`
+   * runs — not sequenced one after the other. (A previous version waited for
+   * the controls' own fade to fully finish before starting the zoom-out, for
+   * a button-close specifically — requested directly, to avoid stationary
+   * chrome hovering over an already-shrinking photo. Reversed on later,
+   * explicit feedback: waiting read as two distinct steps rather than one
+   * motion; starting both together still avoids stationary chrome, since
+   * the chrome is disappearing too, just without the pause.)
+   */
+  private beginClose(frozenDrag?: FrozenDragTransform): void {
     if (this.destroyed || !this.opened || this.isClosing) return;
     this.bus.emit('beforeClose', {});
 
@@ -973,19 +981,10 @@ export class Gallery {
     // reasoning open() above already applies to its own animation.
     if (media && origin && (this.slides?.isActiveReady() || naturalSize)) {
       const aspectRatio = this.resolveAspectRatio(this.activeIndex, origin);
-      const runZoomOut = (): void => {
-        zoomOut(
-          { origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag },
-          () => this.finishClose(),
-        );
-      };
-      const alreadyHidden = this.autoHidden;
       this.forceHideControls();
-      if (waitForControlsFade && !alreadyHidden && this.dom) {
-        waitForTransitionEnd(this.dom.toolbar, runZoomOut, 'opacity');
-      } else {
-        runZoomOut();
-      }
+      zoomOut({ origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag }, () =>
+        this.finishClose(),
+      );
     } else {
       this.finishClose();
     }

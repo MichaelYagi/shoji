@@ -152,8 +152,8 @@ test('the progress bar fades out with the rest of the controls when the close an
   // (.shoji-controls-hidden removed again by finishClose(), progress bar
   // hidden by Autoplay's own close listener) between polls — flakily
   // reading as "never faded." The class is the deterministic signal.
-  const controlsHiddenRightAfterClick = await progress.evaluate(
-    (el) => el.closest('.shoji-dialog')!.classList.contains('shoji-controls-hidden'),
+  const controlsHiddenRightAfterClick = await progress.evaluate((el) =>
+    el.closest('.shoji-dialog')!.classList.contains('shoji-controls-hidden'),
   );
   expect(controlsHiddenRightAfterClick).toBe(true);
 

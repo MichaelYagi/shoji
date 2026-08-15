@@ -28,12 +28,16 @@ still include breaking changes).
 
 ### Changed
 
-- Closing the lightbox now fades the toolbar/nav/counter/caption out first,
-  before the photo animates back to its thumbnail — previously they stayed
-  at full opacity for the whole zoom-out animation, then vanished together
-  with everything else in one abrupt cut once it finished. Moving the mouse
-  (or touching the screen) during that fade no longer brings the controls
-  back mid-close.
+- Closing the lightbox now starts fading the toolbar/nav/counter/caption out
+  at the same instant the photo starts animating back to its thumbnail,
+  instead of one strictly after the other — previously the fade ran to
+  completion first, then the zoom-out began, reading as two separate steps
+  rather than one motion. (An intermediate version of this fix waited for
+  the fade before starting the zoom-out on a button-close specifically, to
+  avoid stationary chrome hovering over a shrinking photo; reversed once
+  that read as two steps too, in favor of starting both together — the
+  chrome disappearing at the same time still avoids the stationary-chrome
+  problem, just without the pause.)
 - Completing a vertical swipe-to-close now fades and shrinks the photo
   toward its thumbnail in one continuous motion, instead of snapping back to
   fully visible for a beat before the zoom-out took over.
@@ -88,6 +92,16 @@ still include breaking changes).
   Shoji would close the gallery on release — it stayed visible everywhere
   else during a drag, just not there, since that moment reused the same
   mechanism idle auto-hide uses to hide the cursor along with the toolbar.
+- Opening or closing the lightbox on a host page with a real (non-overlay)
+  scrollbar could visibly shift the page's layout — the body scroll lock
+  hid the scrollbar by setting `overflow: hidden`, which reclaims its
+  gutter and widens the usable content area for as long as the lightbox is
+  open, then gives it back on close. `scrollbar-gutter: stable` is now set
+  on `<html>` for the same duration as the lock, reserving that space as
+  blank layout regardless of whether a scrollbar is actually drawn there,
+  so nothing reflows in either direction. Scoped to the lock itself, not
+  set permanently — host page layout is unaffected while the lightbox is
+  closed.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 
