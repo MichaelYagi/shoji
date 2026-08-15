@@ -102,6 +102,7 @@ class InfiniteScrollGallery {
   private renderThumb(item: GalleryItem): HTMLAnchorElement {
     const a = document.createElement('a');
     a.href = '#';
+    a.setAttribute('data-shoji-id', item.id!);
     a.innerHTML = item.video
       ? `<video muted playsinline poster="${item.thumb ?? ''}"><source src="${item.src}" type="${guessMimeType(item.src)}" /></video>`
       : `<img src="${item.thumb ?? item.src}" alt="" loading="lazy" />`;

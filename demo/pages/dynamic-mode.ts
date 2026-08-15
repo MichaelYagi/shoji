@@ -33,7 +33,7 @@ function renderThumbs(gallery: Gallery, items: GalleryItem[]): void {
   thumbs.innerHTML = items
     .map(
       (item, i) => `
-        <a href="#" data-index="${i}">
+        <a href="#" data-index="${i}" data-shoji-id="${item.id}">
           ${
             item.video
               ? `<video muted playsinline><source src="${item.src}" type="${guessMimeType(item.src)}" /></video>`

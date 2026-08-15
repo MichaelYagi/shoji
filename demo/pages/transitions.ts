@@ -22,7 +22,7 @@ function renderThumbs(gallery: Gallery, items: GalleryItem[]): void {
   thumbs.innerHTML = items
     .map(
       (item, i) =>
-        `<a href="#" data-index="${i}"><img src="${item.thumb ?? item.src}" alt="${item.caption ?? ''}" loading="lazy" /></a>`,
+        `<a href="#" data-index="${i}" data-shoji-id="${item.id}"><img src="${item.thumb ?? item.src}" alt="${item.caption ?? ''}" loading="lazy" /></a>`,
     )
     .join('');
 

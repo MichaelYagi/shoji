@@ -124,13 +124,17 @@
 
       // Dynamic mode has no scanned DOM to wire clicks from automatically —
       // the host owns this markup, so the host wires it. Click order
-      // matches the items array order 1:1.
+      // matches the items array order 1:1. data-shoji-id="<item.id>" on each
+      // thumbnail is what lets the open/close zoom transition find its
+      // origin element in dynamic mode (there's no scanned DOM to fall back
+      // on) — without it, the animation is silently skipped no matter what
+      // item.width/height say.
       const grid = document.querySelector('#gallery');
       function renderThumbs() {
         grid.innerHTML = gallery.items
           .map(
             (item, i) => `
-              <a href="#" data-index="${i}">
+              <a href="#" data-index="${i}" data-shoji-id="${item.id}">
                 <img src="${item.video ? item.poster : item.src}" alt="${item.caption ?? ''}">
               </a>`,
           )
