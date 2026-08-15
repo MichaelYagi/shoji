@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12] - 2026-08-15
+
 ### Added
 
 - `backdropOpacity` (`GalleryOptions`) — a real 0-1 alpha for the backdrop
