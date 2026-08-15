@@ -96,12 +96,13 @@ still include breaking changes).
   scrollbar could visibly shift the page's layout — the body scroll lock
   hid the scrollbar by setting `overflow: hidden`, which reclaims its
   gutter and widens the usable content area for as long as the lightbox is
-  open, then gives it back on close. `scrollbar-gutter: stable` is now set
-  on `<html>` for the same duration as the lock, reserving that space as
-  blank layout regardless of whether a scrollbar is actually drawn there,
-  so nothing reflows in either direction. Scoped to the lock itself, not
-  set permanently — host page layout is unaffected while the lightbox is
-  closed.
+  open, then gives it back on close. The scrollbar's width is now measured
+  before locking and, only when a real scrollbar was actually there,
+  compensated with invisible `padding-right` on `<html>` for the same
+  duration as the lock — so the usable width never changes and nothing
+  reflows in either direction. Scoped to the lock itself, not set
+  permanently — host page layout is unaffected while the lightbox is
+  closed, and a page that never had a scrollbar gets no padding at all.
 
 ## [0.1.0-alpha.11] - 2026-08-13
 
