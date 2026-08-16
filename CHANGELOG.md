@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.13] - 2026-08-15
+
 ### Fixed
 
 - The page scroll lock (active while the lightbox is open) had four known
