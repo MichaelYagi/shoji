@@ -7,6 +7,15 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- `ActiveThumbnail` could silently lose track of the active slide when used
+  together with the `Layout` plugin's `groupBy` option: any `autoMeasure`
+  correction (most items missing explicit `width`/`height`) triggers a full
+  tile-DOM rebuild under `groupBy`, orphaning the element `ActiveThumbnail`
+  had marked active. Fixed by tracking the active index and re-marking the
+  rebuilt tile via the `layoutRender` event. See DESIGN.md §4.2.
+
 ## [0.1.0-alpha.13] - 2026-08-15
 
 ### Fixed
