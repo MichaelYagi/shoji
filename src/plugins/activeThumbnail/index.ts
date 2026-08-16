@@ -1,4 +1,5 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
+import { markIntentionalScroll } from '../../core/bodyScrollLock';
 
 export interface ActiveThumbnailOptions {
   /** CSS class applied to the origin thumbnail for whichever slide is currently active. Default `'shoji-thumb-active'` — Shoji ships no default styling for it (the host's own thumbnail markup, or the layout plugin's tiles, define what "active" looks like), only the class toggling. */
@@ -102,6 +103,11 @@ export const ActiveThumbnail: ShojiPlugin = {
           // Scrolling is best-effort — whatever goes wrong with it must
           // never take the highlight down with it (already applied above).
           try {
+            // The lightbox that's navigating (and so triggering this scroll)
+            // is also what's holding the page scroll lock — without this,
+            // closing it unconditionally snaps the page back to wherever it
+            // was on open, undoing every scroll this call ever made.
+            markIntentionalScroll();
             el.scrollIntoView({
               block: 'nearest',
               inline: 'nearest',

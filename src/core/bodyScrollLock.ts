@@ -6,8 +6,27 @@ let savedHtmlPaddingLeft = '';
 let savedScrollX = 0;
 let savedScrollY = 0;
 let styleObserver: MutationObserver | null = null;
+// Set by markIntentionalScroll() (ActiveThumbnail's own scrollIntoView while
+// locked, DESIGN.md §2.6a/§4.2) — a real bug/regression: unlockBodyScroll()
+// unconditionally restoring savedScrollX/Y (below) was meant to undo
+// *unrelated* code hijacking scroll during the lock (a router, a stray
+// "scroll to top" button), but it just as unconditionally undid Shoji's own
+// legitimate background-page scrolling too, making ActiveThumbnail's
+// scrollIntoView a complete no-op the instant the lightbox that triggers it
+// is also what's holding the lock — every navigation while open, always.
+// Once anything marks an intentional scroll during this lock session, skip
+// the restore entirely rather than try to track a smooth-scroll animation's
+// eventual resting position (no reliable completion signal across browsers)
+// — same "leave it where legitimate code put it" reasoning, just without
+// pinpointing the exact pixel.
+let intentionalScrollOccurred = false;
 
 const LIGHTBOX_SELECTOR = '.shoji-outer';
+
+/** Call after intentionally scrolling something on the host page while the lock is active (e.g. ActiveThumbnail's own `scrollIntoView`) — tells `unlockBodyScroll()` not to undo it. */
+export function markIntentionalScroll(): void {
+  intentionalScrollOccurred = true;
+}
 
 function isRtl(): boolean {
   return getComputedStyle(document.documentElement).direction === 'rtl';
@@ -68,6 +87,7 @@ export function lockBodyScroll(): void {
     // time the lightbox is open, not just protected from direct input.
     savedScrollX = window.scrollX;
     savedScrollY = window.scrollY;
+    intentionalScrollOccurred = false;
 
     // A real bug: hiding overflow below reclaims the scrollbar's own
     // gutter, widening <html>'s content box by however many px the
@@ -169,6 +189,8 @@ export function unlockBodyScroll(): void {
     document.documentElement.style.paddingRight = savedHtmlPaddingRight;
     document.documentElement.style.paddingLeft = savedHtmlPaddingLeft;
 
-    window.scrollTo({ left: savedScrollX, top: savedScrollY, behavior: 'instant' });
+    if (!intentionalScrollOccurred) {
+      window.scrollTo({ left: savedScrollX, top: savedScrollY, behavior: 'instant' });
+    }
   }
 }

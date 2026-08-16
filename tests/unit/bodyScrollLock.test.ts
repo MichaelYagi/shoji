@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { lockBodyScroll, unlockBodyScroll } from '../../src/core/bodyScrollLock';
+import {
+  lockBodyScroll,
+  markIntentionalScroll,
+  unlockBodyScroll,
+} from '../../src/core/bodyScrollLock';
 
 function mockScrollPosition(x: number, y: number): void {
   Object.defineProperty(window, 'scrollX', { value: x, configurable: true });
@@ -51,6 +55,36 @@ describe('bodyScrollLock — programmatic scroll restore', () => {
 
     unlockBodyScroll();
     expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 100, behavior: 'instant' });
+  });
+
+  it('skips the restore entirely once markIntentionalScroll() has been called — a real regression: this unconditional restore made ActiveThumbnail.scrollIntoView (also running while this exact lock is active) a complete no-op, undone the instant the lightbox closed', () => {
+    mockScrollPosition(0, 250);
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+
+    lockBodyScroll();
+    mockScrollPosition(0, 900); // e.g. ActiveThumbnail scrolling to the active slide
+    markIntentionalScroll();
+
+    unlockBodyScroll();
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('the intentional-scroll flag does not leak into the next lock session', () => {
+    mockScrollPosition(0, 250);
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+
+    lockBodyScroll();
+    markIntentionalScroll();
+    unlockBodyScroll();
+    scrollTo.mockClear();
+
+    mockScrollPosition(0, 250); // fresh open, fresh saved position
+    lockBodyScroll();
+    mockScrollPosition(0, 900); // unrelated drift only, nothing marks it intentional this time
+    unlockBodyScroll();
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 250, behavior: 'instant' });
   });
 });
 

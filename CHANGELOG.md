@@ -15,6 +15,13 @@ still include breaking changes).
   tile-DOM rebuild under `groupBy`, orphaning the element `ActiveThumbnail`
   had marked active. Fixed by tracking the active index and re-marking the
   rebuilt tile via the `layoutRender` event. See DESIGN.md §4.2.
+- `ActiveThumbnail`'s `scrollIntoView` tracking was silently a no-op the
+  entire time the lightbox was open: a regression from alpha.13's own page
+  scroll lock fix, which unconditionally snapped the page back to its
+  pre-open position on close, undoing every scroll `ActiveThumbnail` made
+  while navigating. Fixed with a `markIntentionalScroll()` escape hatch so
+  the lock's own close-time restore no longer fights Shoji's own legitimate
+  background scrolling. See DESIGN.md §2.6a (gap 2).
 
 ## [0.1.0-alpha.13] - 2026-08-15
 
