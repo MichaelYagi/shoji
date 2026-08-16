@@ -5,7 +5,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: [['list']],
+  // 'list' for readable console output during the run; 'html' so CI's
+  // upload-artifact step (playwright-report/) has something to actually
+  // upload — a real gap: without it, that step always silently found
+  // nothing, even though per-test traces (trace: 'retain-on-failure' below)
+  // were being generated the whole time, just never surfaced anywhere
+  // retrievable after a CI run ended. open: 'never' — auto-opening a
+  // browser to show the report would just hang in CI.
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',

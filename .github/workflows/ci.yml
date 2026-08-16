@@ -45,6 +45,20 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+      # Raw per-test traces (playwright.config.ts's trace:
+      # 'retain-on-failure'), uploaded separately from the HTML report above
+      # as a redundant path to the same trace.zip files it links to — in
+      # case the report's own attachment references ever don't resolve
+      # (e.g. downloaded standalone rather than served via `playwright
+      # show-report`), the raw files are still directly reachable here.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
   publish-docs:
     needs: verify
     # workflow_dispatch included so a manual "Run workflow" also republishes
