@@ -115,7 +115,18 @@
           <td><code>Shoji.ActiveThumbnail</code> / <code>activeThumbnail</code></td>
           <td>
             Keeps a host's own thumbnail grid in sync with whichever slide is open — toggles a
-            class, scrolls it into view. No default styling shipped for the class itself.
+            class, scrolls it into view. No default styling shipped for the class itself; you write
+            the CSS:
+            <pre><code>.shoji-thumb-active img {
+  outline: 3px solid #4da3ff;
+  outline-offset: 2px;
+}</code></pre>
+            Live in the
+            <a href="../examples/autoplay-and-active-thumbnail.html"
+              >Autoplay + ActiveThumbnail example</a
+            >. Also needs a <code>data-shoji-id</code> match per item outside selector mode — see
+            <a href="./getting-started.html">Getting started</a>'s <code>GalleryItem</code> fields
+            table.
           </td>
           <td>
             <code>activeClass</code> (<code>'shoji-thumb-active'</code>),
