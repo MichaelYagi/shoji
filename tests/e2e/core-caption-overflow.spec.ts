@@ -70,14 +70,20 @@ test('a very long caption stays height-capped and scrollable, instead of growing
   await expect(caption).toBeVisible();
 
   const box = (await caption.boundingBox())!;
-  const dialogBox = (await page.locator('.shoji-dialog').last().boundingBox())!;
+  const toolbarBox = (await page.locator('.shoji-toolbar').last().boundingBox())!;
 
   // The exact cap is a theme-able custom property (--shoji-caption-max-height,
   // shoji.css), not a magic number worth hardcoding here — the regression
-  // this guards is "unbounded," so asserting it stays comfortably short of
-  // the full dialog height is the meaningful, implementation-detail-free
-  // check, not pinning an exact pixel value.
-  expect(box.height).toBeLessThan(dialogBox.height * 0.5);
+  // this guards is "unbounded," specifically growing up over the toolbar
+  // (DESIGN.md §2.3a's own real bug, caught the same way: a caption long
+  // enough to visibly cover the toolbar's controls). The caption's own
+  // ceiling now derives from the toolbar's real measured height, not a
+  // fixed fraction of the dialog, so "never overlaps the toolbar" is the
+  // meaningful, implementation-detail-free check — not a percentage of
+  // dialog height, which the cap can legitimately exceed on a short
+  // toolbar/tall dialog. Playwright's boundingBox() is {x, y, width,
+  // height}, not a DOMRect — bottom computed manually.
+  expect(box.y).toBeGreaterThanOrEqual(toolbarBox.y + toolbarBox.height);
 
   // The full text is still reachable — scrollable, not truncated/lost.
   const isScrollable = await caption.evaluate((el) => el.scrollHeight > el.clientHeight);

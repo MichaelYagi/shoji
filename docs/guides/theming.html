@@ -189,7 +189,24 @@
         </tr>
         <tr>
           <td><code>--shoji-caption-max-height</code></td>
-          <td><code>min(8rem, 30%)</code></td>
+          <td>
+            <code
+              >calc(100% - var(--shoji-toolbar-height, var(--shoji-provider-video-top-inset)) -
+              var(--shoji-spacing-md) - var(--shoji-spacing-sm))</code
+            >
+            — set on <code>.shoji-dialog</code>, not <code>:root</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>--shoji-caption-max-width</code></td>
+          <td>
+            <code>calc(100% - 2 * var(--shoji-spacing-md))</code>; above a 768px viewport,
+            <code>min(calc(100% - 2 * var(--shoji-spacing-md)), max(24vw, 14rem))</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>--shoji-toolbar-height</code></td>
+          <td>set by Gallery itself (a live measurement) — not meant to be overridden</td>
         </tr>
         <tr>
           <td><code>--shoji-provider-video-top-inset</code></td>
@@ -199,11 +216,24 @@
     </table>
     <p>
       <code>--shoji-caption-max-height</code> caps how tall a caption can grow before it scrolls
-      internally, so a long one can't cover a video slide's native controls.
+      internally — it grows naturally with its content, only capping (and only then scrolling) once
+      it would reach up under the toolbar. It's set on <code>.shoji-dialog</code> rather than
+      <code>:root</code> deliberately: a custom property's nested <code>var()</code> references
+      resolve at the element where that property is <em>declared</em>, not wherever a descendant
+      later uses it, so it has to live on the same element <code>--shoji-toolbar-height</code> (the
+      toolbar's real, live-measured height, kept up to date by a <code>ResizeObserver</code> in
+      <code>Gallery.ts</code> — correct even if a busy toolbar wraps to multiple rows on a narrow
+      viewport) is actually set on for the substitution to see it.
+      <code>--shoji-caption-max-width</code> caps how wide it can grow before wrapping — spans
+      (almost) the full dialog width on a narrow/mobile viewport, unchanged from the original
+      behavior, but narrows to roughly a quarter of the viewport above a 768px breakpoint (floored
+      at <code>14rem</code> so it stays legible in a smaller desktop window) — so a long caption on
+      a wide screen reads as a caption, not a bar spanning the dialog.
       <code>--shoji-provider-video-top-inset</code> reserves space at the top of a provider embed
       (YouTube etc.) matching the toolbar's own height, so the embed's hover-revealed title bar
-      never sits under it. Neither applies to HTML5 video, which has no unbounded caption-overlap or
-      top-of-player UI to protect against.
+      never sits under it — also the caption height cap's own fallback, before the real measurement
+      above has landed (normally one animation frame after mount). That one doesn't apply to HTML5
+      video, which has no top-of-player UI to protect against.
     </p>
 
     <h2>Z-index layers</h2>

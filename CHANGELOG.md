@@ -7,6 +7,23 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Changed
+
+- The caption box's default max-width now narrows to roughly a quarter of
+  the viewport (floored at `14rem`) above a 768px breakpoint, via the new
+  `--shoji-caption-max-width` custom property — a long caption previously
+  wrapped out to the dialog's near-full width on any viewport, reading as
+  a bar rather than a caption sized to its own content. Desktop-only: a
+  narrow/mobile viewport still spans (almost) the full width, unchanged.
+- The caption box's default max-height no longer caps early at a fixed
+  `min(8rem, 30%)` — it now grows naturally with its content on every
+  viewport, only capping (and scrolling) once it would reach up under the
+  toolbar. The toolbar's real rendered height is now measured (a new
+  `ResizeObserver` in `Gallery.ts`) rather than assumed as a fixed
+  single-row figure, so this stays correct even when a busy toolbar (many
+  plugins' buttons) wraps to multiple rows on a narrow viewport. See
+  DESIGN.md §2.3a.
+
 ### Fixed
 
 - `Zoom`'s pan-while-zoomed gesture never called `setPointerCapture`, unlike

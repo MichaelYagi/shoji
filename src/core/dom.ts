@@ -20,6 +20,8 @@ export interface LightboxDom {
   prevButton: HTMLButtonElement;
   nextButton: HTMLButtonElement;
   captionToggleButton: HTMLButtonElement; // DESIGN.md §2.3a
+  /** The whole toolbar bar — DESIGN.md §2.3a's toolbar-height measurement observes this, not any one slot, since it's what actually wraps to multiple rows. */
+  toolbar: HTMLElement;
   /** DESIGN.md §3 — `ctx.ui.toolbar(slot, ...)` inserts into these; close lives in `right`. */
   toolbarLeft: HTMLElement;
   toolbarCenter: HTMLElement;
@@ -111,6 +113,7 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
     prevButton,
     nextButton,
     captionToggleButton,
+    toolbar,
     toolbarLeft,
     toolbarCenter,
     toolbarRight,

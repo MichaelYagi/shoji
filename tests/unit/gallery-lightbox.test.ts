@@ -513,3 +513,65 @@ describe('Gallery — updateSlides while open', () => {
     gallery.destroy();
   });
 });
+
+describe('Gallery — toolbar height measurement for caption sizing (DESIGN.md §2.3a)', () => {
+  const originalRO = window.ResizeObserver;
+  const originalRaf = window.requestAnimationFrame;
+
+  afterEach(() => {
+    window.ResizeObserver = originalRO;
+    window.requestAnimationFrame = originalRaf;
+  });
+
+  function mockResizeObserver(): {
+    fire: () => void;
+    observed: Element[];
+    disconnect: ReturnType<typeof vi.fn>;
+  } {
+    const observed: Element[] = [];
+    const disconnect = vi.fn();
+    let callback: (() => void) | undefined;
+    window.ResizeObserver = vi.fn().mockImplementation((cb: () => void) => {
+      callback = cb;
+      return {
+        observe: (el: Element) => observed.push(el),
+        unobserve: vi.fn(),
+        disconnect,
+      };
+    }) as unknown as typeof ResizeObserver;
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    }) as typeof window.requestAnimationFrame;
+    return { fire: () => callback?.(), observed, disconnect };
+  }
+
+  it("sets --shoji-toolbar-height on .shoji-dialog from the toolbar's real measured height, not a fixed guess", () => {
+    const { fire } = mockResizeObserver();
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    const toolbar = document.querySelector('.shoji-toolbar') as HTMLElement;
+    vi.spyOn(toolbar, 'getBoundingClientRect').mockReturnValue({
+      height: 164,
+    } as DOMRect);
+    fire();
+
+    const dialog = document.querySelector('.shoji-dialog') as HTMLElement;
+    expect(dialog.style.getPropertyValue('--shoji-toolbar-height')).toBe('164px');
+
+    gallery.destroy();
+  });
+
+  it('observes the toolbar element itself, and disconnects the observer on destroy() — no leaked observer', () => {
+    const { observed, disconnect } = mockResizeObserver();
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    const toolbar = document.querySelector('.shoji-toolbar');
+    expect(observed).toEqual([toolbar]);
+
+    gallery.destroy();
+    expect(disconnect).toHaveBeenCalled();
+  });
+});

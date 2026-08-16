@@ -1295,14 +1295,28 @@ describe('Layout — cleanup', () => {
   });
 
   it('disconnects the resize observer on destroy so a later resize does not touch a torn-down gallery', () => {
-    const disconnect = vi.fn();
-    const observe = vi.fn();
+    // Gallery core has its own unrelated ResizeObserver too (measuring the
+    // toolbar for the caption's own height cap, DESIGN.md §2.3a) — both get
+    // created via this same mocked global constructor, since `ensureLightbox()`
+    // (and so both observers) actually runs at construction time, not lazily
+    // on open(). Distinguish Layout's own instance by which element it
+    // observes (the layout container itself, `el`) rather than assuming
+    // it's the only ResizeObserver in play.
+    interface Instance {
+      target: Element | undefined;
+      observe: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    }
+    const instances: Instance[] = [];
     const originalRO = window.ResizeObserver;
-    window.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe,
-      unobserve: vi.fn(),
-      disconnect,
-    })) as unknown as typeof ResizeObserver;
+    window.ResizeObserver = vi.fn().mockImplementation(() => {
+      const instance: Instance = { target: undefined, observe: vi.fn(), disconnect: vi.fn() };
+      instance.observe.mockImplementation((el: Element) => {
+        instance.target = el;
+      });
+      instances.push(instance);
+      return { observe: instance.observe, unobserve: vi.fn(), disconnect: instance.disconnect };
+    }) as unknown as typeof ResizeObserver;
 
     const el = document.createElement('div');
     document.body.appendChild(el);
@@ -1311,10 +1325,11 @@ describe('Layout — cleanup', () => {
       plugins: [Layout],
       layout: { type: 'masonry' },
     });
-    expect(observe).toHaveBeenCalledTimes(1);
+    const layoutInstance = instances.find((i) => i.target === el);
+    expect(layoutInstance?.observe).toHaveBeenCalledTimes(1);
 
     gallery.destroy();
-    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(layoutInstance?.disconnect).toHaveBeenCalledTimes(1);
 
     window.ResizeObserver = originalRO;
   });

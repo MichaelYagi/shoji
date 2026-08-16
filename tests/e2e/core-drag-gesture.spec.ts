@@ -371,10 +371,16 @@ test('a mouse drag starting on caption text selects it, instead of being capture
       const gallery = new Gallery(el, {
         items: [
           {
+            // Short on purpose, not just "fairly long" — the caption's own
+            // max-width is now capped down to roughly a quarter of the
+            // viewport on desktop (DESIGN.md §2.3a), so anything long
+            // enough to wrap would put only whichever line the drag's
+            // fixed vertical midpoint happens to land on within the
+            // dragged selection, not necessarily the whole caption. Short
+            // enough to stay one line even at that cap's floor (14rem).
             id: 'a',
             src: svg,
-            caption:
-              'A fairly long caption with several words in it that a user might want to select and copy with the mouse',
+            caption: 'Several words here',
           },
           { id: 'b', src: svg, caption: 'second' },
         ],

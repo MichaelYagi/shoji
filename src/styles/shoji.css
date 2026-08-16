@@ -50,21 +50,22 @@
 
   --shoji-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --shoji-duration: 300ms;
-  /* Caps how tall the caption box can grow before it scrolls internally —
-     an unbounded caption on a long string would otherwise creep up over a
-     video slide's native control bar underneath it (bottom-left, same
-     corner), silently swallowing scrub/volume/fullscreen clicks with no
-     way to reach them. `min()` also bounds it on a short/wide dialog
-     (mobile landscape), where a `rem`-only cap could still eat most of
-     the available height. */
-  --shoji-caption-max-height: min(8rem, 30%);
-  /* Reserved space at the top of a provider embed (YouTube etc.) so its own
-     hover-revealed title bar never sits under Shoji's toolbar — matches the
-     toolbar's own rendered height (44px button + top/bottom padding).
-     Permanent, not tied to the toolbar's auto-hide state, so the video
-     never resizes as the toolbar fades in/out. HTML5 video has no top-of-
-     player UI at all, so it's untouched. */
+  /* The toolbar's own rendered height (44px button + top/bottom padding) —
+     defined before the caption sizing below since it now derives from
+     this. Also reserves space at the top of a provider embed (YouTube
+     etc.) so its own hover-revealed title bar never sits under Shoji's
+     toolbar; permanent there, not tied to the toolbar's auto-hide state,
+     so the video never resizes as the toolbar fades in/out. HTML5 video
+     has no top-of-player UI at all, so it's untouched by that use. */
   --shoji-provider-video-top-inset: calc(44px + 2 * var(--shoji-spacing-sm));
+  /* Caps how wide the caption box can grow before wrapping — `width:
+     fit-content` alone let a long caption wrap out to the dialog's full
+     width (only actually bounded by the padding subtracted below),
+     reading as a bar spanning the screen rather than a caption sized to
+     its own content. Desktop-only (see the media query below) — on a
+     narrow/mobile viewport the caption still spans (almost) the full
+     width, unchanged from before. */
+  --shoji-caption-max-width: calc(100% - 2 * var(--shoji-spacing-md));
   /* DESIGN.md §2.4 — the gesture engine's own documented default easing for
      drag-to-navigate/drag-to-close settle animations specifically (a snap
      tuned for "released mid-motion," distinct from --shoji-easing's
@@ -89,6 +90,23 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --shoji-duration: 0ms;
+  }
+}
+
+/* Narrows the caption from its mobile default (spans ~the full dialog
+   width) down to roughly a quarter of the viewport, floored at 14rem so
+   it stays legible in a smaller desktop window — reported from real
+   usage as an aesthetic complaint (a long caption reading as a bar
+   spanning the screen), desktop-only by request: a narrow/mobile
+   viewport keeps the original near-full-width behavior unchanged, since
+   there's much less width to spare there in the first place. 768px is an
+   ordinary phone/tablet breakpoint, not tied to any other Shoji default —
+   there's no matching JS-side concept of "mobile" to stay consistent
+   with here (`mobileSettings`'s own `isMobileQuery()` keys off
+   `pointer: coarse` instead, a different, input-type question). */
+@media (min-width: 768px) {
+  :root {
+    --shoji-caption-max-width: min(calc(100% - 2 * var(--shoji-spacing-md)), max(24vw, 14rem));
   }
 }
 
@@ -137,6 +155,26 @@
      interactive regardless (this is about implicit browser gesture
      handling, not pointer-events). */
   touch-action: none;
+  /* Caps how tall the caption box (a descendant, DESIGN.md §2.3a) can grow
+     before it scrolls internally — grows naturally with its content up to
+     that point, no cap kicking in early. The real ceiling is this
+     element's own height (100%) minus the toolbar's footprint at the top
+     minus the caption's own `bottom` offset minus a small breathing gap —
+     i.e. "as tall as it can get without reaching up under the toolbar,"
+     not an arbitrary fixed figure. Declared *here*, not `:root`, on
+     purpose — a real bug caught testing this: a custom property's nested
+     `var()` references substitute at the element where that property is
+     declared, not where a descendant later uses it, so defining this same
+     formula at `:root` baked in whatever `--shoji-toolbar-height`
+     happened to resolve to *there* (never set, always the fallback)
+     regardless of the real, per-instance value Gallery.ts's
+     ResizeObserver sets right on this same `.shoji-dialog` element below.
+     Declaring it here instead means the substitution happens where that
+     inline-set value is actually visible. */
+  --shoji-caption-max-height: calc(
+    100% - var(--shoji-toolbar-height, var(--shoji-provider-video-top-inset)) -
+      var(--shoji-spacing-md) - var(--shoji-spacing-sm)
+  );
 }
 
 .shoji-toolbar {
@@ -489,11 +527,18 @@
   left: var(--shoji-spacing-md);
   z-index: var(--shoji-z-toolbar);
   width: fit-content;
-  max-width: calc(100% - 2 * var(--shoji-spacing-md));
+  max-width: var(--shoji-caption-max-width);
   max-height: var(--shoji-caption-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--shoji-spacing-sm) var(--shoji-spacing-md);
+  /* A real bug, caught by an e2e regression test: without this, max-height
+     only constrains the content box — the element's own padding (16px,
+     top+bottom) then renders on top of that, eating into the breathing
+     gap the height cap's own calc (--shoji-caption-max-height, above)
+     already budgeted for, enough to actually overlap the toolbar instead
+     of stopping just short of it. */
+  box-sizing: border-box;
   border-radius: 8px;
   background: var(--shoji-color-toolbar-bg);
   text-align: left;

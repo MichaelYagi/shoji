@@ -146,6 +146,9 @@ export class Gallery {
   private dom: LightboxDom | null = null;
   private gesture: GestureController | null = null;
   private transition: SlideTransition | null = null;
+  /** DESIGN.md §2.3a — measures `.shoji-toolbar`'s real rendered height (it can wrap to multiple rows on a narrow viewport with many toolbar buttons registered) so the caption's own height cap can reserve exactly that much space, not a fixed single-row guess. */
+  private toolbarHeightObserver: ResizeObserver | null = null;
+  private toolbarHeightFrame: number | null = null;
   private readonly shortcuts = new Map<string, (e: KeyboardEvent) => void>();
   private readonly pluginStorage = new Map<string, unknown>();
   /** Backs `getActivePlugins()`. */
@@ -405,6 +408,26 @@ export class Gallery {
     }
 
     document.body.appendChild(dom.outer);
+
+    // DESIGN.md §2.3a — a fixed single-row assumption undercounted a busy
+    // toolbar (many plugins registering buttons) wrapping to multiple rows
+    // on a narrow viewport, letting the caption's own height cap grow up
+    // over the real controls instead of stopping below them. Measuring the
+    // real rendered height instead of guessing is correct regardless of
+    // plugin count or viewport width. rAF-batched, same pattern the Layout
+    // plugin's own resize handling already uses (CLAUDE.md: batch DOM
+    // writes that can thrash layout).
+    this.toolbarHeightObserver = new ResizeObserver(() => {
+      if (this.toolbarHeightFrame !== null) return;
+      this.toolbarHeightFrame = requestAnimationFrame(() => {
+        this.toolbarHeightFrame = null;
+        dom.dialog.style.setProperty(
+          '--shoji-toolbar-height',
+          `${dom.toolbar.getBoundingClientRect().height}px`,
+        );
+      });
+    });
+    this.toolbarHeightObserver.observe(dom.toolbar);
 
     // DESIGN.md §2.4 — attached to the whole dialog (not just .shoji-slides)
     // so vertical swipe-to-close works from anywhere in it, not only over
@@ -1170,6 +1193,10 @@ export class Gallery {
     this.gesture?.destroy();
     this.gesture = null;
     this.transition = null;
+    this.toolbarHeightObserver?.disconnect();
+    this.toolbarHeightObserver = null;
+    if (this.toolbarHeightFrame !== null) cancelAnimationFrame(this.toolbarHeightFrame);
+    this.toolbarHeightFrame = null;
     this.slides?.destroy();
     this.dom?.outer.remove();
     this.slides = null;
