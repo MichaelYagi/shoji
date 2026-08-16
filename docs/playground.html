@@ -238,10 +238,12 @@ its own id) rather than a real function input.
             <label><input type="checkbox" id="plugin-zoom" checked /> Zoom</label>
             <label><input type="checkbox" id="plugin-video" checked /> Video</label>
             <label><input type="checkbox" id="plugin-autoplay" checked /> Autoplay</label>
+            <label><input type="checkbox" id="plugin-myPlugin" checked /> MyPlugin</label>
+            <label><input type="checkbox" id="plugin-themePicker" checked /> ThemePicker</label>
           </div>
           <p class="note">
-            MyPlugin/ThemePicker (this page's own two custom plugins) are always loaded — not real
-            options to toggle.
+            MyPlugin/ThemePicker are this page's own two custom plugins (not official Shoji ones) —
+            toggleable like the rest.
           </p>
         </fieldset>
 
@@ -746,7 +748,8 @@ its own id) rather than a real function input.
         const plugins = [];
         if (checked('plugin-fullscreen')) plugins.push(Shoji.Fullscreen);
         if (checked('plugin-rotateFlip')) plugins.push(Shoji.RotateFlip);
-        plugins.push(MyPlugin, ThemePicker);
+        if (checked('plugin-myPlugin')) plugins.push(MyPlugin);
+        if (checked('plugin-themePicker')) plugins.push(ThemePicker);
         if (checked('plugin-layout')) plugins.push(Shoji.Layout);
         if (checked('plugin-activeThumbnail')) plugins.push(Shoji.ActiveThumbnail);
         if (checked('plugin-zoom')) plugins.push(Shoji.Zoom);
