@@ -60,7 +60,16 @@ test('a very long caption stays height-capped and scrollable, instead of growing
   page,
 }) => {
   await page.goto('/pages/e2e-plugins.html');
-  const longCaption = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(30);
+  // repeat(30) was plenty against the old fixed min(8rem, 30%) cap, but
+  // isn't a safe margin against the new, much larger toolbar-derived one
+  // (DESIGN.md §2.3a) on every viewport — CI's mobile-chrome project, wide
+  // relative to its own height with no width cap of its own (mobile is
+  // deliberately excluded from the desktop-only width cap), wraps this
+  // into few enough lines to fit the taller cap without ever needing to
+  // scroll. A much larger repeat count keeps this test about "does
+  // scrolling engage for a genuinely too-long caption," not about tuned
+  // geometry that has to keep pace with the cap's own default.
+  const longCaption = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(200);
   await openVideoGallery(page, longCaption);
 
   // .last() — the fixture page's own gallery (closed, but already
