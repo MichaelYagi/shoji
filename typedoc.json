@@ -18,7 +18,8 @@
   "excludeProtected": true,
   "hideGenerator": true,
   "navigationLinks": {
-    "Guides": "../index.html"
+    "Guides": "../index.html",
+    "Playground": "../playground.html"
   },
   "sort": ["source-order"]
 }

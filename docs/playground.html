@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Only the built dist/ output is loaded here — no Vite, no bundler. See
+      docs/index.html's footer: run `npm run build` first so dist/ exists,
+      then serve docs/ over http(s) (not file://) — the YouTube item
+      (Shoji.Video) needs a real origin, or its IFrame Player API rejects
+      with "Error 153: Video player configuration error".
+    -->
+    <link rel="stylesheet" href="./docs.css" />
+    <link rel="stylesheet" href="dist/shoji.min.css" />
+    <title>Shoji Docs — Playground</title>
+    <style>
+      /* orientation: 'horizontal' below is the transpose of normal masonry —
+           height is the *given* input dimension, width is computed — so unlike
+           vertical masonry (which must NOT have a host height, or it fights the
+           plugin's own computed height), horizontal masonry needs the host to
+           supply one. Without it the container's absolutely-positioned tiles
+           contribute 0 to auto-height, it collapses to 0, and the plugin's own
+           containerHeight <= 0 guard makes layout a permanent no-op — nothing
+           renders at all. */
+      #gallery {
+        /* height: 480px; */
+        --shoji-layout-heading-font-family: sans-serif;
+        --shoji-layout-heading-title-font-size: 0.7em;
+        --shoji-layout-heading-title-font-weight: 500;
+        --shoji-layout-heading-subtitle-font-size: 0.5em;
+        --shoji-layout-heading-subtitle-color: #444;
+        visibility: hidden;
+      }
+
+      #gallery.shoji-layout {
+        visibility: visible;
+      }
+
+      /*
+          The gallery's own look/theme is untouched above — everything below
+          is plain, unstyled-as-possible form markup for the control panel
+          only, kept deliberately minimal (system font, no colors beyond
+          borders, no framework) so it doesn't compete visually with the
+          thing it's testing.
+        */
+      #controls {
+        border: 1px solid #999;
+        padding: 0.75rem 1rem;
+        margin: 1.5rem 0;
+        max-width: 900px;
+        font-family: system-ui, sans-serif;
+      }
+
+      #controls h2 {
+        font-size: 1rem;
+        margin: 0 0 0.5rem;
+      }
+
+      #controls fieldset {
+        border: 1px solid #ccc;
+        margin: 0 0 0.75rem;
+        padding: 0.5rem 0.75rem;
+      }
+
+      #controls legend {
+        font-weight: bold;
+        padding: 0 0.25rem;
+      }
+
+      #controls .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0.4rem 1rem;
+      }
+
+      #controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.85rem;
+        /* Not nowrap — a long label (e.g. "rowHeight (justified target /
+           horizontal masonry fixed)") forced past its own grid cell's width
+           and overlapped the next label/input instead of wrapping onto a
+           second line within its own cell. */
+        white-space: normal;
+      }
+
+      #controls input[type='number'],
+      #controls input[type='text'],
+      #controls select {
+        width: 8rem;
+        font-size: 0.85rem;
+      }
+
+      #controls .note {
+        font-size: 0.75rem;
+        color: #666;
+        margin: 0.25rem 0 0;
+      }
+
+      #apply {
+        font-size: 0.9rem;
+        padding: 0.4rem 1rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="./index.html">Overview</a>
+      <a href="./guides/getting-started.html">Getting started</a>
+      <a href="./guides/plugins.html">Plugins</a>
+      <a href="./guides/layout.html">Layout plugin</a>
+      <a href="./guides/transitions.html">Transitions</a>
+      <a href="./guides/methods.html">Methods</a>
+      <a href="./guides/events.html">Events</a>
+      <a href="./guides/settings.html">Settings</a>
+      <a href="./guides/theming.html">Theming</a>
+      <a href="./examples/index.html">Examples</a>
+      <a href="./playground.html" aria-current="page">Playground</a>
+      <a href="./api/index.html">API reference</a>
+    </nav>
+
+    <h1>Playground</h1>
+    <p>
+      Every <code>GalleryOptions</code>/plugin-option field as a live form below the gallery — flip
+      settings, pick dynamic (JSON items) vs. selector (DOM markup) mode, and rebuild the gallery to
+      see the result immediately. All 24 items are generated inline (SVG placeholders, one real
+      HTML5 video, one YouTube link, one Vimeo link) — no external image assets, so this page has no
+      dependency beyond <code>dist/</code> and one small sample clip.
+    </p>
+
+    <!--
+This file drives both DOM and dynamic modes from one options panel instead
+of a single hardcoded config — see buildGallery() at the bottom of the
+script. Every control rebuilds the gallery from scratch (destroy() + new
+Shoji(...)) on "Apply" rather than trying to patch a live instance, since
+several of these (data source, plugin roster, selector) aren't things
+reinit() alone covers cleanly for a harness meant to try any combination.
+
+Intentionally NOT exposed as form fields, all for the same reason —
+they're function/open-object-shaped, not a plain value a form field can
+hold: `locale` (arbitrary string-key map), `layout.breakpoints` (nested
+partial-options-per-width), `layout.renderHeading` (a render function).
+`layout.groupBy` gets a single demo checkbox instead (group each item by
+its own id) rather than a real function input.
+-->
+
+    <div id="gallery"></div>
+
+    <div id="controls">
+      <h2>Shoji options</h2>
+      <form id="options-form">
+        <fieldset>
+          <legend>Data source</legend>
+          <div class="row">
+            <label
+              ><input type="radio" name="dataSource" value="json" checked /> JSON items (dynamic
+              mode)</label
+            >
+            <label
+              ><input type="radio" name="dataSource" value="dom" /> DOM markup (selector
+              mode)</label
+            >
+          </div>
+          <p class="note">
+            DOM mode generates the same 24 items as <code>data-shoji-*</code> markup instead of
+            passing <code>items</code> — same content either way, different construction path.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Core options</legend>
+          <div class="row">
+            <label><input type="checkbox" id="opt-closable" checked /> closable</label>
+            <label><input type="checkbox" id="opt-loop" checked /> loop</label>
+            <label><input type="checkbox" id="opt-counter" checked /> counter</label>
+            <label><input type="checkbox" id="opt-showVideoCaption" /> showVideoCaption</label>
+            <label><input type="checkbox" id="opt-openOnInit" /> openOnInit</label>
+            <label>index <input type="number" id="opt-index" value="0" min="0" /></label>
+            <label>preload <input type="number" id="opt-preload" value="1" min="0" /></label>
+            <label
+              >backdropOpacity
+              <input type="number" id="opt-backdropOpacity" value="1" min="0" max="1" step="0.05"
+            /></label>
+            <label
+              >autoHideDelay (ms)
+              <input type="number" id="opt-autoHideDelay" value="3000" min="0" step="100"
+            /></label>
+            <label
+              ><input type="checkbox" id="opt-autoHideDelayFalse" /> autoHideDelay: false (always
+              visible)</label
+            >
+            <label
+              >mode
+              <select id="opt-mode"></select
+            ></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>mobileSettings (coarse pointer only)</legend>
+          <div class="row">
+            <label
+              >mode
+              <select id="opt-mobileMode"></select
+            ></label>
+            <label><input type="checkbox" id="opt-mobileControls" /> controls</label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>gestures (blank = default)</legend>
+          <div class="row">
+            <label
+              >lockThreshold <input type="number" id="opt-lockThreshold" placeholder="10"
+            /></label>
+            <label
+              >swipeThreshold <input type="number" id="opt-swipeThreshold" placeholder="50"
+            /></label>
+            <label
+              >swipeVelocity
+              <input type="number" id="opt-swipeVelocity" placeholder="0.3" step="0.01"
+            /></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Plugins</legend>
+          <div class="row">
+            <label><input type="checkbox" id="plugin-fullscreen" checked /> Fullscreen</label>
+            <label><input type="checkbox" id="plugin-rotateFlip" checked /> RotateFlip</label>
+            <label><input type="checkbox" id="plugin-layout" checked /> Layout</label>
+            <label
+              ><input type="checkbox" id="plugin-activeThumbnail" checked /> ActiveThumbnail</label
+            >
+            <label><input type="checkbox" id="plugin-zoom" checked /> Zoom</label>
+            <label><input type="checkbox" id="plugin-video" checked /> Video</label>
+            <label><input type="checkbox" id="plugin-autoplay" checked /> Autoplay</label>
+          </div>
+          <p class="note">
+            MyPlugin/ThemePicker (this page's own two custom plugins) are always loaded — not real
+            options to toggle.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Zoom options</legend>
+          <div class="row">
+            <label
+              >maxScale <input type="number" id="opt-zoom-maxScale" value="4" min="1" step="0.5"
+            /></label>
+            <label
+              >doubleTapScale
+              <input type="number" id="opt-zoom-doubleTapScale" value="2" min="1" step="0.5"
+            /></label>
+            <label
+              >buttonStep
+              <input type="number" id="opt-zoom-buttonStep" value="1.5" min="1" step="0.1"
+            /></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Autoplay options</legend>
+          <div class="row">
+            <label
+              >interval (ms)
+              <input type="number" id="opt-autoplay-interval" value="3000" min="500" step="100"
+            /></label>
+            <label
+              ><input type="checkbox" id="opt-autoplay-showProgress" checked /> showProgress</label
+            >
+            <label><input type="checkbox" id="opt-autoplay-autoStart" /> autoStart</label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>ActiveThumbnail options</legend>
+          <div class="row">
+            <label
+              >activeClass
+              <input type="text" id="opt-activeThumbnail-activeClass" value="shoji-thumb-active"
+            /></label>
+            <label
+              ><input type="checkbox" id="opt-activeThumbnail-scrollIntoView" checked />
+              scrollIntoView</label
+            >
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Layout options</legend>
+          <div class="row">
+            <label
+              >type
+              <select id="opt-layout-type">
+                <option value="justified" selected>justified</option>
+                <option value="grid">grid</option>
+                <option value="masonry">masonry</option>
+              </select></label
+            >
+            <label
+              >orientation (masonry only)
+              <select id="opt-layout-orientation">
+                <option value="vertical" selected>vertical</option>
+                <option value="horizontal">horizontal</option>
+              </select></label
+            >
+            <label>gutter <input type="number" id="opt-layout-gutter" value="3" min="0" /></label>
+            <label><input type="checkbox" id="opt-layout-animate" /> animate</label>
+            <label
+              ><input type="checkbox" id="opt-layout-groupBy" /> group by id (demo headings)</label
+            >
+            <label
+              >headingOverflow
+              <select id="opt-layout-headingOverflow">
+                <option value="fit" selected>fit</option>
+                <option value="show">show</option>
+              </select></label
+            >
+            <label
+              >aspectRatio (grid only)
+              <input type="number" id="opt-layout-aspectRatio" value="1" min="0.1" step="0.1"
+            /></label>
+            <label
+              >fill (masonry vertical)
+              <select id="opt-layout-fill">
+                <option value="">(default)</option>
+                <option value="shortest">shortest</option>
+                <option value="ordered">ordered</option>
+              </select></label
+            >
+            <label
+              >lastRow (justified)
+              <select id="opt-layout-lastRow">
+                <option value="">(default)</option>
+                <option value="justify">justify</option>
+                <option value="left">left</option>
+                <option value="hide">hide</option>
+              </select></label
+            >
+            <label
+              >columns (masonry vertical, blank = auto)
+              <input type="number" id="opt-layout-columns" placeholder="auto"
+            /></label>
+            <label
+              >columnWidth <input type="number" id="opt-layout-columnWidth" placeholder=""
+            /></label>
+            <label
+              >minColumnWidth <input type="number" id="opt-layout-minColumnWidth" placeholder=""
+            /></label>
+            <label
+              >maxColumnWidth <input type="number" id="opt-layout-maxColumnWidth" placeholder=""
+            /></label>
+            <label
+              >rowHeight (justified/horiz. masonry)
+              <input type="number" id="opt-layout-rowHeight" placeholder=""
+            /></label>
+            <label
+              >minRowHeight <input type="number" id="opt-layout-minRowHeight" placeholder=""
+            /></label>
+            <label
+              >maxRowHeight <input type="number" id="opt-layout-maxRowHeight" value="255"
+            /></label>
+          </div>
+          <p class="note">
+            Blank number fields are left out of the options object entirely (plugin default
+            applies), not sent as 0/empty-string.
+          </p>
+        </fieldset>
+
+        <button type="button" id="apply">Apply / rebuild gallery</button>
+      </form>
+    </div>
+
+    <script src="dist/shoji.min.js"></script>
+    <script>
+      const TRANSITION_PRESETS = [
+        'slide',
+        'fade',
+        'zoom',
+        'deck',
+        'slideVertical',
+        'push',
+        'fadeUp',
+        'fadeDown',
+        'fadeLeft',
+        'fadeRight',
+        'zoomOut',
+        'scaleUp',
+        'scaleDown',
+        'rotate',
+        'rotateLeft',
+        'rotateRight',
+        'flipX',
+        'flipY',
+        'cube',
+        'coverflow',
+        'drop',
+      ];
+
+      // Same technique docs/examples/thumbnails-and-originals.html uses —
+      // a small labeled SVG for `thumb`, a larger labeled "ORIGINAL" SVG
+      // for `src`, so it's obvious at a glance which tier loaded where,
+      // with no external asset files this page has to ship. width/height
+      // are the ORIGINAL's real pixel size, not the thumb's — required
+      // for the open-transition growth cap and Layout's measure-free
+      // positioning (see that example page for the full explanation).
+      function svgDataUri(label, w, h, color) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${w / 8}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const COLORS = [
+        '#c0392b',
+        '#2980b9',
+        '#27ae60',
+        '#8e44ad',
+        '#d35400',
+        '#16a085',
+        '#c2185b',
+        '#0097a7',
+      ];
+      // Varying aspect ratios (not just one fixed 4:3) so Layout/masonry/
+      // justified still have real per-item shape differences to solve for.
+      const ASPECTS = [
+        { w: 1600, h: 1200 }, // landscape
+        { w: 1200, h: 1600 }, // portrait
+        { w: 1600, h: 900 }, // wide
+        { w: 1200, h: 1200 }, // square
+      ];
+
+      function photoItem(id, caption, metadata_id, extra) {
+        const n = Number(id);
+        const color = COLORS[n % COLORS.length];
+        const { w, h } = ASPECTS[n % ASPECTS.length];
+        return {
+          id,
+          caption,
+          metadata_id,
+          width: w,
+          height: h,
+          thumb: svgDataUri(`thumb ${id}`, Math.round(w / 5), Math.round(h / 5), color),
+          src: svgDataUri(`ORIGINAL ${id}`, w, h, color),
+          ...extra,
+        };
+      }
+
+      // Own builder, not svgDataUri() — poster labels describe the actual
+      // video ("YouTube video", "storm.mp4 (html5)"), too long for
+      // svgDataUri's font-size (tuned for short "thumb N"/"ORIGINAL N"
+      // labels) to fit without overflowing the box.
+      function posterUri(label, colorIndex) {
+        const w = 480,
+          h = 270;
+        const color = COLORS[colorIndex % COLORS.length];
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="28" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      const items = [
+        photoItem(
+          '1',
+          'Sunset 1 Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos. Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.',
+          '123',
+        ),
+        photoItem('2', 'Sunset 2', '234'),
+        photoItem('3', 'Sunset 3', '345'),
+        photoItem('4', 'Sunset 4', '456'),
+        photoItem('5', 'Sunset 5', '567'),
+        photoItem('6', 'Sunset 6', '678'),
+        photoItem('7', 'Sunset 7', '789'),
+        photoItem('8', 'Sunset 8', '890'),
+        photoItem('9', 'Sunset 9', '901'),
+        photoItem('10', 'Sunset 10', '012'),
+        photoItem('11', 'Sunset 11', '098'),
+        photoItem('12', 'Sunset 12', '987'),
+        photoItem('13', 'Sunset 13', '876'),
+        photoItem('14', 'Sunset 14', '765'),
+        photoItem('15', 'Sunset 15', '654'),
+        photoItem('16', 'Sunset 16', '543'),
+        photoItem('17', 'Sunset 17', '432'),
+        photoItem('18', 'Sunset 18', '321'),
+        photoItem('19', { dangerouslySetInnerHTML: 'Sunset 19<br><br>asdfasdfasd asdfas' }, '210'),
+        {
+          id: '20',
+          src: 'examples/assets/storm.mp4',
+          poster: posterUri('storm.mp4 (html5)', 0),
+          video: true,
+          metadata_id: '109',
+          caption:
+            'Sunset 20 asdfasdfa sdfasdf asf asdf asdf asdf asd asfd as dfa sdf asdf asdf as fasd fasdf as fasd fasdf a fdsa fasd fas das fdsa afs das asdfasdf asdf asdf asdf asdf asdf asdf asdf asdf as fasd fdasdf asdf asdf asdf asdf asd as dfasd fasd asd fas fdas dfasd asdf s',
+        },
+        {
+          id: '21',
+          src: 'https://youtu.be/I-dCb4y7E4w',
+          video: true,
+          poster: posterUri('YouTube video', 1),
+          caption: 'Sunset 21',
+        },
+        // Deliberately not photoItem() — a genuinely odd, small portrait
+        // size (170x222) is the point of this item, kept as its own
+        // explicit dimensions rather than folded into the rotating
+        // ASPECTS list above.
+        {
+          id: '22',
+          caption: 'Sunset 22',
+          metadata_id: '999',
+          width: 170,
+          height: 222,
+          thumb: svgDataUri('thumb 22', 34, 44, COLORS[2]),
+          src: svgDataUri('ORIGINAL 22', 170, 222, COLORS[2]),
+        },
+        photoItem('23', 'Sunset 23', '998'),
+        {
+          id: '24',
+          caption: 'Sunset 24',
+          metadata_id: '997',
+          src: 'https://vimeo.com/167254041',
+          poster: posterUri('Vimeo video', 3),
+          video: true,
+        },
+      ];
+
+      // DOM mode isn't a second, hand-duplicated item list — it's generated
+      // from the same `items` array above, so the two modes always show
+      // identical content and never drift apart. `data-shoji-video`/
+      // `data-shoji-poster` items skip the href/<img> pair entirely, same
+      // shape hand-written markup for a video item would use.
+      function escapeAttr(value) {
+        return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      }
+
+      function itemsToDomMarkup(list) {
+        return list
+          .map((item) => {
+            const caption =
+              typeof item.caption === 'string'
+                ? item.caption
+                : (item.caption && item.caption.dangerouslySetInnerHTML) || '';
+            const attrs = [
+              `data-shoji-id="${escapeAttr(item.id)}"`,
+              `data-shoji-caption="${escapeAttr(caption)}"`,
+            ];
+            if (item.metadata_id)
+              attrs.push(`data-shoji-metadata_id="${escapeAttr(item.metadata_id)}"`);
+            if (item.width) attrs.push(`data-shoji-width="${escapeAttr(item.width)}"`);
+            if (item.height) attrs.push(`data-shoji-height="${escapeAttr(item.height)}"`);
+
+            if (item.video) {
+              if (item.poster) attrs.push(`data-shoji-poster="${escapeAttr(item.poster)}"`);
+              return `<a data-shoji-video="${escapeAttr(item.src)}" ${attrs.join(' ')}></a>`;
+            }
+            if (item.thumb) attrs.push(`data-shoji-thumb="${escapeAttr(item.thumb)}"`);
+            return `<a href="${escapeAttr(item.src)}" ${attrs.join(' ')}><img src="${escapeAttr(item.thumb || item.src)}"></a>`;
+          })
+          .join('\n');
+      }
+
+      const MyPlugin = {
+        name: 'my-plugin',
+        init(ctx) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'shoji-toolbar-button'; // 44px circle, translucent black, hover/focus states — all free
+          // Use bootstrap icons (or any other SVG) for the button's content — no extra CSS needed, just set innerHTML. The toolbar is a flex row, so the button will be centered vertically automatically.
+          button.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-0-circle-fill" viewBox="0 0 16 16"><path d="M8 4.951c-1.008 0-1.629 1.09-1.629 2.895v.31c0 1.81.627 2.895 1.629 2.895s1.623-1.09 1.623-2.895v-.31c0-1.8-.621-2.895-1.623-2.895"/><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-8.012 4.158c1.858 0 2.96-1.582 2.96-3.99V7.84c0-2.426-1.079-3.996-2.936-3.996-1.864 0-2.965 1.588-2.965 3.996v.328c0 2.42 1.09 3.99 2.941 3.99"/></svg>';
+          button.setAttribute('aria-label', 'Do thing');
+          button.title = 'Do thing';
+
+          button.addEventListener('click', () => {
+            let index = ctx.gallery.currentIndex;
+            const item = ctx.gallery.items[index];
+            alert(JSON.stringify(item, null, 2));
+          });
+          ctx.ui.toolbar('right', button);
+
+          ctx.gallery.on('afterOpen', ({ index }) => {
+            console.log('my-plugin sees afterOpen', index);
+            const item = ctx.gallery.items[index];
+            console.log(item);
+            console.log(JSON.stringify(item, null, 2));
+          });
+
+          ctx.gallery.on('afterSlide', ({ from, to }) => {
+            console.log('my-plugin sees afterSlide', from, to);
+            const item = ctx.gallery.items[to];
+            console.log(item.caption);
+          });
+
+          const options = ctx.options;
+          console.log('my-plugin sees options', options);
+        },
+      };
+
+      const ThemePicker = {
+        name: 'theme-picker',
+        init(ctx) {
+          const themes = [
+            { name: 'Dark', className: '' },
+            { name: 'Light', className: 'shoji-light' },
+            { name: '☀️ Summer', className: 'shoji-summer' },
+            { name: '🌸 Spring', className: 'shoji-spring' },
+            { name: '🔥 GARBAGEFIRE 🔥', className: 'shoji-garbagefire' },
+          ];
+
+          if (!document.getElementById('garbagefire-style')) {
+            const style = document.createElement('style');
+            style.id = 'garbagefire-style';
+            style.textContent = `
+                        .shoji-theme-picker {
+                            -webkit-appearance: none;
+                            appearance: none;
+                            border-radius: 999px;
+                            padding: 0.4rem 1rem;
+                            font-size: 0.85rem;
+                            font-family: var(--shoji-font-family);
+                            background: var(--shoji-color-toolbar-bg);
+                            color: var(--shoji-color-fg);
+                            border: 1px solid var(--shoji-color-disabled);
+                            cursor: pointer;
+                            white-space: nowrap;
+                            width: auto;
+                            max-width: none;
+                        }
+                        .shoji-theme-picker:focus-visible {
+                            outline: var(--shoji-focus-ring);
+                        }
+
+                        /* Golden-hour palette: warm dark background, sunset-orange accent. */
+                        .shoji-summer {
+                            --shoji-color-bg: #1a1006;
+                            --shoji-color-fg: #fff4e0;
+                            --shoji-color-accent: #ff8c42;
+                            --shoji-color-backdrop: rgba(20, 10, 0, 0.92);
+                            --shoji-color-toolbar-bg: rgba(40, 20, 5, 0.85);
+                            --shoji-color-disabled: rgba(255, 244, 224, 0.35);
+                        }
+
+                        /* Cherry-blossom palette: pale mint-white background, blossom-pink accent. */
+                        .shoji-spring {
+                            --shoji-color-bg: #f4faf1;
+                            --shoji-color-fg: #1f2e1a;
+                            --shoji-color-accent: #ff6f9c;
+                            --shoji-color-backdrop: rgba(244, 250, 241, 0.96);
+                            --shoji-color-toolbar-bg: rgba(230, 245, 220, 0.9);
+                            --shoji-color-disabled: rgba(31, 46, 26, 0.35);
+                        }
+
+                        .shoji-garbagefire {
+                            --shoji-color-bg: #0aff0a;
+                            --shoji-color-fg: #ff00ff;
+                            --shoji-color-accent: #faff00;
+                            --shoji-color-backdrop: repeating-linear-gradient(
+                                45deg, #ff00ff, #ff00ff 20px, #00fff2 20px, #00fff2 40px,
+                                #faff00 40px, #faff00 60px, #ff5f00 60px, #ff5f00 80px
+                            );
+                            --shoji-color-toolbar-bg: #8000ff;
+                            --shoji-color-disabled: #ff5f00;
+                            --shoji-font-family: 'Comic Sans MS', cursive, sans-serif;
+                        }
+                        .shoji-garbagefire .shoji-theme-picker {
+                            border: 3px dashed #00fff2 !important;
+                            box-shadow: 0 0 20px #faff00, 0 0 40px #ff00ff !important;
+                            animation: garbagefire-wobble 0.6s ease-in-out infinite alternate;
+                        }
+                        .shoji-garbagefire .shoji-toolbar-button {
+                            border-radius: 0 50% 50% 50% / 0 60% 40% 100% !important;
+                            background: linear-gradient(135deg, #ff00ff, #00fff2, #faff00, #ff5f00) !important;
+                            box-shadow: 0 0 20px #faff00, 0 0 40px #ff00ff !important;
+                            border: 3px dashed #00fff2 !important;
+                        }
+                        @keyframes garbagefire-wobble {
+                            from { rotate: -3deg; }
+                            to { rotate: 3deg; }
+                        }
+                    `;
+            document.head.appendChild(style);
+          }
+
+          function applyTheme(i) {
+            for (const t of themes) if (t.className) document.body.classList.remove(t.className);
+            const theme = themes[i];
+            if (theme.className) document.body.classList.add(theme.className);
+          }
+
+          const select = document.createElement('select');
+          select.className = 'shoji-theme-picker'; // pill, not the 44px circle — so long labels fit
+          select.setAttribute('aria-label', 'Change theme');
+          themes.forEach((theme, i) => {
+            const option = document.createElement('option');
+            option.value = String(i);
+            option.textContent = theme.name;
+            select.appendChild(option);
+          });
+          select.addEventListener('change', () => applyTheme(Number(select.value)));
+
+          applyTheme(0);
+          ctx.on('controls:hide', () => select.blur());
+          ctx.ui.toolbar('right', select);
+        },
+      };
+
+      function populatePresetSelects() {
+        for (const select of [
+          document.getElementById('opt-mode'),
+          document.getElementById('opt-mobileMode'),
+        ]) {
+          for (const preset of TRANSITION_PRESETS) {
+            const option = document.createElement('option');
+            option.value = preset;
+            option.textContent = preset;
+            select.appendChild(option);
+          }
+        }
+        document.getElementById('opt-mode').value = 'rotateLeft';
+        document.getElementById('opt-mobileMode').value = 'rotate';
+      }
+
+      const $ = (id) => document.getElementById(id);
+      const checked = (id) => $(id).checked;
+      const numOrUndefined = (id) => {
+        const raw = $(id).value.trim();
+        return raw === '' ? undefined : Number(raw);
+      };
+      const strOrUndefined = (id) => {
+        const raw = $(id).value.trim();
+        return raw === '' ? undefined : raw;
+      };
+
+      let gallery = null;
+
+      function buildGallery() {
+        if (gallery) {
+          gallery.destroy();
+          gallery = null;
+        }
+        const el = document.getElementById('gallery');
+        el.innerHTML = '';
+
+        const dataSource = document.querySelector('input[name="dataSource"]:checked').value;
+
+        const plugins = [];
+        if (checked('plugin-fullscreen')) plugins.push(Shoji.Fullscreen);
+        if (checked('plugin-rotateFlip')) plugins.push(Shoji.RotateFlip);
+        plugins.push(MyPlugin, ThemePicker);
+        if (checked('plugin-layout')) plugins.push(Shoji.Layout);
+        if (checked('plugin-activeThumbnail')) plugins.push(Shoji.ActiveThumbnail);
+        if (checked('plugin-zoom')) plugins.push(Shoji.Zoom);
+        if (checked('plugin-video')) plugins.push(Shoji.Video);
+        if (checked('plugin-autoplay')) plugins.push(Shoji.Autoplay);
+
+        const gestures = {};
+        const lockThreshold = numOrUndefined('opt-lockThreshold');
+        const swipeThreshold = numOrUndefined('opt-swipeThreshold');
+        const swipeVelocity = numOrUndefined('opt-swipeVelocity');
+        if (lockThreshold !== undefined) gestures.lockThreshold = lockThreshold;
+        if (swipeThreshold !== undefined) gestures.swipeThreshold = swipeThreshold;
+        if (swipeVelocity !== undefined) gestures.swipeVelocity = swipeVelocity;
+
+        const options = {
+          closable: checked('opt-closable'),
+          loop: checked('opt-loop'),
+          counter: checked('opt-counter'),
+          showVideoCaption: checked('opt-showVideoCaption'),
+          openOnInit: checked('opt-openOnInit'),
+          index: Number($('opt-index').value) || 0,
+          preload: Number($('opt-preload').value) || 0,
+          backdropOpacity: Number($('opt-backdropOpacity').value),
+          autoHideDelay: checked('opt-autoHideDelayFalse')
+            ? false
+            : Number($('opt-autoHideDelay').value),
+          mode: $('opt-mode').value,
+          mobileSettings: {
+            mode: $('opt-mobileMode').value,
+            controls: checked('opt-mobileControls'),
+          },
+          plugins,
+          zoom: {
+            maxScale: Number($('opt-zoom-maxScale').value),
+            doubleTapScale: Number($('opt-zoom-doubleTapScale').value),
+            buttonStep: Number($('opt-zoom-buttonStep').value),
+          },
+          autoplay: {
+            interval: Number($('opt-autoplay-interval').value),
+            showProgress: checked('opt-autoplay-showProgress'),
+            autoStart: checked('opt-autoplay-autoStart'),
+          },
+          activeThumbnail: {
+            activeClass: $('opt-activeThumbnail-activeClass').value || 'shoji-thumb-active',
+            scrollIntoView: checked('opt-activeThumbnail-scrollIntoView'),
+          },
+          'my-plugin': {
+            greeting: 'hello there',
+            anotherOption: 42,
+          },
+        };
+        if (Object.keys(gestures).length > 0) options.gestures = gestures;
+
+        const layout = {
+          type: $('opt-layout-type').value,
+          orientation: $('opt-layout-orientation').value,
+          gutter: Number($('opt-layout-gutter').value) || 0,
+          animate: checked('opt-layout-animate'),
+          headingOverflow: $('opt-layout-headingOverflow').value,
+          aspectRatio: Number($('opt-layout-aspectRatio').value) || 1,
+        };
+        const fill = strOrUndefined('opt-layout-fill');
+        const lastRow = strOrUndefined('opt-layout-lastRow');
+        const columns = numOrUndefined('opt-layout-columns');
+        const columnWidth = numOrUndefined('opt-layout-columnWidth');
+        const minColumnWidth = numOrUndefined('opt-layout-minColumnWidth');
+        const maxColumnWidth = numOrUndefined('opt-layout-maxColumnWidth');
+        const rowHeight = numOrUndefined('opt-layout-rowHeight');
+        const minRowHeight = numOrUndefined('opt-layout-minRowHeight');
+        const maxRowHeight = numOrUndefined('opt-layout-maxRowHeight');
+        if (fill !== undefined) layout.fill = fill;
+        if (lastRow !== undefined) layout.lastRow = lastRow;
+        if (columns !== undefined) layout.columns = columns;
+        if (columnWidth !== undefined) layout.columnWidth = columnWidth;
+        if (minColumnWidth !== undefined) layout.minColumnWidth = minColumnWidth;
+        if (maxColumnWidth !== undefined) layout.maxColumnWidth = maxColumnWidth;
+        if (rowHeight !== undefined) layout.rowHeight = rowHeight;
+        if (minRowHeight !== undefined) layout.minRowHeight = minRowHeight;
+        if (maxRowHeight !== undefined) layout.maxRowHeight = maxRowHeight;
+        if (checked('opt-layout-groupBy')) {
+          layout.groupBy = (item) => item.id ?? 'Other';
+          layout.renderHeading = (key) => ({
+            title: key + 'asdfasdfasdfasdfasdasfdfsfadfasdfasdfasdfasdfsdfasdfasdfs',
+            subtitle:
+              'asdfasdfasdfasdfasdfasfdasdfasdfsadffasdfasdfasdfasdfasdfasdfasdfasdfasfdasdfasdfasf',
+          });
+        }
+        options.layout = layout;
+
+        if (dataSource === 'dom') {
+          el.innerHTML = itemsToDomMarkup(items);
+          options.selector = 'a';
+        } else {
+          options.items = items;
+        }
+
+        gallery = new Shoji('#gallery', options);
+
+        gallery.on('afterOpen', ({ index }) => console.log('afterOpen', index));
+        gallery.on('beforeSlide', ({ from, to }) => console.log('beforeSlide', from, to));
+        gallery.on('afterSlide', ({ from, to }) => console.log('afterSlide', from, to));
+        gallery.on('slideItemLoad', ({ index }) => console.log('slideItemLoad', index));
+        gallery.on('itemsUpdated', ({ items }) => console.log('itemsUpdated', items));
+        gallery.on('afterClose', () => console.log('afterClose'));
+        gallery.on('destroy', () => console.log('destroy'));
+
+        console.log(Shoji.version);
+      }
+
+      populatePresetSelects();
+      document.getElementById('apply').addEventListener('click', buildGallery);
+      buildGallery();
+    </script>
+  </body>
+</html>
