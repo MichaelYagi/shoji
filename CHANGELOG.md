@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.14] - 2026-08-15
+
 ### Fixed
 
 - `ActiveThumbnail` could silently lose track of the active slide when used
