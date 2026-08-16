@@ -264,19 +264,58 @@ test('a very large vertical drag does not snap to a different position on releas
     await page.mouse.down();
     await page.mouse.move(x, endY, { steps: 10 });
 
-    // The live-dragged position, sampled right before release — this is
-    // what the close animation must continue from, with no snap.
-    const rectBeforeRelease = await media.evaluate((el) => el.getBoundingClientRect());
+    // Both rects are captured natively in-browser, not via two separate
+    // Playwright round-trips bracketing mouse.up() — a real bug in this
+    // test itself, found via a real WebKit CI failure and its trace, not
+    // guessed: two `media.evaluate()` calls have real IPC latency between
+    // them (WebKit's driver measurably more than Chromium/Firefox's), and
+    // the close transition starts synchronously on release — a ~70ms gap
+    // between the two round-trips is ~25% of the 300ms transition, easily
+    // enough real elapsed time for a smooth, correctly-continuous
+    // transition to produce a "discrepancy" of dozens of px with nothing
+    // having actually snapped. Confirmed directly: the received values on
+    // WebKit scaled with the measured round-trip gap, not with a fixed
+    // offset a real snap would produce. The 'before' rect here is
+    // unaffected by this (nothing has started moving yet when it's taken);
+    // only 'after' needed to move off the round-trip clock — done by
+    // capturing it inside a native `pointerup` listener on `document`,
+    // added after (so it fires after, bubble phase) Shoji's own
+    // target-level pointerup handler, with zero Playwright IPC in between
+    // the real release event and the measurement.
+    await media.evaluate((el) => {
+      const w = window as unknown as {
+        __dragRelease: { before: DOMRect; after: DOMRect | null };
+      };
+      w.__dragRelease = { before: el.getBoundingClientRect(), after: null };
+      const onPointerUp = (): void => {
+        w.__dragRelease.after = el.getBoundingClientRect();
+        document.removeEventListener('pointerup', onPointerUp);
+      };
+      document.addEventListener('pointerup', onPointerUp);
+    });
 
     await page.mouse.up();
 
-    // Right at release, before the close animation itself even starts —
-    // must match the live-dragged position, not jump to a bounded/clamped
-    // one. A generous tolerance for cross-browser sub-pixel rendering
-    // differences, not a real allowance — the bug this guards against was
-    // a snap of hundreds of pixels (the gap between the raw drag distance
-    // and the old 160px clamp), far past this.
-    const rectAfterRelease = await media.evaluate((el) => el.getBoundingClientRect());
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __dragRelease: { after: DOMRect | null } }).__dragRelease.after !==
+        null,
+    );
+    const { before: rectBeforeRelease, after: rectAfterRelease } = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __dragRelease: { before: DOMRect; after: DOMRect };
+          }
+        ).__dragRelease,
+    );
+
+    // Right at release, before the close animation has had any real time to
+    // progress — must match the live-dragged position, not jump to a
+    // bounded/clamped one. A generous tolerance for cross-browser
+    // sub-pixel rendering differences, not a real allowance — the bug this
+    // guards against was a snap of hundreds of pixels (the gap between the
+    // raw drag distance and the old 160px clamp), far past this.
     expect(Math.abs(rectAfterRelease.top - rectBeforeRelease.top)).toBeLessThan(10);
     expect(Math.abs(rectAfterRelease.left - rectBeforeRelease.left)).toBeLessThan(10);
   });
