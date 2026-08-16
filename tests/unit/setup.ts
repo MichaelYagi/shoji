@@ -64,3 +64,10 @@ if (typeof Element.prototype.setPointerCapture === 'undefined') {
 if (typeof Element.prototype.scrollIntoView === 'undefined') {
   Element.prototype.scrollIntoView = function (): void {};
 }
+
+// jsdom logs "Not implemented: window.scrollTo" (not a thrown error, just
+// noisy stderr) rather than actually implementing it — bodyScrollLock.ts's
+// unlockBodyScroll() calls it on every Gallery close/destroy to restore the
+// pre-lock scroll position, so without a stub nearly every test in this
+// suite that opens and closes a gallery would log it.
+window.scrollTo = (): void => {};

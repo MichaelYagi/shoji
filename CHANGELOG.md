@@ -7,6 +7,30 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- The page scroll lock (active while the lightbox is open) had four known
+  gaps, all fixed together:
+  - iOS Safari's own touch-driven rubber-band/bounce scroll wasn't
+    reliably blocked by `overflow: hidden` alone — a background touch
+    could still move the page while the lightbox was open. Fixed with a
+    non-passive `touchmove` listener that blocks the default only for
+    touches starting outside the lightbox, leaving Shoji's own in-dialog
+    gestures untouched.
+  - A plain `window.scrollTo()` (or setting `scrollTop` directly) wasn't
+    blocked at all — if the host's own code scrolled the window while the
+    lightbox was open, the page ended up somewhere different once it
+    closed. The pre-lock scroll position is now captured and restored
+    unconditionally on unlock.
+  - The lock only defended against other `Gallery` instances, not
+    unrelated code on the page — another library also touching
+    `document.documentElement.style.overflow` could silently undo it. A
+    `MutationObserver` now re-asserts the lock if that happens.
+  - The scrollbar-width compensation (added in 0.1.0-alpha.12) assumed a
+    right-side scrollbar; on a `direction: rtl` page it now compensates
+    `padding-left` instead, matching where a classic scrollbar actually
+    renders there.
+
 ## [0.1.0-alpha.12] - 2026-08-15
 
 ### Added

@@ -2,9 +2,73 @@
 let lockCount = 0;
 let savedHtmlOverflow = '';
 let savedHtmlPaddingRight = '';
+let savedHtmlPaddingLeft = '';
+let savedScrollX = 0;
+let savedScrollY = 0;
+let styleObserver: MutationObserver | null = null;
+
+const LIGHTBOX_SELECTOR = '.shoji-outer';
+
+function isRtl(): boolean {
+  return getComputedStyle(document.documentElement).direction === 'rtl';
+}
+
+/**
+ * A real gap: `overflow: hidden` on `<html>` doesn't reliably block iOS
+ * Safari's own touch-driven rubber-band/bounce scroll in every case — a
+ * well-known limitation of this technique across the ecosystem. The common
+ * workaround (flipping `body` to `position: fixed` while locked) has its
+ * own real tradeoffs: a full reflow, plus manual scroll-position capture/
+ * restore that's a frequent source of bugs in other libraries (the exact
+ * class of bug this whole lock has already had twice — see the other real
+ * bugs in this file's history). Lighter alternative: block the browser's
+ * default only for a touchmove that didn't start inside a lightbox,
+ * leaving Shoji's own in-dialog gesture handling (which already manages
+ * its own `preventDefault`, see `GestureEngine.ts`) completely untouched.
+ * Not a passive listener — `preventDefault` is genuinely required here to
+ * suppress the browser's native scroll, not just observe it.
+ */
+function onTouchMove(event: TouchEvent): void {
+  const target = event.target;
+  const insideLightbox = target instanceof Element && target.closest(LIGHTBOX_SELECTOR) !== null;
+  if (!insideLightbox) event.preventDefault();
+}
+
+/**
+ * A real gap: this lock is reference-counted against other `Gallery`
+ * instances, but has no way to know about unrelated code on the host page
+ * — another modal/dropdown library that also sets
+ * `document.documentElement.style.overflow`, then clears it back to `''`
+ * on its own close, would silently undo this lock mid-lightbox with
+ * neither library aware of the other. Watching the one attribute this
+ * lock itself owns is the only way to detect and correct that reactively.
+ * `takeRecords()` discards the mutation record our own corrective write
+ * below just queued — otherwise the observer would fire again for a
+ * change it caused itself, forever.
+ */
+function onStyleMutation(): void {
+  if (lockCount === 0) return;
+  const html = document.documentElement;
+  if (getComputedStyle(html).overflow !== 'hidden') {
+    html.style.overflow = 'hidden';
+    styleObserver?.takeRecords();
+  }
+}
 
 export function lockBodyScroll(): void {
   if (lockCount === 0) {
+    // A real gap: `overflow: hidden` blocks wheel/touch/keyboard-driven
+    // scrolling, but not a programmatic `window.scrollTo()`/`scrollTop`
+    // write — confirmed directly. If the host's own code scrolls the
+    // window while the lightbox is open (a router restoring scroll
+    // position, an unrelated "scroll to top" button), the page ends up
+    // somewhere different than where the viewer left it once the lock
+    // releases. Restored unconditionally on unlock below — a scroll
+    // *lock* implies the background stays frozen in place for the whole
+    // time the lightbox is open, not just protected from direct input.
+    savedScrollX = window.scrollX;
+    savedScrollY = window.scrollY;
+
     // A real bug: hiding overflow below reclaims the scrollbar's own
     // gutter, widening <html>'s content box by however many px the
     // scrollbar was — on a host page whose content spans the full viewport
@@ -31,11 +95,24 @@ export function lockBodyScroll(): void {
     // `<html>` (not `body`), compensates the actual element the scrollbar's
     // gutter belongs to either way.
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const rtl = isRtl();
     savedHtmlPaddingRight = document.documentElement.style.paddingRight;
+    savedHtmlPaddingLeft = document.documentElement.style.paddingLeft;
     if (scrollbarWidth > 0) {
-      const currentPaddingRight =
-        parseFloat(getComputedStyle(document.documentElement).paddingRight) || 0;
-      document.documentElement.style.paddingRight = `${currentPaddingRight + scrollbarWidth}px`;
+      // A real gap: a classic scrollbar renders on the *left* on a
+      // `direction: rtl` page, not the right — compensating the wrong
+      // side would reintroduce the exact reflow this exists to prevent,
+      // just mirrored. Checked at lock time, not baked in as a fixed
+      // assumption.
+      if (rtl) {
+        const currentPaddingLeft =
+          parseFloat(getComputedStyle(document.documentElement).paddingLeft) || 0;
+        document.documentElement.style.paddingLeft = `${currentPaddingLeft + scrollbarWidth}px`;
+      } else {
+        const currentPaddingRight =
+          parseFloat(getComputedStyle(document.documentElement).paddingRight) || 0;
+        document.documentElement.style.paddingRight = `${currentPaddingRight + scrollbarWidth}px`;
+      }
     }
 
     // A real bug: `document.body.style.overflow = 'hidden'` (this function's
@@ -66,6 +143,17 @@ export function lockBodyScroll(): void {
     // there before.
     savedHtmlOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
+
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+
+    // Starts observing only after the writes above have already landed, so
+    // it never reacts to its own initial setup — only to a later, external
+    // change.
+    styleObserver = new MutationObserver(onStyleMutation);
+    styleObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style'],
+    });
   }
   lockCount++;
 }
@@ -73,7 +161,14 @@ export function lockBodyScroll(): void {
 export function unlockBodyScroll(): void {
   lockCount = Math.max(0, lockCount - 1);
   if (lockCount === 0) {
+    styleObserver?.disconnect();
+    styleObserver = null;
+    document.removeEventListener('touchmove', onTouchMove);
+
     document.documentElement.style.overflow = savedHtmlOverflow;
     document.documentElement.style.paddingRight = savedHtmlPaddingRight;
+    document.documentElement.style.paddingLeft = savedHtmlPaddingLeft;
+
+    window.scrollTo({ left: savedScrollX, top: savedScrollY, behavior: 'instant' });
   }
 }
