@@ -244,6 +244,19 @@ export const Zoom: ShojiPlugin = {
       panPointerId = event.pointerId;
       lastX = event.clientX;
       lastY = event.clientY;
+      // Without this, a fast pan whose pointer exits `outer`'s bounds
+      // stops receiving pointermove/pointerup entirely (no capture = only
+      // elements actually under the cursor get events), leaving
+      // panPointerId stuck non-null until the next pointerdown — the
+      // gesture just goes dead mid-drag. Captured on the `<img>` itself,
+      // not `outer`: capturing retargets the subsequent synthetic `click`
+      // to whatever captured it, and `img` — unlike `outer` — already
+      // matches isBackdropClick's own exclusion selector (Gallery.ts), so
+      // a captured pan's release still can't misread as a backdrop click.
+      // GestureEngine's own capture needs a separate suppressRetargetedClick
+      // step for exactly this reason; this doesn't, since the retarget
+      // lands somewhere already excluded.
+      getImg()?.setPointerCapture(event.pointerId);
     }
     function onPointerMove(event: PointerEvent): void {
       if (panPointerId !== event.pointerId || !natural || !container) return;

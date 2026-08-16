@@ -299,16 +299,19 @@ describe('Zoom — pan suspends core drag-to-navigate (DESIGN.md §4-zoom)', () 
     gallery.destroy();
   });
 
-  it('does not capture the pointer for a pan drag while zoomed (DESIGN.md §2.4, "exits on release" bug) — capturing would retarget the release click to the dialog in a real browser and trigger click-outside-to-close, even though the drag\'s own effect is already suppressed', async () => {
+  it('captures the pointer for a pan drag while zoomed, but only on the image — never the dialog it bubbles through, which would misread the release click as a backdrop click and close the lightbox (DESIGN.md §4-zoom, twelfth bug; §2.4\'s own "exits on release" bug for how GestureEngine\'s own dialog capture is separately suppressed here)', async () => {
     const gallery = makeGallery();
     gallery.open(0);
     await flushSlideLoad();
     doubleTapAt(150, 150); // zoom in first
 
     const captureSpy = vi.spyOn(Element.prototype, 'setPointerCapture');
-    dragHorizontal(-80); // locks direction in core's engine even though its effect is suppressed
+    dragHorizontal(-80); // locks direction in core's engine even though its navigate/close effect is suppressed; also bubbles through this plugin's own pan listener on `outer`
 
-    expect(captureSpy).not.toHaveBeenCalled();
+    expect(captureSpy).toHaveBeenCalled();
+    for (const instance of captureSpy.mock.instances) {
+      expect(instance).toBe(activeImg()); // never the dialog GestureEngine would otherwise have captured on
+    }
     gallery.destroy();
   });
 

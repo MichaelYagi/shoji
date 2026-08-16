@@ -7,6 +7,18 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- `Zoom`'s pan-while-zoomed gesture never called `setPointerCapture`, unlike
+  every other pointer-driven gesture in the codebase: a fast pan whose
+  pointer exited the lightbox's bounds mid-drag stopped receiving further
+  `pointermove`/`pointerup` events, leaving the gesture dead until the next
+  `pointerdown`. Fixed by capturing on the active slide's `<img>` itself
+  (not the dialog/backdrop `GestureEngine` would use) — capturing there
+  would have retargeted the release `click` to a spot that reads as a
+  backdrop click, closing the lightbox on every real pan. See DESIGN.md
+  §4.6 (twelfth bug).
+
 ## [0.1.0-alpha.14] - 2026-08-15
 
 ### Fixed
