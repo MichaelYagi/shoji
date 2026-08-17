@@ -38,7 +38,7 @@ still include breaking changes).
   vertically-centered nav arrows sharing the caption's own left edge.
   Beyond that, see "Added" above — it truncates and opens a modal instead
   of scrolling in place. See DESIGN.md §2.3a.
-- Core's size budget raised 26.9 kB → 31 kB (min+gzip) for the caption
+- Core's size budget raised 26.9 kB → 33 kB (min+gzip) for the caption
   modal above and the real bugs fixed while testing it end to end (see
   "Fixed" below) — real, deliberate growth, not incidental. See DESIGN.md's
   own budget-history note.
@@ -71,6 +71,22 @@ still include breaking changes).
   keydown listener attached forever — `teardown()` closes the lightbox via
   a different path than a normal close, one that skipped the modal
   cleanup. See DESIGN.md §2.3a.
+- `Autoplay`'s progress bar faded out during ordinary idle auto-hide, not
+  just the close animation the fix for it was originally about — the one
+  piece of UI actively telling the viewer "still counting down" would
+  disappear during every idle period on a running slideshow. See DESIGN.md
+  §2.8/§4.1.
+- The idle auto-hide hover guard (`hideControls()`'s "don't hide while a
+  control is hovered" check) could get stuck — permanently paused, or
+  intermittently stale depending on browser/automation timing — in a few
+  real scenarios: a control that swaps its own children on click while the
+  pointer sits stationary over it (Autoplay's own play/pause icon), a
+  control that _appears_ under an already-stationary cursor (common right
+  after `open()`), and a Firefox-specific pointer-simulation timing gap.
+  Replaced the plain hover counter with a set reconciled against the
+  browser's own live `:hover` state instead of trusting individual
+  `pointerenter`/`pointerleave` events to always fire correctly. See
+  DESIGN.md §2.8.
 - `Zoom`'s pan-while-zoomed gesture never called `setPointerCapture`, unlike
   every other pointer-driven gesture in the codebase: a fast pan whose
   pointer exited the lightbox's bounds mid-drag stopped receiving further

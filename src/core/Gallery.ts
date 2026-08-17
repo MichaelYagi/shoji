@@ -134,7 +134,41 @@ export class Gallery {
   private readonly liveRegion = new LiveRegion();
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
   private autoHidden = false;
-  private hoveredControlCount = 0;
+  /**
+   * Every control `wireControlHover()` has ever wired — the full candidate
+   * list `reconcileHover()` (below) checks `:hover` against, kept separate
+   * from `hoveringElements` (elements *believed* to be hovered) so
+   * reconciliation can also *add* one currently missing from that set, not
+   * just remove a stale one.
+   */
+  private readonly hoverableElements = new Set<HTMLElement>();
+  /**
+   * The subset of `hoverableElements` the pointer is currently considered
+   * to be over — a `Set`, not a plain incrementing counter, so
+   * `onActivity()` (below) can reconcile it against the browser's own live
+   * `:hover` ground truth on every real pointer movement, self-healing from
+   * a `pointerenter`/`pointerleave` pair that never fired at all. Two real
+   * bugs, both reported from real usage, both variations on the same
+   * browser behavior already leveraged elsewhere in this file (`hidden`
+   * doesn't fire `pointerleave` under a stationary cursor, §2.3a): (1) a
+   * control that synchronously replaces its own children while the pointer
+   * sits stationary over it (Autoplay's own play/pause icon swap) can
+   * desync the browser's internal hover-chain tracking badly enough that
+   * the *next* real pointer movement away from it never fires `pointerleave`
+   * — a plain counter has no way to detect a leave that never reports
+   * itself. (2) the mirror image: a control that *appears* under an
+   * already-stationary cursor (the common case right after `open()` —
+   * whatever the viewer clicked to get here is often right where a
+   * toolbar/caption/nav control ends up) never gets a `pointerenter`
+   * either, since browsers only recompute hover state on actual pointer
+   * movement, not on an element materializing under one already sitting
+   * still — so idle auto-hide could fire and hide a control the viewer's
+   * cursor is, visibly, still resting directly on top of. Re-deriving "is
+   * this actually hovered" fresh from the browser on every real pointer
+   * move fixes both directions at once, since neither depends on any
+   * event having fired correctly in the first place.
+   */
+  private readonly hoveringElements = new Set<HTMLElement>();
   private isClosing = false;
   /** True while a vertical drag has hidden controls past its own distance threshold (`setControlsHiddenForDrag`) — `onActivity()` defers to it, since the drag's own continuous pointermove stream would otherwise immediately re-reveal what it just hid on every single move. */
   private controlsHiddenByDrag = false;
@@ -194,6 +228,7 @@ export class Gallery {
    * stream would otherwise re-reveal what it just hid, every single frame.
    */
   private readonly onActivity = (): void => {
+    this.reconcileHover();
     if (
       this.autoHideDelay === 0 ||
       this.autoHideDelay === false ||
@@ -642,17 +677,15 @@ export class Gallery {
     };
   }
 
-  /** DESIGN.md §2.8/§3 — pauses auto-hide while genuinely hovered: controls, caption, and any plugin overlay (`ctx.ui.overlay()`). Unsubscribe also corrects the count if removed mid-hover — a real risk for overlay content a plugin can toggle while the gallery stays open, unlike static buttons. */
+  /** DESIGN.md §2.8/§3 — pauses auto-hide while genuinely hovered: controls, caption, and any plugin overlay (`ctx.ui.overlay()`). Unsubscribe also corrects the set if removed mid-hover — a real risk for overlay content a plugin can toggle while the gallery stays open, unlike static buttons. */
   private wireControlHover(el: HTMLElement): Unsubscribe {
-    let hovering = false;
+    this.hoverableElements.add(el);
     const onEnter = (): void => {
-      hovering = true;
-      this.hoveredControlCount++;
+      this.hoveringElements.add(el);
       this.onActivity();
     };
     const onLeave = (): void => {
-      hovering = false;
-      this.hoveredControlCount--;
+      if (!this.hoveringElements.delete(el)) return;
       this.scheduleAutoHide();
     };
     el.addEventListener('pointerenter', onEnter);
@@ -660,11 +693,8 @@ export class Gallery {
     return () => {
       el.removeEventListener('pointerenter', onEnter);
       el.removeEventListener('pointerleave', onLeave);
-      if (hovering) {
-        hovering = false;
-        this.hoveredControlCount--;
-        this.scheduleAutoHide();
-      }
+      this.hoverableElements.delete(el);
+      if (this.hoveringElements.delete(el)) this.scheduleAutoHide();
     };
   }
 
@@ -676,7 +706,27 @@ export class Gallery {
    * `onActivity()`), it just no longer blocks the eventual hide.
    */
   private isControlActive(): boolean {
-    return this.hoveredControlCount > 0;
+    return this.hoveringElements.size > 0;
+  }
+
+  /**
+   * Syncs `hoveringElements` to the browser's own live `:hover` truth for
+   * every registered control — both directions, not just dropping a stale
+   * entry: also picks up one that's genuinely hovered but never got a
+   * `pointerenter` of its own (see `hoveringElements`'s own doc comment for
+   * why either direction can happen). Whichever ends up true here is what
+   * `isControlActive()` reads immediately after, in the same `onActivity()`
+   * call — no separate reveal step needed for a newly-added element; that
+   * call already does it for any activity, hover included. Cheap in
+   * practice: `hoverableElements` is normally single digits, and `:hover`
+   * matching is a native, already-computed browser check, not a
+   * layout-triggering one.
+   */
+  private reconcileHover(): void {
+    for (const el of this.hoverableElements) {
+      if (el.matches(':hover')) this.hoveringElements.add(el);
+      else this.hoveringElements.delete(el);
+    }
   }
 
   /**
@@ -733,6 +783,27 @@ export class Gallery {
     // `cursor: none` (shoji.css) applies to the whole dialog including the
     // modal's own backdrop/panel — the cursor visibly vanishing over text
     // the viewer is actively reading, not idling on.
+    //
+    // A real bug, found testing this cross-browser: `hoveringElements` is
+    // normally kept in sync by `reconcileHover()` running inside
+    // `onActivity()`, on every real pointer event — but that only helps if
+    // one actually fires *after* the pointer reaches wherever it's really
+    // ending up. Confirmed directly: some browser pointer-simulation paths
+    // (reproduced consistently under Firefox automation, though nothing
+    // rules out a genuine — if rarer — real-hardware equivalent) fire their
+    // last bubbling pointer event mid-transition, before the browser's own
+    // `:hover` state has caught up to the pointer's actual final position —
+    // reconciling *then* just recorded the wrong, stale answer, and with no
+    // further pointer event ever arriving, nothing was left to correct it
+    // before this timer fired. A plain counter would have the identical gap
+    // (whatever event it's trusted to fire is the same one that didn't).
+    // Fixed by re-reconciling right here too, immediately before the
+    // decision that actually depends on the answer being fresh — this is
+    // the one moment `hoveringElements` being even briefly stale actually
+    // matters, so it's also the one moment worth an extra, authoritative
+    // check instead of trusting whatever the last activity event happened
+    // to leave behind.
+    this.reconcileHover();
     if (
       !this.dom ||
       this.autoHidden ||
@@ -749,7 +820,7 @@ export class Gallery {
   private showControls(): void {
     if (!this.dom || !this.autoHidden) return;
     this.autoHidden = false;
-    this.dom.dialog.classList.remove('shoji-controls-hidden');
+    this.dom.dialog.classList.remove('shoji-controls-hidden', 'shoji-controls-hidden-for-close');
     this.bus.emit('controls:show', {});
   }
 
@@ -993,16 +1064,14 @@ export class Gallery {
     // A real bug, caught testing this: the click that opens the modal
     // typically leaves the pointer sitting right over the caption —
     // hiding it out from under a *stationary* cursor never fires the
-    // `pointerleave` `wireControlHover()` needs to decrement
-    // `hoveredControlCount` back down (browsers only fire that on actual
-    // pointer movement past an element's edge, not on the element
-    // disappearing). Left alone, that stuck count makes `isControlActive()`
-    // permanently true, silently blocking `hideControls()` for as long as
-    // the modal stays open. Nothing meaningful should still read as
-    // "hovered" once the modal has taken over anyway, so this just resets
-    // it outright rather than trying to reach into that closure's own
-    // private hover-tracking state from here.
-    this.hoveredControlCount = 0;
+    // `pointerleave` `wireControlHover()` needs to drop it from
+    // `hoveringElements` (browsers only fire that on actual pointer
+    // movement past an element's edge, not on the element disappearing).
+    // `reconcileHover()` would eventually self-heal this on the next real
+    // pointer move anyway, but nothing meaningful should still read as
+    // "hovered" once the modal has taken over — clearing it immediately
+    // here is more deterministic than waiting for that.
+    this.hoveringElements.clear();
     this.captionModalOpen = true;
     this.focusTrap.retarget(this.dom.captionModalPanel);
     document.addEventListener('keydown', this.onCaptionModalKeydown, true);
@@ -1305,11 +1374,29 @@ export class Gallery {
     }
   }
 
-  /** Forces the same fade §2.8's idle timer would eventually trigger, bypassing `hideControls()`'s own `isControlActive()` hover guard — the most common close path (clicking close) is hovering a control at this exact instant, and a deliberate close should hide regardless. No-op if already hidden. */
+  /**
+   * Forces the same fade §2.8's idle timer would eventually trigger, bypassing `hideControls()`'s own `isControlActive()` hover guard — the most common close path (clicking close) is hovering a control at this exact instant, and a deliberate close should hide regardless. No-op if already hidden.
+   *
+   * Also marks `.shoji-controls-hidden-for-close` alongside the ordinary
+   * class — a real bug, reported from real usage: a plugin's own overlay
+   * (Autoplay's progress bar, `autoplay.css`) was wired to fade on plain
+   * `.shoji-controls-hidden`, the same class *ordinary idle auto-hide* also
+   * applies — so it faded out and stayed gone through every idle period
+   * too, not just the close animation the original request was actually
+   * about. That went unnoticed for a while because until recently, tapping
+   * the image toggled play/pause *and* revealed controls on the same tap,
+   * papering over how often it was actually gone; once that tap-to-toggle
+   * was removed (§4.1 point 15) as a separate, unrelated fix, an idle
+   * slideshow now visibly loses its own progress indicator and never gets
+   * it back without an unrelated interaction — surfacing this as a real
+   * regression in practice, even though no code touching this class had
+   * changed. This second class is the hook a plugin's CSS can key off
+   * specifically for "closing," without it ever matching ordinary idle-hide.
+   */
   private forceHideControls(): void {
     if (!this.dom || this.autoHidden) return;
     this.autoHidden = true;
-    this.dom.dialog.classList.add('shoji-controls-hidden');
+    this.dom.dialog.classList.add('shoji-controls-hidden', 'shoji-controls-hidden-for-close');
     this.bus.emit('controls:hide', {});
   }
 
@@ -1383,9 +1470,9 @@ export class Gallery {
       this.autoHideTimer = null;
     }
     this.autoHidden = false;
-    this.hoveredControlCount = 0;
+    this.hoveringElements.clear();
     this.controlsHiddenByDrag = false;
-    this.dom?.dialog.classList.remove('shoji-controls-hidden');
+    this.dom?.dialog.classList.remove('shoji-controls-hidden', 'shoji-controls-hidden-for-close');
     // A completed drag-close never calls setControlsHiddenForDrag(false)
     // (nothing left to un-hide for) — clean up the marker here instead, so
     // it can't linger into the next open().
@@ -1504,6 +1591,17 @@ export class Gallery {
     this.dom?.outer.remove();
     this.slides = null;
     this.dom = null;
+    // A real leak, caught by inspection: core's own `wireControlHover()`
+    // calls in `ensureLightbox()` (closeButton, toolbar slots, caption,
+    // counter, ...) never store/call the unsubscribe they return, since
+    // there was never anywhere else that needed it before — those elements
+    // were expected to just live and die with the rest of `dom` above.
+    // `reinit()` routes through here too, though, and rebuilds a whole new
+    // `dom` afterward (`ensureLightbox()` runs again) — without this,
+    // `hoverableElements` would keep every previous reinit cycle's now-
+    // detached elements forever, growing unbounded across repeated calls.
+    this.hoverableElements.clear();
+    this.hoveringElements.clear();
   }
 
   destroy(): void {

@@ -15,17 +15,24 @@
   display: none;
 }
 
-/* DESIGN.md §2.6a/§2.8 — fades out together with the rest of the controls
-   (`.shoji-controls-hidden`, shoji.css) on idle auto-hide and, notably, the
-   close sequence: a real bug, reported from real usage — this lived outside
-   `.shoji-controls-hidden`'s selector list, so it stayed fully visible,
-   untouched, through the entire close animation while everything else
-   faded away with it. */
+/* DESIGN.md §2.6a/§2.8 — fades out with the rest of the controls
+   specifically during the close sequence: a real bug, reported from real
+   usage — this lived outside `.shoji-controls-hidden`'s selector list
+   (shoji.css), so it stayed fully visible, untouched, through the entire
+   close animation while everything else faded away with it.
+   `.shoji-controls-hidden-for-close` (Gallery.ts's `forceHideControls()`),
+   not plain `.shoji-controls-hidden` — a second real bug, reported from
+   real usage: the first fix keyed off `.shoji-controls-hidden` alone, which
+   ordinary idle auto-hide (§2.8) also applies, so the progress bar faded
+   out and stayed gone through every idle period too, not just closing —
+   the one piece of the UI actively telling the viewer "still counting down
+   to the next slide" disappearing right when nothing else is happening to
+   explain it. */
 .shoji-autoplay-progress {
   transition: opacity var(--shoji-duration) var(--shoji-easing);
 }
 
-.shoji-controls-hidden .shoji-autoplay-progress {
+.shoji-controls-hidden-for-close .shoji-autoplay-progress {
   opacity: 0;
 }
 

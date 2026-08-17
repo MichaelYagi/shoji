@@ -2,15 +2,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../src/core';
 import type { PluginContext } from '../../src/core';
 
+// jsdom has no real `:hover` tracking at all (`Element.prototype.matches`
+// never returns true for it, regardless of any dispatched pointer event) —
+// Gallery.ts's own `reconcileHover()` (DESIGN.md §2.8) reads that as ground
+// truth on every activity event, so left unmocked it would immediately
+// undo whatever `hover()`/`unhover()` below just did, in the same
+// synchronous call. Tracked here instead and consulted only for `:hover`
+// queries — every other selector still goes through the real `matches()`.
+const hoveredInTest = new Set<Element>();
+let realMatches: typeof Element.prototype.matches;
+
 beforeEach(() => {
   HTMLImageElement.prototype.decode = vi.fn().mockResolvedValue(undefined);
   vi.useFakeTimers();
+  realMatches = Element.prototype.matches;
+  Element.prototype.matches = function (selector: string): boolean {
+    if (selector === ':hover') return hoveredInTest.has(this);
+    return realMatches.call(this, selector);
+  };
 });
 
 afterEach(() => {
   vi.useRealTimers();
   // @ts-expect-error - removing the test-only stub added above
   delete HTMLImageElement.prototype.decode;
+  Element.prototype.matches = realMatches;
+  hoveredInTest.clear();
   document.body.innerHTML = '';
 });
 
@@ -33,11 +50,15 @@ function pointerMove(): void {
 }
 
 function hover(selector: string): void {
-  document.querySelector(selector)!.dispatchEvent(new Event('pointerenter'));
+  const el = document.querySelector(selector)!;
+  hoveredInTest.add(el);
+  el.dispatchEvent(new Event('pointerenter'));
 }
 
 function unhover(selector: string): void {
-  document.querySelector(selector)!.dispatchEvent(new Event('pointerleave'));
+  const el = document.querySelector(selector)!;
+  hoveredInTest.delete(el);
+  el.dispatchEvent(new Event('pointerleave'));
 }
 
 describe('Gallery — auto-hide controls', () => {
