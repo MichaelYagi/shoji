@@ -228,14 +228,29 @@
    reach for (see the layout plugin's masonry `orientation: 'horizontal'`,
    which was rebuilt specifically to avoid it) — wrapping to a second row
    keeps every button reachable by a tap with no sideways scroll gesture
-   anywhere in the lightbox chrome either. */
+   anywhere in the lightbox chrome either.
+
+   max-width was 45% until a real bug, reported from real usage: the
+   toolbar-overflow popover (DESIGN.md §3.1a) collapses plugin buttons down
+   to `minPinnedToolbarButtons` (default 2), but 2 pinned + close + the
+   caret itself (4 icons, ~200px at the 44px touch-target size plus gaps)
+   already exceeds 45% of a common ~380px mobile width — so this slot fell
+   back to wrapping to a second row (pushing close onto its own line) even
+   though the *whole point* of the popover is that a bounded, small icon
+   count should now reliably fit in one row. Raised to 60% — comfortably
+   covers the default floor plus close/caret at typical mobile widths,
+   confirmed directly — while still leaving `.shoji-toolbar-left`'s own
+   counter room; a host who raises `minPinnedToolbarButtons` well past the
+   default on a narrow viewport can still hit this same wrap, by design
+   (DESIGN.md §3.1a: never collapsing below that floor, even if it still
+   leaves a slot wrapped, is the documented tradeoff). */
 .shoji-toolbar-slot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--shoji-spacing-sm);
   pointer-events: auto;
-  max-width: 45%;
+  max-width: 60%;
 }
 
 .shoji-toolbar-left {

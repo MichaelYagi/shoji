@@ -117,6 +117,21 @@ still include breaking changes).
   would have retargeted the release `click` to a spot that reads as a
   backdrop click, closing the lightbox on every real pan. See DESIGN.md
   §4.6 (twelfth bug).
+- The toolbar overflow popover above didn't reliably fit even its own
+  default pinned-button count on a real narrow phone (reported and
+  reproduced directly at a 360×640 viewport): `.shoji-toolbar-slot`'s own
+  `max-width: 45%`, a pre-existing cap from before the popover replaced
+  the old wrap-to-a-second-row fallback, was narrower than what the
+  _default, unconfigured_ `minPinnedToolbarButtons` (2) plus close plus
+  the caret need. Raised to 60%. See DESIGN.md §3.1a.
+- The popover's own outside-click-to-close listener used `event.target`,
+  which can already be a detached node by the time a bubble-phase listener
+  runs if the clicked element replaces its own innerHTML synchronously
+  (Autoplay's play/pause icon-swap) — `.contains(target)` then reads false
+  even for a click genuinely inside the popover, wrongly closing it out
+  from under the button that was just clicked. Switched to
+  `event.composedPath()`, captured at dispatch time before any such
+  mutation. See DESIGN.md §3.1a.
 
 ## [0.1.0-alpha.14] - 2026-08-15
 

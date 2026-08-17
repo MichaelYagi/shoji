@@ -36,22 +36,36 @@ export async function revealToolbarButton(page: Page, button: Locator): Promise<
 /**
  * Reveal-then-click, retried — for a button whose popover can close itself
  * out from under an in-flight click (e.g. Autoplay, mid-slideshow: each
- * `navigate()` auto-closes the popover, DESIGN.md §3.1a, and that can land
- * in the gap between this helper's own `revealToolbarButton` check and the
- * click actually landing). A plain `button.click()` would otherwise wait
- * out its full timeout for a "visible" state that never returns, since
- * nothing re-opens the popover on its own.
+ * `navigate()` auto-closes the popover, DESIGN.md §3.1a, and it stays open
+ * for only as long as the fixture's own interval — genuinely on the order
+ * of a couple hundred ms, not a generous window).
+ *
+ * Clicks via `element.click()` inside `page.evaluate()`, not
+ * `locator.click()` — a real bug in this test helper itself, found running
+ * with tracing on (`playwright.config.ts`'s `trace: 'retain-on-failure'`,
+ * always recording so it has something to keep on failure): `locator.click()`
+ * does its own actionability wait first (stable across two consecutive
+ * frames), and that extra round-trip is exactly what a slower/more-loaded
+ * run (tracing, or real CI contention) can't reliably fit inside the
+ * popover's own open window before `navigate()` closes it again — reliably
+ * reproducible locally by re-running with `--trace=on` even though the
+ * exact same test passed consistently with tracing off. Once this helper's
+ * own `isVisible()` check has already confirmed the element is visible and
+ * attached *right now*, a direct DOM `.click()` needs no further waiting —
+ * it either lands in that same tick or the button wasn't really visible,
+ * in which case the next loop iteration's `isVisible()` check catches it.
  */
 export async function revealAndClickToolbarButton(page: Page, button: Locator): Promise<void> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    await revealToolbarButton(page, button);
-    try {
-      await button.click({ timeout: 1000 });
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (await button.isVisible()) {
+      await button.evaluate((el) => (el as HTMLElement).click());
       return;
-    } catch {
-      // Popover likely auto-closed (a slide navigated) between the reveal
-      // check above and this click actually landing — retry the whole pair.
     }
+    if ((await caret.isVisible()) && (await caret.getAttribute('aria-expanded')) !== 'true') {
+      await caret.click().catch(() => {});
+    }
+    await page.waitForTimeout(50);
   }
   await button.click(); // final attempt — let a genuine failure throw normally
 }
