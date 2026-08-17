@@ -5,6 +5,24 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // CI (GitHub Actions' shared runners) was hitting extensive,
+  // non-deterministic Playwright actionability-check timeouts ("element is
+  // not visible" after 25+s of retrying an already-succeeded click) across
+  // webkit/mobile-safari and even mobile-chrome — the exact same tests pass
+  // 100% reliably run locally on the same engines, so this isn't a product
+  // bug. No CI-runner metrics to confirm it directly, but the pattern
+  // (worse on heavier engines, inconsistent between runs, unaffected by
+  // adding retries within a single test) matches CPU contention:
+  // `fullyParallel` with no worker cap spins up many concurrent browser
+  // processes across 5 projects at once on a runner with few real cores;
+  // under contention, layout/paint frames come far less often, so "stable
+  // across two consecutive frames" (what a click waits for) can starve for
+  // a long time — that reads as a hung click, not a slow one. Capped only
+  // in CI; local runs keep Playwright's own default (faster iteration,
+  // where this contention doesn't exist). Revert or raise this if CI still
+  // flakes the same way afterward — that would mean the real cause is
+  // something else.
+  workers: process.env.CI ? 2 : undefined,
   // 'list' for readable console output during the run; 'html' so CI's
   // upload-artifact step (playwright-report/) has something to actually
   // upload — a real gap: without it, that step always silently found
