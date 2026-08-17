@@ -68,7 +68,9 @@ async function openWithLongCaption(page: Page): Promise<void> {
   // at all), but it's harmless for every other caller too.
   await page.evaluate(
     () =>
-      new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
   );
 }
 
