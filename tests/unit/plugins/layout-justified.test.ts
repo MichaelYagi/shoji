@@ -153,6 +153,30 @@ describe('layoutJustified — minRowHeight/maxRowHeight clamping', () => {
     }
   });
 
+  it('keeps a wider grouping (letting minRowHeight yield) instead of shedding down to a lone tile that would itself need maxRowHeight clamping — a real bug, reported from real usage: a square thumbnail sandwiched between wider neighbors landed exactly here, left with a visible gap on the right edge', () => {
+    // Square (aspect 1) + wide (aspect 3) combined: natural height
+    // (1000-8)/4=248, below minRowHeight(260) — the old behavior sheds the
+    // wide tile, leaving the square alone. But the square tile ALONE would
+    // need to scale to containerWidth (1000) to fill the row — clamped down
+    // to maxRowHeight(300), it falls 700px short of the right edge instead.
+    // Keeping both tiles at their natural (sub-minRowHeight) 248px height
+    // fills the container exactly, no gap.
+    const square: JustifiedTile = { width: 100, height: 100 };
+    const wide: JustifiedTile = { width: 300, height: 100 };
+    const result = layoutJustified([square, wide], {
+      ...base,
+      minRowHeight: 260,
+      maxRowHeight: 300,
+      lastRow: 'justify',
+    });
+
+    expect(result.rows.length).toBe(1); // not shed into two rows
+    const [squarePos, widePos] = result.positions as [JustifiedPosition, JustifiedPosition];
+    expect(squarePos.height).toBeLessThan(260); // minRowHeight yielded, not clamped up
+    const totalWidth = squarePos.width + base.gutterX + widePos.width;
+    expect(totalWidth).toBeCloseTo(base.containerWidth, 0); // flush right edge, no gap
+  });
+
   it('a single tile so wide that minRowHeight can never fit the container falls back to natural height instead of overflowing — nothing left to shed', () => {
     // aspect 20 (very wide): unclamped it'd scale to
     // containerWidth / 20 = 50px tall to fit the row at all — raising it to

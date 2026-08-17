@@ -132,6 +132,17 @@ still include breaking changes).
   from under the button that was just clicked. Switched to
   `event.composedPath()`, captured at dispatch time before any such
   mutation. See DESIGN.md §3.1a.
+- `Layout`'s justified mode could isolate a tile into a row that fell short
+  of the container's right edge — a visible gap — instead of grouping it
+  with a neighbor: shedding a trailing tile down to a lone remaining one
+  (to keep a pair from overflowing past `minRowHeight`) didn't check
+  whether that lone tile's own natural height would itself need
+  `maxRowHeight` to clamp it, which falls short of the right edge for the
+  exact same reason. Reported and reproduced directly (a square thumbnail
+  sandwiched between wider neighbors, narrow viewport) — fixed by keeping
+  the wider grouping and letting `minRowHeight` yield instead, the same
+  precedent already used for a single tile too wide to fit at
+  `minRowHeight` at all. See DESIGN.md §5.2.
 
 ## [0.1.0-alpha.14] - 2026-08-15
 

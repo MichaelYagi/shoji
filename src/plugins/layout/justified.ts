@@ -114,7 +114,30 @@ export function layoutJustified(
   function resolveScaledRow(startIndex: number, endExclusive: number, sum: number): number {
     let end = endExclusive;
     let rowSum = sum;
+    let yieldMinRowHeight = false;
     while (end - startIndex > 1 && naturalHeightOf(startIndex, end, rowSum) < minRowHeight) {
+      // A real bug, reported from real usage: shedding the trailing tile
+      // down to exactly one remaining tile only helps if that lone tile's
+      // own natural height doesn't itself need `maxRowHeight` to clamp it
+      // — otherwise shedding trades an under-`minRowHeight` row (merely a
+      // bit short) for one that instead falls short of the *right edge*
+      // (a visible gap, this file's own `maxRowHeight` tradeoff above) —
+      // strictly worse, for nothing. Confirmed directly: a lone square
+      // tile sandwiched between two wider neighbors landed exactly here.
+      // Keep the wider grouping instead and let `minRowHeight` yield for
+      // it too, same precedent the single-super-wide-tile case below
+      // already establishes.
+      if (end - startIndex === 2) {
+        const soloNatural = naturalHeightOf(
+          startIndex,
+          startIndex + 1,
+          aspectRatioOf(tiles[startIndex]!),
+        );
+        if (soloNatural > maxRowHeight) {
+          yieldMinRowHeight = true;
+          break;
+        }
+      }
       end--;
       rowSum -= aspectRatioOf(tiles[end]!);
     }
@@ -123,9 +146,10 @@ export function layoutJustified(
     // own aspect ratio makes minRowHeight-at-full-width inherently wider
     // than the container — nothing left to shed, so minRowHeight yields
     // (the natural height keeps width exactly at containerWidth) rather
-    // than ever letting the row overflow.
+    // than ever letting the row overflow. `yieldMinRowHeight` extends the
+    // same yield to the lone-tile-would-gap case just above.
     const height =
-      end - startIndex === 1 && natural < minRowHeight
+      (end - startIndex === 1 || yieldMinRowHeight) && natural < minRowHeight
         ? natural
         : Math.min(Math.max(natural, minRowHeight), maxRowHeight);
     placeRow(startIndex, end, height);
