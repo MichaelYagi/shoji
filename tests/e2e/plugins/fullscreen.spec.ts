@@ -33,7 +33,7 @@ test('toolbar button toggles native fullscreen and reflects real fullscreenchang
   await expect(button).toHaveAttribute('aria-label', 'Exit fullscreen');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
 
-  await button.click();
+  await clickToolbarButton(page, button);
   await expect(button).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 });

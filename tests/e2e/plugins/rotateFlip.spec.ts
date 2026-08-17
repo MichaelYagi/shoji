@@ -62,10 +62,14 @@ test('regression: four rotate-right clicks keep animating forward to 360deg, not
 }) => {
   await openLightbox(page);
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await clickToolbarButton(page, rotateRight);
-
-  for (let i = 0; i < 3; i++) {
-    await rotateRight.click();
+  // Each iteration goes through clickToolbarButton, not just the first —
+  // a real CI failure (mobile-safari): the rotate transition itself (this
+  // test runs it un-emulated, unlike its reduced-motion siblings) is
+  // apparently enough real-browser work to make a later locator.click() in
+  // the loop hit the same actionability-wait race as an unrevealed button,
+  // even though the popover itself never actually closes.
+  for (let i = 0; i < 4; i++) {
+    await clickToolbarButton(page, rotateRight);
   }
 
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(360deg\)/);
