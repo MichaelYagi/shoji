@@ -59,11 +59,13 @@ test('double-click zooms in, second double-click resets', async ({ page }) => {
 test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page }) => {
   await openLightbox(page);
 
-  // Zoom is the first-registered plugin (DESIGN.md §3.1a), so "Zoom in" —
-  // its first button — always stays pinned; "Zoom out" (its second) is the
-  // next to collapse into the popover once the row overflows, which
-  // mobile-chrome's own default viewport already does with this fixture's
-  // four toolbar plugins.
+  // Zoom is the first-registered plugin (DESIGN.md §3.1a) — "Zoom in" and
+  // "Zoom out", its first two buttons, are always among the pinned ones
+  // (the fixture doesn't override minPinnedToolbarButtons, default 2);
+  // revealToolbarButton() below is a
+  // harmless no-op wherever that's already true, and only does real work on
+  // a viewport narrow enough that even these don't fit (unlikely, but not
+  // assumed away — same reasoning as every other call site in this file).
   await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
 

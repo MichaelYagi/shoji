@@ -689,7 +689,7 @@ describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
     gallery.destroy();
   });
 
-  it('collapses down to MIN_PINNED_PLUGIN_BUTTONS (1) pinned button plus close and the caret when it overflows, latest-registered first', () => {
+  it('collapses down to the default minPinnedToolbarButtons (2) pinned buttons plus close and the caret when it overflows, latest-registered first', () => {
     const { flush } = mockRaf();
     mockToolbarWrap(3);
     const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
@@ -698,13 +698,29 @@ describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
 
     const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
     expect(caret.hidden).toBe(false);
-    // Exactly 3 icons share the row once collapsed: 1 pinned plugin button,
-    // close, and the caret — requested directly, see MIN_PINNED_PLUGIN_BUTTONS.
-    expect(pinnedIds()).toEqual(['btn-0']);
+    // 4 icons share the row once collapsed: 2 pinned plugin buttons, close,
+    // and the caret — requested directly, see GalleryOptions.minPinnedToolbarButtons.
+    expect(pinnedIds()).toEqual(['btn-0', 'btn-1']);
     // Collapsed latest-registered first (btn-6 drops off the row before
-    // btn-1 does), but the panel itself reads in the same ascending
+    // btn-2 does), but the panel itself reads in the same ascending
     // registration order the toolbar row would have shown, not reversed.
-    expect(panelIds()).toEqual(['btn-1', 'btn-2', 'btn-3', 'btn-4', 'btn-5', 'btn-6']);
+    expect(panelIds()).toEqual(['btn-2', 'btn-3', 'btn-4', 'btn-5', 'btn-6']);
+
+    gallery.destroy();
+  });
+
+  it('GalleryOptions.minPinnedToolbarButtons overrides the default pinned-button floor', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, {
+      plugins: makeButtonPlugins(7),
+      minPinnedToolbarButtons: 4,
+    });
+    gallery.open(0);
+    flush();
+
+    expect(pinnedIds()).toEqual(['btn-0', 'btn-1', 'btn-2', 'btn-3']);
+    expect(panelIds()).toEqual(['btn-4', 'btn-5', 'btn-6']);
 
     gallery.destroy();
   });

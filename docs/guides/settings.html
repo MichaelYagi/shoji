@@ -110,6 +110,18 @@
           </td>
         </tr>
         <tr>
+          <td><code>minPinnedToolbarButtons</code></td>
+          <td><code>2</code></td>
+          <td>
+            How many <code>ctx.ui.toolbar('right', ...)</code>-registered plugin buttons stay pinned
+            directly on the toolbar row (in registration order) once it doesn't fit — the rest
+            collapse into an overflow popover behind a caret, latest-registered first.
+            <code>closeButton</code> and the caret itself are always on the row regardless; a host
+            with more toolbar plugins than the default fits might raise this. See the
+            <a href="./plugins.html">Plugins guide</a>.
+          </td>
+        </tr>
+        <tr>
           <td><code>preload</code></td>
           <td><code>1</code></td>
           <td>

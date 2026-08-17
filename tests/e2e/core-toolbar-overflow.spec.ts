@@ -12,7 +12,10 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 async function openOverflowing(page: Page): Promise<void> {
-  await page.setViewportSize({ width: 400, height: 700 });
+  // Wide enough that the pinned set itself (minPinnedToolbarButtons (2) +
+  // close + caret = 4 icons) still fits comfortably in one row — this is
+  // about the *extra* buttons overflowing, not the pinned ones.
+  await page.setViewportSize({ width: 500, height: 700 });
   await page.goto('/pages/e2e-plugins.html?extraToolbarButtons=6');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
@@ -34,7 +37,7 @@ test('no caret, no popover, when the toolbar fits in one row', async ({ page }) 
   await expect(page.locator('.shoji-toolbar-overflow-panel').last()).toBeHidden();
 });
 
-test('an overflowing toolbar collapses buttons (latest-registered first) into the popover, keeping close and one pinned button on the row', async ({
+test('an overflowing toolbar collapses buttons (latest-registered first) into the popover, keeping close and 2 pinned plugin buttons on the row', async ({
   page,
 }) => {
   await openOverflowing(page);
@@ -50,9 +53,11 @@ test('an overflowing toolbar collapses buttons (latest-registered first) into th
     .height;
   expect(toolbarRightHeight).toBeLessThanOrEqual(rowHeight + 1);
 
-  // The latest-registered extra button (#5) collapsed into the popover; an
-  // earlier one (#0) is still pinned on the row — registration order is
-  // overflow priority.
+  // The fixture registers 15 plugin buttons total (Zoom 3, Fullscreen 1,
+  // RotateFlip 4, Autoplay 1, plus the 6 forced extras) — the default
+  // minPinnedToolbarButtons (2) keeps only Zoom's own first 2 pinned; the
+  // latest-registered extra button (#5) is nowhere near that front, so
+  // it's collapsed into the popover.
   await expect(page.locator('.shoji-toolbar-right [data-e2e-button="5"]')).toHaveCount(0);
   const panel = page.locator('.shoji-toolbar-overflow-panel').last();
   await caret.click();

@@ -196,6 +196,10 @@ its own id) rather than a real function input.
             <label>index <input type="number" id="opt-index" value="0" min="0" /></label>
             <label>preload <input type="number" id="opt-preload" value="1" min="0" /></label>
             <label
+              >minPinnedToolbarButtons
+              <input type="number" id="opt-minPinnedToolbarButtons" value="2" min="0"
+            /></label>
+            <label
               >backdropOpacity
               <input type="number" id="opt-backdropOpacity" value="1" min="0" max="1" step="0.05"
             /></label>
@@ -769,6 +773,7 @@ its own id) rather than a real function input.
           openOnInit: checked('opt-openOnInit'),
           index: Number($('opt-index').value) || 0,
           preload: Number($('opt-preload').value) || 0,
+          minPinnedToolbarButtons: Number($('opt-minPinnedToolbarButtons').value) || 0,
           backdropOpacity: Number($('opt-backdropOpacity').value),
           autoHideDelay: checked('opt-autoHideDelayFalse')
             ? false

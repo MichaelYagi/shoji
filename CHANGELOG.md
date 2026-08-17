@@ -24,16 +24,16 @@ still include breaking changes).
 - A toolbar with more plugin buttons than a narrow viewport has room for no
   longer wraps to a second/third row — once the row measurably doesn't fit,
   buttons collapse (latest-registered first) into a floating popover
-  revealed by a caret just to the left of the close button, keeping exactly the pinned
-  button, close, and the caret sharing the toolbar's own row — the popover
-  itself lists them in the same order they'd have read on the toolbar, not
-  reversed. Opens on caret click, closes on Escape/an outside click,
-  keyboard-confined while open
-  (Tab cycling narrows to it, matching the caption modal's own focus-trap
-  behavior), and restores every button to its normal slot the moment it fits
-  again. Replaces the removed `mobileSettings.controls` (see "Removed"
-  below) as the actual, measured-overflow answer to a busy toolbar. See
-  DESIGN.md §3.1a.
+  revealed by a caret just to the left of the close button, keeping
+  `minPinnedToolbarButtons` (new `GalleryOptions` field, default 2) plugin
+  buttons plus close and the caret sharing the toolbar's own row — the
+  popover itself lists them in the same order they'd have read on the
+  toolbar, not reversed. Opens on caret click, closes on Escape/an outside
+  click, keyboard-confined while open (Tab cycling narrows to it, matching
+  the caption modal's own focus-trap behavior), and restores every button
+  to its normal slot the moment it fits again. Replaces the removed
+  `mobileSettings.controls` (see "Removed" below) as the actual,
+  measured-overflow answer to a busy toolbar. See DESIGN.md §3.1a.
 
 ### Changed
 

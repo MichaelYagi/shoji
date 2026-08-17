@@ -43,9 +43,6 @@ function resolveElement(target: HTMLElement | string): HTMLElement {
 const instanceRegistry = new WeakMap<HTMLElement, Gallery>();
 const allInstances = new Set<Gallery>();
 
-/** DESIGN.md §3.1a — requested directly: 3 icons total share the toolbar's own row once it overflows (this many pinned plugin buttons, plus `closeButton` and `toolbarOverflowButton` itself) — everything else collapses into the popover. */
-const MIN_PINNED_PLUGIN_BUTTONS = 1;
-
 /** CLAUDE.md — all user-visible strings go through `locale`; these are the fallback defaults. */
 const DEFAULT_LOCALE = {
   close: 'Close',
@@ -134,6 +131,8 @@ export class Gallery {
   private loop = true;
   private closable = true;
   private autoHideDelay: number | false = 5000;
+  /** DESIGN.md §3.1a — GalleryOptions.minPinnedToolbarButtons; see measureToolbarOverflow(). */
+  private minPinnedToolbarButtons = 2;
   private readonly focusTrap = new FocusTrap();
   private readonly liveRegion = new LiveRegion();
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -197,7 +196,7 @@ export class Gallery {
    * registration order, alongside the slot it was registered into (so a
    * collapsed one can be restored to the right place, not just anywhere).
    * Registration order is what decides overflow priority: the first
-   * `MIN_PINNED_PLUGIN_BUTTONS` always stay pinned, the rest collapse into
+   * `minPinnedToolbarButtons` always stay pinned, the rest collapse into
    * the popover before them, latest-registered first — see
    * `measureToolbarOverflow()`.
    */
@@ -354,6 +353,7 @@ export class Gallery {
     this.loop = options.loop ?? true;
     this.closable = options.closable ?? true;
     this.autoHideDelay = options.autoHideDelay ?? 5000;
+    this.minPinnedToolbarButtons = options.minPinnedToolbarButtons ?? 2;
     // Reset explicitly — a reinit() call must not inherit these from before.
     this.activeIndex = 0;
     this.scannedElements = [];
@@ -759,12 +759,13 @@ export class Gallery {
    * Collapses latest-registered first (DESIGN.md §3's own registration-
    * order-is-priority convention — `plugins: [A, B, C]` keeps A pinned
    * before B/C), stopping the instant it fits — never below
-   * `MIN_PINNED_PLUGIN_BUTTONS` pinned, even if that still leaves a slot
+   * `minPinnedToolbarButtons` pinned, even if that still leaves a slot
    * wrapped on a pathologically narrow viewport; losing access to a button
    * entirely is worse than an occasional short second row. Requested
-   * directly: exactly 3 icons total share the toolbar's own row once
-   * overflow is active — the pinned plugin button(s), `closeButton`, and
-   * `toolbarOverflowButton` itself — everything else relocates into the
+   * directly: `minPinnedToolbarButtons` plugin buttons (default 2, see
+   * `GalleryOptions.minPinnedToolbarButtons`) stay pinned on the toolbar's
+   * own row once overflow is active, alongside `closeButton` and
+   * `toolbarOverflowButton` themselves — everything else relocates into the
    * popover, which renders directly below that row.
    */
   private measureToolbarOverflow(): void {
@@ -784,10 +785,10 @@ export class Gallery {
         (slotEl) => slotEl.getBoundingClientRect().height <= rowHeight + 1,
       );
 
-    if (this.pluginToolbarButtons.length <= MIN_PINNED_PLUGIN_BUTTONS || fitsOneRow()) return;
+    if (this.pluginToolbarButtons.length <= this.minPinnedToolbarButtons || fitsOneRow()) return;
 
     dom.toolbarOverflowButton.hidden = false;
-    for (let i = this.pluginToolbarButtons.length - 1; i >= MIN_PINNED_PLUGIN_BUTTONS; i--) {
+    for (let i = this.pluginToolbarButtons.length - 1; i >= this.minPinnedToolbarButtons; i--) {
       if (fitsOneRow()) break;
       // Collapsed latest-registered first (the decision above), but
       // inserted at the *front* of the panel each time — the panel should

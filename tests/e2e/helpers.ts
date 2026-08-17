@@ -9,10 +9,28 @@ import type { Locator, Page } from '@playwright/test';
  * way (click the button, or open the popover first if it's not on the row);
  * this makes e2e locators do the same, transparently, rather than assuming
  * every toolbar button is always directly clickable.
+ *
+ * Retried, not a one-shot check-then-click: a real CI run (slower, more
+ * contended than a local one — confirmed directly, this exact one-shot
+ * version passed consistently locally across chromium/firefox/mobile-chrome
+ * but failed extensively in CI on mobile-chrome/webkit/mobile-safari) can
+ * still be mid-open-transition, or the popover can still be settling from
+ * its own click, at the instant a single `isVisible()` check runs — a false
+ * "not visible yet" there previously meant the caret was never clicked at
+ * all, since `revealToolbarButton` only ever tried once. Retrying re-checks
+ * and, if needed, re-clicks the caret (skipped if it's already open, so
+ * this can't toggle it back closed) until the target genuinely becomes
+ * visible or the budget below is spent.
  */
 export async function revealToolbarButton(page: Page, button: Locator): Promise<void> {
-  if (await button.isVisible()) return;
-  await page.locator('.shoji-toolbar-overflow').last().click();
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (await button.isVisible()) return;
+    if ((await caret.isVisible()) && (await caret.getAttribute('aria-expanded')) !== 'true') {
+      await caret.click().catch(() => {});
+    }
+    await page.waitForTimeout(200);
+  }
 }
 
 /**
