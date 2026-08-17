@@ -1,5 +1,5 @@
 import { test, expect, type Page, type ElementHandle } from '@playwright/test';
-import { revealToolbarButton } from '../helpers';
+import { clickToolbarButton, revealToolbarButton } from '../helpers';
 
 /**
  * Real-browser coverage for the Zoom plugin's gesture/DOM behavior — the
@@ -70,8 +70,7 @@ test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
 
   const zoomOut = page.locator('.shoji-toolbar-button[aria-label="Zoom out"]');
-  await revealToolbarButton(page, zoomOut);
-  await zoomOut.click();
+  await clickToolbarButton(page, zoomOut);
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
 
@@ -93,12 +92,10 @@ test('actual size toggles zoom (fixture image is scaled down to fit the dialog)'
   // into the overflow popover — reveal it before clicking, same as a real
   // viewer would.
   const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
-  await revealToolbarButton(page, actualSize);
-  await actualSize.click();
+  await clickToolbarButton(page, actualSize);
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
 
-  await revealToolbarButton(page, actualSize);
-  await actualSize.click();
+  await clickToolbarButton(page, actualSize);
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
 

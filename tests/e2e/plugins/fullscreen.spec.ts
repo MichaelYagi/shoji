@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { revealToolbarButton } from '../helpers';
+import { clickToolbarButton } from '../helpers';
 
 /**
  * Real Fullscreen API behavior — jsdom has no Fullscreen API at all, so this
@@ -28,8 +28,7 @@ test('toolbar button toggles native fullscreen and reflects real fullscreenchang
   // (DESIGN.md §3.1a) — its button collapses into the overflow popover on
   // any viewport too narrow to fit all four (mobile-chrome's own default
   // viewport included), same as a real viewer would need to reveal it.
-  await revealToolbarButton(page, button);
-  await button.click();
+  await clickToolbarButton(page, button);
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   await expect(button).toHaveAttribute('aria-label', 'Exit fullscreen');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
@@ -47,8 +46,7 @@ test('closing the gallery while fullscreen exits fullscreen too', async ({ page 
   test.skip(!supported, 'Fullscreen API not available in this browser context');
 
   const button = page.locator('.shoji-toolbar-button[aria-label$="fullscreen"]');
-  await revealToolbarButton(page, button);
-  await button.click();
+  await clickToolbarButton(page, button);
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
 
   await page.locator('.shoji-close').click();

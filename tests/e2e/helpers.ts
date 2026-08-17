@@ -11,51 +11,53 @@ import type { Locator, Page } from '@playwright/test';
  * every toolbar button is always directly clickable.
  *
  * Retried, not a one-shot check-then-click: a real CI run (slower, more
- * contended than a local one — confirmed directly, this exact one-shot
- * version passed consistently locally across chromium/firefox/mobile-chrome
- * but failed extensively in CI on mobile-chrome/webkit/mobile-safari) can
- * still be mid-open-transition, or the popover can still be settling from
- * its own click, at the instant a single `isVisible()` check runs — a false
- * "not visible yet" there previously meant the caret was never clicked at
- * all, since `revealToolbarButton` only ever tried once. Retrying re-checks
- * and, if needed, re-clicks the caret (skipped if it's already open, so
- * this can't toggle it back closed) until the target genuinely becomes
- * visible or the budget below is spent.
+ * contended than a local one) can still be mid-open-transition, or the
+ * popover can still be settling from its own click, at the instant a
+ * single `isVisible()` check runs — a false "not visible yet" there
+ * previously meant the caret was never clicked at all, since this used to
+ * only try once. Retrying re-checks and, if needed, re-clicks the caret
+ * (skipped if it's already open, so this can't toggle it back closed)
+ * until the target genuinely becomes visible or the budget below is spent.
+ *
+ * Reveal-only — doesn't click the target itself, for the (rare) case a
+ * test needs the button visible without acting on it yet (e.g. checking
+ * its own state right after a keyboard-triggered toggle). Most call sites
+ * want `clickToolbarButton` below instead.
  */
 export async function revealToolbarButton(page: Page, button: Locator): Promise<void> {
   const caret = page.locator('.shoji-toolbar-overflow').last();
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     if (await button.isVisible()) return;
     if ((await caret.isVisible()) && (await caret.getAttribute('aria-expanded')) !== 'true') {
       await caret.click().catch(() => {});
     }
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(50);
   }
 }
 
 /**
- * Reveal-then-click, retried — for a button whose popover can close itself
- * out from under an in-flight click (e.g. Autoplay, mid-slideshow: each
- * `navigate()` auto-closes the popover, DESIGN.md §3.1a, and it stays open
- * for only as long as the fixture's own interval — genuinely on the order
- * of a couple hundred ms, not a generous window).
- *
- * Clicks via `element.click()` inside `page.evaluate()`, not
- * `locator.click()` — a real bug in this test helper itself, found running
- * with tracing on (`playwright.config.ts`'s `trace: 'retain-on-failure'`,
- * always recording so it has something to keep on failure): `locator.click()`
- * does its own actionability wait first (stable across two consecutive
- * frames), and that extra round-trip is exactly what a slower/more-loaded
- * run (tracing, or real CI contention) can't reliably fit inside the
- * popover's own open window before `navigate()` closes it again — reliably
- * reproducible locally by re-running with `--trace=on` even though the
- * exact same test passed consistently with tracing off. Once this helper's
- * own `isVisible()` check has already confirmed the element is visible and
- * attached *right now*, a direct DOM `.click()` needs no further waiting —
- * it either lands in that same tick or the button wasn't really visible,
- * in which case the next loop iteration's `isVisible()` check catches it.
+ * Reveal-then-click, retried — the version almost every call site actually
+ * wants. A real bug, found running with tracing on
+ * (`playwright.config.ts`'s `trace: 'retain-on-failure'`, always
+ * recording so it has something to keep on failure, same as CI's own
+ * config): a plain `revealToolbarButton()` followed by a separate
+ * `locator.click()` still failed under real CI load even for buttons with
+ * no concurrent popover-closer racing them (RotateFlip/Zoom/Fullscreen,
+ * not just Autoplay mid-slideshow) — `locator.click()` does its own
+ * actionability wait first (stable across two consecutive frames), and
+ * that extra round-trip alone was enough to time out under CI's real
+ * contention, reproducible locally with `--trace=on` even though the exact
+ * same test passed consistently with tracing off. Once `isVisible()` has
+ * already confirmed the element is visible and attached *right now*, a
+ * direct DOM `.click()` (inside `page.evaluate()`, not `locator.click()`)
+ * needs no further waiting — it either lands in that same tick or the
+ * button wasn't really visible, in which case the next loop iteration's
+ * `isVisible()` check catches it. This also covers Autoplay's own extra
+ * wrinkle: mid-slideshow, each `navigate()` auto-closes the popover
+ * (DESIGN.md §3.1a), open for only as long as the fixture's own interval —
+ * genuinely a couple hundred ms, not a generous window.
  */
-export async function revealAndClickToolbarButton(page: Page, button: Locator): Promise<void> {
+export async function clickToolbarButton(page: Page, button: Locator): Promise<void> {
   const caret = page.locator('.shoji-toolbar-overflow').last();
   for (let attempt = 0; attempt < 60; attempt++) {
     if (await button.isVisible()) {

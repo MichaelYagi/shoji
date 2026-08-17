@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { revealToolbarButton } from '../helpers';
+import { clickToolbarButton, revealToolbarButton } from '../helpers';
 
 /**
  * Real CSS transform composition — the normalization math itself is unit
@@ -40,12 +40,10 @@ test('rotate right applies a real rotate() transform, twice compounds to 180deg'
   // (DESIGN.md §3.1a) — its buttons collapse into the overflow popover on
   // any viewport too narrow to fit all four (mobile-chrome's own default
   // viewport included), same as a real viewer would need to reveal them.
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(180deg\)/);
 });
 
@@ -55,8 +53,7 @@ test('rotate left animates to a negative degree value, not the normalized 270deg
   await openLightbox(page);
   const rotateLeft = page.locator('.shoji-toolbar-button[aria-label="Rotate left"]');
 
-  await revealToolbarButton(page, rotateLeft);
-  await rotateLeft.click();
+  await clickToolbarButton(page, rotateLeft);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(-90deg\)/);
 });
 
@@ -65,9 +62,9 @@ test('regression: four rotate-right clicks keep animating forward to 360deg, not
 }) => {
   await openLightbox(page);
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, rotateRight);
+  await clickToolbarButton(page, rotateRight);
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     await rotateRight.click();
   }
 
@@ -82,7 +79,7 @@ test('flip horizontal composes scaleX(-1) with the current rotation, aria-presse
   await revealToolbarButton(page, flipHBtn);
 
   await expect(flipHBtn).toHaveAttribute('aria-pressed', 'false');
-  await flipHBtn.click();
+  await clickToolbarButton(page, flipHBtn);
   await expect(flipHBtn).toHaveAttribute('aria-pressed', 'true');
   await expect
     .poll(() => activeMediaTransform(page))
@@ -95,10 +92,8 @@ test('aria-pressed canonicalizes flipping both axes to no flip (DESIGN.md §8.1 
   await openLightbox(page);
   const flipHBtn = page.locator('.shoji-toolbar-button[aria-label="Flip horizontal"]');
   const flipVBtn = page.locator('.shoji-toolbar-button[aria-label="Flip vertical"]');
-  await revealToolbarButton(page, flipHBtn);
-
-  await flipHBtn.click();
-  await flipVBtn.click();
+  await clickToolbarButton(page, flipHBtn);
+  await clickToolbarButton(page, flipVBtn);
 
   await expect(flipHBtn).toHaveAttribute('aria-pressed', 'false');
   await expect(flipVBtn).toHaveAttribute('aria-pressed', 'false');
@@ -113,10 +108,8 @@ test('regression: "Rotate right" while flipped horizontally still spins clockwis
   await openLightbox(page);
   const flipHBtn = page.locator('.shoji-toolbar-button[aria-label="Flip horizontal"]');
   const rotateRightBtn = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, flipHBtn);
-
-  await flipHBtn.click();
-  await rotateRightBtn.click();
+  await clickToolbarButton(page, flipHBtn);
+  await clickToolbarButton(page, rotateRightBtn);
 
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(-90deg\)/);
   // scaleX/scaleY aren't asserted as exactly -1/1 here: the fixture image
@@ -157,8 +150,7 @@ test("regression: a rotated photo's own visible box stays within .shoji-slides i
 
   const slidesBox = (await page.locator('.shoji-slides').boundingBox())!;
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
   const imgBox = await page.evaluate(() =>
@@ -226,8 +218,7 @@ test('regression: a low-resolution photo does not grow when rotated, even though
   // plugin registered, DESIGN.md §3.1a) collapse into the overflow popover —
   // reveal one before clicking, same as a real viewer would.
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
   const after = await page.evaluate(() =>
@@ -265,8 +256,7 @@ test('regression: a high-resolution photo grows fully to fill newly-available sp
   );
 
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
   const after = await page.evaluate(() =>
@@ -317,8 +307,7 @@ test("regression: the real bug as originally reported — a small photo with no 
   );
 
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
   const after = await page.evaluate(() =>
@@ -338,8 +327,7 @@ test('navigating to the next slide resets rotation/flip to neutral', async ({ pa
   await openLightbox(page);
   const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
 
-  await revealToolbarButton(page, rotateRight);
-  await rotateRight.click();
+  await clickToolbarButton(page, rotateRight);
   await expect.poll(() => activeMediaTransform(page)).toMatch(/rotate\(90deg\)/);
 
   await page.locator('.shoji-nav-next').click();
