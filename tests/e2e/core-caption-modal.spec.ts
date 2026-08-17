@@ -51,6 +51,25 @@ async function openWithLongCaption(page: Page): Promise<void> {
   // caller needs this settled before it starts, so it belongs here once
   // rather than duplicated at every call site.
   await expect(page.locator('.shoji-caption').last()).toHaveClass(/shoji-caption--truncated/);
+  // The class landing doesn't mean the trailing recheck is done — the same
+  // `requestAnimationFrame` this comment describes above only *schedules*
+  // that recheck; it fires up to a frame later, and (Gallery.ts's own
+  // `updateCaptionTruncation()` sets `tabIndex`/class together, but a
+  // second real bug, WebKit/mobile-Safari-only and never reproduced
+  // locally: `.focus()` immediately after the class first appears can
+  // still land inside that later window, and toggling tabIndex off then
+  // back on mid-focus-attempt is enough to make it silently not take on
+  // WebKit) drop the caption's interactivity out from under a caller that
+  // acts the instant the class appears. Waiting two real animation frames
+  // (not a fixed timeout — this frame boundary is the actual mechanism,
+  // DESIGN.md §2.3a) guarantees that scheduled recheck has already run
+  // before any caller proceeds. Only the Enter/focus test below is
+  // actually sensitive to this (a plain click doesn't depend on tabIndex
+  // at all), but it's harmless for every other caller too.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
 }
 
 test('a caption long enough to exceed the arrow-aware cap truncates with an ellipsis, never overlapping the nav arrow', async ({
