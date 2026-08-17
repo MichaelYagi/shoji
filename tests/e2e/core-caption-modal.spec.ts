@@ -38,6 +38,19 @@ async function openWithLongCaption(page: Page): Promise<void> {
     const items = gallery.items.map((item, i) => (i === 0 ? { ...item, caption } : item));
     gallery.updateSlides(items);
   }, LONG_CAPTION);
+  // A real race, caught by CI running WebKit/mobile-Safari (never
+  // reproduced locally on Chromium/Firefox/mobile-Chrome): `--truncated`
+  // (and the `tabindex="0"` that comes with it, DESIGN.md §2.3a) isn't
+  // guaranteed to have landed the instant `updateSlides()` above returns —
+  // `updateCaptionTruncation()`'s own synchronous pass usually gets there
+  // first, but a `requestAnimationFrame`-deferred re-check (added for the
+  // reopen-consistency fix) can still be the one that actually finishes
+  // it. A caller that acts immediately (`.focus()` especially — a `<div>`
+  // with no `tabindex` yet is simply not focusable, so the very first key
+  // this exists to test never reaches anything) can race that gap. Every
+  // caller needs this settled before it starts, so it belongs here once
+  // rather than duplicated at every call site.
+  await expect(page.locator('.shoji-caption').last()).toHaveClass(/shoji-caption--truncated/);
 }
 
 test('a caption long enough to exceed the arrow-aware cap truncates with an ellipsis, never overlapping the nav arrow', async ({

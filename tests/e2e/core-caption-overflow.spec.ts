@@ -102,7 +102,13 @@ test('a very long caption stays height-capped and scrollable, instead of growing
   // and tests/e2e/core-caption-modal.spec.ts instead, not here.
   const stillOverflows = await caption.evaluate((el) => el.scrollHeight > el.clientHeight);
   expect(stillOverflows).toBe(true);
-  expect(caption).toHaveClass(/shoji-caption--truncated/);
+  // A real bug, caught by a flaky CI failure on WebKit: missing `await`
+  // here meant this auto-retrying assertion was never actually retried —
+  // just a single, unawaited check racing whatever `updateCaptionTruncation()`
+  // (still mid-flight, see its own `requestAnimationFrame`-deferred re-check,
+  // DESIGN.md §2.3a) had landed at that exact instant, not a real wait for
+  // the settled state the test is actually about.
+  await expect(caption).toHaveClass(/shoji-caption--truncated/);
 });
 
 test('regression: even a short caption on a full-bleed video click-throughs to the video, not just the space around it', async ({
