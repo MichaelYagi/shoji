@@ -30,6 +30,26 @@
         --shoji-layout-heading-subtitle-font-size: 0.5em;
         --shoji-layout-heading-subtitle-color: #444;
         visibility: hidden;
+        /* A real bug, confirmed directly: every live rebuild below
+           (buildGallery(), on any field's own change/input event) clears
+           this element via innerHTML = '' and reconstructs an entirely new
+           Shoji instance in it — a much bigger churn than the library's own
+           updateSlides()/reinit() ever do internally. For one frame while
+           the old 24 tiles are gone and the new ones haven't fully settled
+           yet, this container's real height briefly overshoots its final
+           value; the browser's own CSS scroll-anchoring then "corrects" the
+           page's scroll position for that transient change — but since the
+           anchor node it picks lives inside the very subtree being torn
+           down and rebuilt, it can pick a wildly unstable one and
+           overcorrect by many times the actual pixel delta, landing the
+           whole page hundreds of pixels away once the transient settles
+           back down. Confirmed directly: with this off, the same transient
+           height blip still happens but the page scroll follows it by
+           roughly the real delta and fully un-shifts once layout settles —
+           with it on, the scroll lands permanently offset. Scoped to this
+           element rather than the whole page since only this container is
+           ever torn down and rebuilt this way. */
+        overflow-anchor: none;
       }
 
       #gallery.shoji-layout {
@@ -97,12 +117,6 @@
         color: #666;
         margin: 0.25rem 0 0;
       }
-
-      #apply {
-        font-size: 0.9rem;
-        padding: 0.4rem 1rem;
-        cursor: pointer;
-      }
     </style>
   </head>
   <body>
@@ -125,19 +139,20 @@
     <h1>Playground</h1>
     <p>
       Every <code>GalleryOptions</code>/plugin-option field as a live form below the gallery — flip
-      settings, pick dynamic (JSON items) vs. selector (DOM markup) mode, and rebuild the gallery to
-      see the result immediately. All 24 items are generated inline (SVG placeholders, one real
-      HTML5 video, one YouTube link, one Vimeo link) — no external image assets, so this page has no
-      dependency beyond <code>dist/</code> and one small sample clip.
+      settings, pick dynamic (JSON items) vs. selector (DOM markup) mode, and the gallery rebuilds
+      itself immediately, no separate step. All 24 items are generated inline (SVG placeholders, one
+      real HTML5 video, one YouTube link, one Vimeo link) — no external image assets, so this page
+      has no dependency beyond <code>dist/</code> and one small sample clip.
     </p>
 
     <!--
 This file drives both DOM and dynamic modes from one options panel instead
 of a single hardcoded config — see buildGallery() at the bottom of the
 script. Every control rebuilds the gallery from scratch (destroy() + new
-Shoji(...)) on "Apply" rather than trying to patch a live instance, since
-several of these (data source, plugin roster, selector) aren't things
-reinit() alone covers cleanly for a harness meant to try any combination.
+Shoji(...)) live, on its own change/input event (debounced) — no separate
+Apply step — rather than trying to patch a live instance, since several of
+these (data source, plugin roster, selector) aren't things reinit() alone
+covers cleanly for a harness meant to try any combination.
 
 Intentionally NOT exposed as form fields, all for the same reason —
 they're function/open-object-shaped, not a plain value a form field can
@@ -372,8 +387,6 @@ its own id) rather than a real function input.
             applies), not sent as 0/empty-string.
           </p>
         </fieldset>
-
-        <button type="button" id="apply">Apply / rebuild gallery</button>
       </form>
     </div>
 
@@ -860,7 +873,26 @@ its own id) rather than a real function input.
       }
 
       populatePresetSelects();
-      document.getElementById('apply').addEventListener('click', buildGallery);
+
+      // Live — no separate Apply button. One delegated listener instead of
+      // wiring each field by id individually, so a newly added option
+      // field just works without a matching line here to remember to add.
+      // 'input' (fires per keystroke on text/number fields) and 'change'
+      // (checkboxes/radios/selects) together cover every control type;
+      // debounced so typing a multi-digit number doesn't rebuild the whole
+      // gallery — and flash it — on every single keystroke.
+      let rebuildTimer = null;
+      function scheduleRebuild() {
+        if (rebuildTimer !== null) clearTimeout(rebuildTimer);
+        rebuildTimer = setTimeout(() => {
+          rebuildTimer = null;
+          buildGallery();
+        }, 150);
+      }
+      const form = document.getElementById('options-form');
+      form.addEventListener('input', scheduleRebuild);
+      form.addEventListener('change', scheduleRebuild);
+
       buildGallery();
     </script>
   </body>
