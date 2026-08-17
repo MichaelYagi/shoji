@@ -51,11 +51,12 @@ afterEach(() => {
 });
 
 function toggleButton(): HTMLButtonElement {
-  // :not(.shoji-caption-toggle) excludes core's own video-caption toggle
-  // button, which now also lives in this slot (hidden outside a captioned
-  // video slide, but still a real .shoji-toolbar-button in the DOM).
+  // :not(.shoji-caption-toggle):not(.shoji-toolbar-overflow) excludes core's
+  // own video-caption toggle and toolbar-overflow caret, which also live in
+  // this slot (both hidden unless needed, but still real
+  // .shoji-toolbar-button elements in the DOM — DESIGN.md §3.1a).
   return document.querySelector(
-    '.shoji-toolbar-right .shoji-toolbar-button:not(.shoji-caption-toggle)',
+    '.shoji-toolbar-right .shoji-toolbar-button:not(.shoji-caption-toggle):not(.shoji-toolbar-overflow)',
   ) as HTMLButtonElement;
 }
 

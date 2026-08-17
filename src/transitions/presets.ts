@@ -191,7 +191,7 @@ const PRESET_LIST: TransitionPreset[] = [
   }),
 ];
 
-/** Keyed by name for `Gallery`'s `mode`/`mobileSettings.mode` lookup — an unrecognized string is treated as a custom CSS-class-pair mode instead (see `SlideTransition.animateCustom`), not an error. */
+/** Keyed by name for `Gallery`'s `mode` lookup — an unrecognized string is treated as a custom CSS-class-pair mode instead (see `SlideTransition.animateCustom`), not an error. */
 export const TRANSITION_PRESETS: Readonly<Record<string, TransitionPreset>> = Object.fromEntries(
   PRESET_LIST.map((p) => [p.name, p]),
 );

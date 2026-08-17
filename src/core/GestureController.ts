@@ -33,7 +33,7 @@ const VERTICAL_FEEDBACK_DISTANCE = 160;
  * actually stops that, not anything at the click-event layer.
  */
 export const INTERACTIVE_CONTROL_SELECTOR =
-  'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption, .shoji-caption-modal';
+  'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption, .shoji-caption-modal, .shoji-toolbar-overflow-panel';
 
 /** A click/drag starting on a real control shouldn't also be captured as a gesture — see `INTERACTIVE_CONTROL_SELECTOR`. */
 function shouldIgnoreGesture(event: PointerEvent): boolean {

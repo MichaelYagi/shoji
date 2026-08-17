@@ -1,4 +1,4 @@
-import { CAPTION_ICON, CLOSE_ICON, NEXT_ICON, PREV_ICON } from './icons';
+import { CAPTION_ICON, CARET_ICON, CLOSE_ICON, NEXT_ICON, PREV_ICON } from './icons';
 
 let idCounter = 0;
 
@@ -9,6 +9,7 @@ export interface LightboxLabels {
   showCaption: string;
   hideCaption: string;
   fullCaption: string; // DESIGN.md §2.3a — aria-label for the caption modal's own dialog role
+  moreControls: string; // DESIGN.md §3.1a — the toolbar overflow popover's own toggle/dialog label
 }
 
 export interface LightboxDom {
@@ -32,6 +33,10 @@ export interface LightboxDom {
   toolbarLeft: HTMLElement;
   toolbarCenter: HTMLElement;
   toolbarRight: HTMLElement;
+  /** DESIGN.md §3.1a — hidden unless the toolbar actually overflows; toggles `toolbarOverflowPanel`. Lives in `toolbarRight`, just before `closeButton`. */
+  toolbarOverflowButton: HTMLButtonElement;
+  /** DESIGN.md §3.1a — the floating popover collapsed plugin buttons relocate into once they don't fit. */
+  toolbarOverflowPanel: HTMLElement;
 }
 
 function iconButton(className: string, icon: string, label: string): HTMLButtonElement {
@@ -82,7 +87,27 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
   );
   captionToggleButton.setAttribute('aria-pressed', 'false');
   captionToggleButton.hidden = true;
-  toolbarRight.append(captionToggleButton, closeButton);
+  // DESIGN.md §3.1a — requested directly: close stays the absolute
+  // rightmost control, with the (usually hidden) overflow caret just to its
+  // left — `pluginToolbar()` inserts new buttons immediately before the
+  // caret now, not before close, so they still land to the left of both
+  // fixed controls.
+  const toolbarOverflowButton = iconButton(
+    'shoji-toolbar-button shoji-toolbar-overflow',
+    CARET_ICON,
+    labels.moreControls,
+  );
+  toolbarOverflowButton.setAttribute('aria-haspopup', 'true');
+  toolbarOverflowButton.setAttribute('aria-expanded', 'false');
+  toolbarOverflowButton.hidden = true;
+  toolbarRight.append(captionToggleButton, toolbarOverflowButton, closeButton);
+
+  const toolbarOverflowPanel = document.createElement('div');
+  toolbarOverflowPanel.className = 'shoji-toolbar-overflow-panel';
+  toolbarOverflowPanel.setAttribute('role', 'dialog');
+  toolbarOverflowPanel.setAttribute('aria-label', labels.moreControls);
+  toolbarOverflowPanel.tabIndex = -1;
+  toolbarOverflowPanel.hidden = true;
 
   // The counter lives in the toolbar's own left slot (flex flow, not
   // independent absolute positioning) specifically so a plugin button
@@ -95,6 +120,12 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
 
   toolbar.append(toolbarLeft, toolbarCenter, toolbarRight);
   dialog.appendChild(toolbar);
+  // Appended to `dialog` directly, not nested in `.shoji-toolbar` — the
+  // toolbar's own `pointer-events: none` base rule (re-enabled per-slot,
+  // not per-descendant) would otherwise need remembering to re-enable here
+  // too; sidestepped entirely by living outside it, same placement pattern
+  // `.shoji-caption-modal` already uses below.
+  dialog.appendChild(toolbarOverflowPanel);
 
   const prevButton = iconButton('shoji-nav shoji-nav-prev', PREV_ICON, labels.previous);
   const nextButton = iconButton('shoji-nav shoji-nav-next', NEXT_ICON, labels.next);
@@ -143,5 +174,7 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
     toolbarLeft,
     toolbarCenter,
     toolbarRight,
+    toolbarOverflowButton,
+    toolbarOverflowPanel,
   };
 }

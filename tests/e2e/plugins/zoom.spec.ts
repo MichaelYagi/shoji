@@ -1,4 +1,5 @@
 import { test, expect, type Page, type ElementHandle } from '@playwright/test';
+import { revealToolbarButton } from '../helpers';
 
 /**
  * Real-browser coverage for the Zoom plugin's gesture/DOM behavior — the
@@ -58,10 +59,17 @@ test('double-click zooms in, second double-click resets', async ({ page }) => {
 test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page }) => {
   await openLightbox(page);
 
+  // Zoom is the first-registered plugin (DESIGN.md §3.1a), so "Zoom in" —
+  // its first button — always stays pinned; "Zoom out" (its second) is the
+  // next to collapse into the popover once the row overflows, which
+  // mobile-chrome's own default viewport already does with this fixture's
+  // four toolbar plugins.
   await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
 
-  await page.locator('.shoji-toolbar-button[aria-label="Zoom out"]').click();
+  const zoomOut = page.locator('.shoji-toolbar-button[aria-label="Zoom out"]');
+  await revealToolbarButton(page, zoomOut);
+  await zoomOut.click();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
 
@@ -78,10 +86,17 @@ test('actual size toggles zoom (fixture image is scaled down to fit the dialog)'
   await page.setViewportSize({ width: 400, height: 300 });
   await openLightbox(page);
 
-  await page.locator('.shoji-toolbar-button[aria-label="Actual size"]').click();
+  // This viewport is narrow enough that Zoom's own "Actual size" button
+  // (registered after Zoom's other two buttons, DESIGN.md §3.1a) collapses
+  // into the overflow popover — reveal it before clicking, same as a real
+  // viewer would.
+  const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
+  await revealToolbarButton(page, actualSize);
+  await actualSize.click();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
 
-  await page.locator('.shoji-toolbar-button[aria-label="Actual size"]').click();
+  await revealToolbarButton(page, actualSize);
+  await actualSize.click();
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
 
@@ -147,6 +162,7 @@ test('regression: zoom-out back to neutral keeps transform-origin anchored until
   await openLightbox(page);
   const zoomIn = page.locator('.shoji-toolbar-button[aria-label="Zoom in"]');
   const zoomOut = page.locator('.shoji-toolbar-button[aria-label="Zoom out"]');
+  await revealToolbarButton(page, zoomOut); // "Zoom out" can collapse into the popover; see the test above
 
   await zoomIn.click(); // scale 1.5
   const img = await activeImgHandle(page);

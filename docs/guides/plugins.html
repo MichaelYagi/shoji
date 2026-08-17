@@ -187,7 +187,10 @@ new Shoji('#gallery', { plugins: [MyPlugin], myPlugin: { message: 'Hi!' } });</c
       <li>
         <code>ctx.ui.toolbar(slot, el)</code> — add a button/element to the <code>'left'</code>,
         <code>'center'</code>, or <code>'right'</code> toolbar slot. <code>'right'</code> is where
-        every official plugin puts its controls (inserted immediately before the close button).
+        every official plugin puts its controls (inserted immediately before the close button). If
+        too many buttons end up sharing a row for the viewport to fit, core collapses the extra ones
+        (latest-registered first) into a small popover behind a caret automatically — nothing a
+        plugin needs to handle itself.
       </li>
       <li>
         <code>ctx.ui.overlay(el, layer?)</code> — mount an element into the dialog, absolutely

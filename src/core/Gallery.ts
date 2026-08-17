@@ -43,6 +43,9 @@ function resolveElement(target: HTMLElement | string): HTMLElement {
 const instanceRegistry = new WeakMap<HTMLElement, Gallery>();
 const allInstances = new Set<Gallery>();
 
+/** DESIGN.md §3.1a — requested directly: 3 icons total share the toolbar's own row once it overflows (this many pinned plugin buttons, plus `closeButton` and `toolbarOverflowButton` itself) — everything else collapses into the popover. */
+const MIN_PINNED_PLUGIN_BUTTONS = 1;
+
 /** CLAUDE.md — all user-visible strings go through `locale`; these are the fallback defaults. */
 const DEFAULT_LOCALE = {
   close: 'Close',
@@ -52,6 +55,7 @@ const DEFAULT_LOCALE = {
   showCaption: 'Show caption',
   hideCaption: 'Hide caption',
   fullCaption: 'Full caption', // DESIGN.md §2.3a
+  moreControls: 'More controls', // DESIGN.md §3.1a
 };
 
 /**
@@ -188,6 +192,21 @@ export class Gallery {
   /** DESIGN.md §2.3a — a truncated caption's own click/Enter/Space target opens this; also gates `GestureController`'s `isZoomed` (alongside the real zoom gate) so a drag over the open modal can't also navigate/close the lightbox underneath it. */
   private captionModalOpen = false;
   private captionModalReturnFocus: HTMLElement | null = null;
+  /**
+   * DESIGN.md §3.1a — every `ctx.ui.toolbar()`-registered button, in
+   * registration order, alongside the slot it was registered into (so a
+   * collapsed one can be restored to the right place, not just anywhere).
+   * Registration order is what decides overflow priority: the first
+   * `MIN_PINNED_PLUGIN_BUTTONS` always stay pinned, the rest collapse into
+   * the popover before them, latest-registered first — see
+   * `measureToolbarOverflow()`.
+   */
+  private readonly pluginToolbarButtons: Array<{
+    el: HTMLElement;
+    slot: 'left' | 'center' | 'right';
+  }> = [];
+  private toolbarOverflowOpen = false;
+  private toolbarOverflowReturnFocus: HTMLElement | null = null;
   private readonly shortcuts = new Map<string, (e: KeyboardEvent) => void>();
   private readonly pluginStorage = new Map<string, unknown>();
   /** Backs `getActivePlugins()`. */
@@ -463,6 +482,37 @@ export class Gallery {
       event.stopPropagation();
       if (event.target === dom.captionModal) this.closeCaptionModal();
     });
+    dom.toolbarOverflowButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.toggleToolbarOverflow();
+    });
+    // Closes on any click outside the panel and off the caret itself —
+    // registered ahead of onOuterClick below (same-node listeners run in
+    // registration order) so it can stop the click there too, the same
+    // reasoning the caption modal's own backdrop-click listener above uses:
+    // without it, a click that closes the popover would also keep bubbling
+    // and get misread by onOuterClick as "clicked outside the real
+    // content," closing the whole lightbox in the same click.
+    dom.outer.addEventListener('click', (event) => {
+      if (!this.toolbarOverflowOpen) return;
+      // event.composedPath(), not event.target — a real bug, found testing
+      // this against Autoplay's own play/pause button (icon-swap-on-click,
+      // same class of button CLAUDE.md/DESIGN.md §2.8 already documents):
+      // if the click's own handler replaces the button's innerHTML
+      // synchronously (as that pattern does), `event.target` can already be
+      // a now-detached node by the time this bubble-phase listener runs —
+      // `.contains(target)` then reads false even though the click
+      // genuinely originated inside the panel, and the popover (wrongly)
+      // closes out from under the very button that was just clicked.
+      // composedPath() is captured at dispatch time, before any such
+      // mutation, so it stays accurate regardless.
+      const insidePanel = event
+        .composedPath()
+        .some((node) => node === dom.toolbarOverflowPanel || node === dom.toolbarOverflowButton);
+      if (insidePanel) return;
+      event.stopPropagation();
+      this.closeToolbarOverflow();
+    });
     dom.outer.addEventListener('click', this.onOuterClick);
     dom.outer.addEventListener('pointermove', this.onActivity, { passive: true });
     // Registered before onActivity's own pointerdown listener — order matters, see captureGestureStartState's doc comment.
@@ -503,16 +553,7 @@ export class Gallery {
     // plugin count or viewport width. rAF-batched, same pattern the Layout
     // plugin's own resize handling already uses (CLAUDE.md: batch DOM
     // writes that can thrash layout).
-    this.toolbarHeightObserver = new ResizeObserver(() => {
-      if (this.toolbarHeightFrame !== null) return;
-      this.toolbarHeightFrame = requestAnimationFrame(() => {
-        this.toolbarHeightFrame = null;
-        dom.dialog.style.setProperty(
-          '--shoji-toolbar-height',
-          `${dom.toolbar.getBoundingClientRect().height}px`,
-        );
-      });
-    });
+    this.toolbarHeightObserver = new ResizeObserver(() => this.scheduleToolbarOverflowMeasure());
     this.toolbarHeightObserver.observe(dom.toolbar);
 
     // DESIGN.md §2.4 — attached to the whole dialog (not just .shoji-slides)
@@ -539,7 +580,8 @@ export class Gallery {
         // caption modal is open, same mechanism the Zoom plugin's own gate
         // already uses, so a drag starting over the modal can't also
         // navigate/close the lightbox underneath it.
-        isZoomed: () => (this.zoomGate?.() ?? false) || this.captionModalOpen,
+        isZoomed: () =>
+          (this.zoomGate?.() ?? false) || this.captionModalOpen || this.toolbarOverflowOpen,
       },
       {
         onTap: (x, y) =>
@@ -625,11 +667,12 @@ export class Gallery {
   }
 
   /**
-   * DESIGN.md §3.1 — 'right' inserts immediately before the close button
-   * (never after), so close stays fixed rightmost and plugins cluster to
-   * its left in registration order: `plugins: [A, B, C]` reads A, B, C,
-   * close. 'left'/'center' are independent zones for a plugin that doesn't
-   * want to sit next to close.
+   * DESIGN.md §3.1 — 'right' inserts immediately before the overflow caret
+   * (DESIGN.md §3.1a — never after, and never after close either), so
+   * close stays fixed absolute-rightmost, the caret sits just to its left,
+   * and plugins cluster further left still, in registration order:
+   * `plugins: [A, B, C]` reads A, B, C, caret, close. 'left'/'center' are
+   * independent zones for a plugin that doesn't want to sit next to close.
    */
   private pluginToolbar(
     slot: 'left' | 'center' | 'right',
@@ -642,13 +685,18 @@ export class Gallery {
     const node = isRawElement ? el : this.buildToolbarButton(el);
     const unhover = isRawElement ? this.wireControlHover(node) : null;
     if (slot === 'right') {
-      dom.toolbarRight.insertBefore(node, dom.closeButton);
+      dom.toolbarRight.insertBefore(node, dom.toolbarOverflowButton);
     } else {
       (slot === 'left' ? dom.toolbarLeft : dom.toolbarCenter).appendChild(node);
     }
+    this.pluginToolbarButtons.push({ el: node, slot });
+    this.scheduleToolbarOverflowMeasure();
     return () => {
       unhover?.();
       node.remove();
+      const index = this.pluginToolbarButtons.findIndex((b) => b.el === node);
+      if (index !== -1) this.pluginToolbarButtons.splice(index, 1);
+      this.scheduleToolbarOverflowMeasure();
     };
   }
 
@@ -665,6 +713,123 @@ export class Gallery {
     button.addEventListener('click', spec.onClick);
     this.wireControlHover(button);
     return button;
+  }
+
+  /**
+   * DESIGN.md §3.1a — coalesces both toolbar-overflow measurement and the
+   * pre-existing `--shoji-toolbar-height` update into one rAF-batched pass
+   * (CLAUDE.md: batch DOM writes that can thrash layout), triggered by the
+   * toolbar's own `ResizeObserver` (width *or* height changes — a busy
+   * toolbar wrapping counts as both) and by `pluginToolbar()` registering
+   * or unregistering a button. Order matters: overflow collapse has to run
+   * *before* the height read, so the height custom property reflects the
+   * settled (ideally single-row, post-collapse) toolbar, not a momentarily
+   * wrapped one the caption's own height cap would otherwise over-reserve
+   * space for.
+   */
+  private scheduleToolbarOverflowMeasure(): void {
+    if (this.toolbarHeightFrame !== null) return;
+    this.toolbarHeightFrame = requestAnimationFrame(() => {
+      this.toolbarHeightFrame = null;
+      if (!this.dom) return;
+      this.measureToolbarOverflow();
+      this.dom.dialog.style.setProperty(
+        '--shoji-toolbar-height',
+        `${this.dom.toolbar.getBoundingClientRect().height}px`,
+      );
+    });
+  }
+
+  /**
+   * DESIGN.md §3.1a — collapses plugin toolbar buttons into
+   * `toolbarOverflowPanel` once they don't fit in one row, instead of
+   * letting the toolbar wrap to a second/third one. Always restores every
+   * plugin button to its own original slot first and recomputes from that
+   * clean slate, rather than incrementally adjusting whatever the previous
+   * pass left behind — the *set* of buttons and the viewport width can
+   * both have changed since then, and a fresh, deterministic pass is both
+   * simpler and self-correcting than trying to reason about a delta.
+   *
+   * "Fits in one row" is measured, not assumed: each slot's own rendered
+   * height is compared against `closeButton`'s (always exactly one row
+   * tall, always present) — a slot has wrapped if it's taller than that,
+   * regardless of *which* slot a plugin happened to register into (the
+   * three slots wrap independently, DESIGN.md §3.1a's own CSS notes).
+   *
+   * Collapses latest-registered first (DESIGN.md §3's own registration-
+   * order-is-priority convention — `plugins: [A, B, C]` keeps A pinned
+   * before B/C), stopping the instant it fits — never below
+   * `MIN_PINNED_PLUGIN_BUTTONS` pinned, even if that still leaves a slot
+   * wrapped on a pathologically narrow viewport; losing access to a button
+   * entirely is worse than an occasional short second row. Requested
+   * directly: exactly 3 icons total share the toolbar's own row once
+   * overflow is active — the pinned plugin button(s), `closeButton`, and
+   * `toolbarOverflowButton` itself — everything else relocates into the
+   * popover, which renders directly below that row.
+   */
+  private measureToolbarOverflow(): void {
+    if (!this.dom) return;
+    const dom = this.dom;
+    for (const { el, slot } of this.pluginToolbarButtons) {
+      if (slot === 'right') dom.toolbarRight.insertBefore(el, dom.toolbarOverflowButton);
+      else (slot === 'left' ? dom.toolbarLeft : dom.toolbarCenter).appendChild(el);
+    }
+    dom.toolbarOverflowPanel.replaceChildren();
+    dom.toolbarOverflowButton.hidden = true;
+    if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
+
+    const rowHeight = dom.closeButton.getBoundingClientRect().height;
+    const fitsOneRow = (): boolean =>
+      [dom.toolbarLeft, dom.toolbarCenter, dom.toolbarRight].every(
+        (slotEl) => slotEl.getBoundingClientRect().height <= rowHeight + 1,
+      );
+
+    if (this.pluginToolbarButtons.length <= MIN_PINNED_PLUGIN_BUTTONS || fitsOneRow()) return;
+
+    dom.toolbarOverflowButton.hidden = false;
+    for (let i = this.pluginToolbarButtons.length - 1; i >= MIN_PINNED_PLUGIN_BUTTONS; i--) {
+      if (fitsOneRow()) break;
+      // Collapsed latest-registered first (the decision above), but
+      // inserted at the *front* of the panel each time — the panel should
+      // read in the same left-to-right registration order the toolbar row
+      // itself would have shown, not reversed just because that's the order
+      // they were evaluated in.
+      dom.toolbarOverflowPanel.insertBefore(
+        this.pluginToolbarButtons[i]!.el,
+        dom.toolbarOverflowPanel.firstChild,
+      );
+    }
+  }
+
+  private readonly onToolbarOverflowKeydown = (event: KeyboardEvent): void => {
+    event.stopPropagation();
+    if (event.key === 'Escape') this.closeToolbarOverflow();
+  };
+
+  private toggleToolbarOverflow(): void {
+    if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
+    else this.openToolbarOverflow();
+  }
+
+  private openToolbarOverflow(): void {
+    if (!this.dom || this.toolbarOverflowOpen) return;
+    this.toolbarOverflowReturnFocus = document.activeElement as HTMLElement | null;
+    this.dom.toolbarOverflowPanel.hidden = false;
+    this.dom.toolbarOverflowButton.setAttribute('aria-expanded', 'true');
+    this.toolbarOverflowOpen = true;
+    this.focusTrap.retarget(this.dom.toolbarOverflowPanel);
+    document.addEventListener('keydown', this.onToolbarOverflowKeydown, true);
+  }
+
+  private closeToolbarOverflow(): void {
+    if (!this.dom || !this.toolbarOverflowOpen) return;
+    document.removeEventListener('keydown', this.onToolbarOverflowKeydown, true);
+    this.dom.toolbarOverflowPanel.hidden = true;
+    this.dom.toolbarOverflowButton.setAttribute('aria-expanded', 'false');
+    this.toolbarOverflowOpen = false;
+    this.focusTrap.retarget(this.dom.dialog);
+    this.toolbarOverflowReturnFocus?.focus({ preventScroll: true });
+    this.toolbarOverflowReturnFocus = null;
   }
 
   private pluginOverlay(el: HTMLElement, layer?: number): Unsubscribe {
@@ -768,8 +933,7 @@ export class Gallery {
    * `autoHideDelay: false` — a real bug, reported from real usage: Autoplay's
    * tap-to-toggle-chrome behavior called this directly and ignored `false`
    * entirely, since only the idle timer checked it. `false` has to hold for
-   * every caller, not just the timer — `mobileSettings.controls: false` is
-   * affected the same way, by design. `forceHideControls()`/
+   * every caller, not just the timer. `forceHideControls()`/
    * `setControlsHiddenForDrag()` (close, drag-to-close) deliberately don't
    * check this — direct user actions with their own feedback, not auto-hide.
    */
@@ -809,7 +973,13 @@ export class Gallery {
       this.autoHidden ||
       this.isControlActive() ||
       this.autoHideDelay === false ||
-      this.captionModalOpen
+      this.captionModalOpen ||
+      // DESIGN.md §3.1a — same reasoning as `captionModalOpen` immediately
+      // above: an idle timer already ticking down before the toolbar
+      // overflow popover opened isn't cancelled by opening it, and the
+      // popover is anchored to (visually part of) the toolbar this would
+      // hide out from under it.
+      this.toolbarOverflowOpen
     )
       return;
     this.autoHidden = true;
@@ -1158,7 +1328,6 @@ export class Gallery {
     document.addEventListener('keydown', this.onKeydown);
     this.focusTrap.activate(this.dom!.dialog);
     this.scheduleAutoHide();
-    this.applyMobileControlsSetting();
 
     const media = this.slides?.getActiveMedia();
     if (media && origin && naturalSize) {
@@ -1238,6 +1407,11 @@ export class Gallery {
     // gesture gate above suspends drag-navigate) would keep showing the
     // outgoing slide's text over the new slide.
     if (this.captionModalOpen) this.closeCaptionModal();
+    // DESIGN.md §3.1a — the popover's own position depends on the current
+    // toolbar height, which can change slide-to-slide (e.g. a video slide's
+    // caption-toggle button appearing/disappearing); simplest to just close
+    // it rather than reposition it mid-navigation.
+    if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
     const from = this.activeIndex;
     // beforeSlide fires first so a listener (e.g. Autoplay) can detach its
     // own 'pause' listener from the outgoing video before pauseMedia() below
@@ -1273,32 +1447,8 @@ export class Gallery {
     this.bus.emit('afterSlide', { from, to: clamped });
   }
 
-  /** DESIGN.md §2.5 — `mobileSettings.mode` overrides `mode` on a coarse-pointer device, evaluated fresh each navigation. */
   private resolveTransitionMode(): string {
-    if (this.isMobileQuery() && this.options.mobileSettings?.mode) {
-      return this.options.mobileSettings.mode;
-    }
     return this.options.mode ?? 'slide';
-  }
-
-  private isMobileQuery(): boolean {
-    return (
-      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
-    );
-  }
-
-  /**
-   * DESIGN.md §2.5 — `mobileSettings.controls: false` starts controls
-   * hidden on a coarse-pointer device, reusing the existing §2.8 auto-hide
-   * mechanism (`hideControls()`) rather than a separate permanent-hide
-   * state: auto-hide is opacity-only, never removed from the tab order,
-   * and already reveals on any activity — a genuinely *permanent* hide
-   * would strand a touch user with no way to ever reach Close.
-   */
-  private applyMobileControlsSetting(): void {
-    if (this.isMobileQuery() && this.options.mobileSettings?.controls === false) {
-      this.hideControls();
-    }
   }
 
   close(): void {
@@ -1335,6 +1485,7 @@ export class Gallery {
     // linger past the lightbox itself closing, and its own document-level
     // keydown listener needs removing before that.
     if (this.captionModalOpen) this.closeCaptionModal();
+    if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
     this.bus.emit('beforeClose', {});
 
     // .shoji-outer must stay display:block for the zoom-out to be visible,
@@ -1566,6 +1717,11 @@ export class Gallery {
       // destroyed instance, `stopPropagation()`-ing every future keydown on
       // the page regardless of what it's for.
       if (this.captionModalOpen) this.closeCaptionModal();
+      // Same gap, same fix, for the toolbar overflow popover (§3.1a) —
+      // teardown() skips beginClose() entirely, so a destroy()/reinit()
+      // while it happened to be open would leak its own document-level
+      // keydown listener the same way.
+      if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
       if (!this.isClosing) this.bus.emit('beforeClose', {});
       this.finishClose();
     }
@@ -1602,6 +1758,10 @@ export class Gallery {
     // detached elements forever, growing unbounded across repeated calls.
     this.hoverableElements.clear();
     this.hoveringElements.clear();
+    // Same reasoning: a plugin's own `ctx.ui.toolbar()` unsubscribe not
+    // being called for some reason must not leave stale, now-detached
+    // elements in here across a `reinit()` cycle either.
+    this.pluginToolbarButtons.length = 0;
   }
 
   destroy(): void {

@@ -14,10 +14,10 @@ const DEFAULT_RECT: DOMRect = {
   toJSON: () => ({}),
 };
 
-/** Query-aware: only `(pointer: coarse)` reports true when `coarse` is set — a blunt "matches everything" stub would also flip `prefers-reduced-motion` to true and silently skip every transition. */
-function mockMatchMedia(coarse: boolean): void {
-  window.matchMedia = vi.fn((query: string) => ({
-    matches: query.includes('pointer: coarse') && coarse,
+/** Never matches anything — a blunt "matches everything" stub would flip `prefers-reduced-motion` to true and silently skip every transition. */
+function mockMatchMedia(): void {
+  window.matchMedia = vi.fn(() => ({
+    matches: false,
   })) as unknown as typeof window.matchMedia;
 }
 
@@ -32,7 +32,7 @@ beforeEach(() => {
   // to vi.spyOn), so afterEach's restoreAllMocks() can't restore it — it
   // resets to a no-op instead, leaking `undefined` into whichever test runs
   // next unless every test starts from a known-good default here.
-  mockMatchMedia(false);
+  mockMatchMedia();
 });
 
 afterEach(() => {
@@ -114,83 +114,6 @@ describe('Gallery — transition system (DESIGN.md §2.5)', () => {
     expect(g!.classList.contains('shoji-transition-my-custom-flip-leave')).toBe(true);
 
     settleAnyGhost();
-    gallery.destroy();
-  });
-
-  it('mobileSettings.mode overrides mode under a coarse-pointer device', () => {
-    mockMatchMedia(true);
-    const gallery = new Gallery(document.body, {
-      items: items(3),
-      preload: 0,
-      mode: 'slide',
-      mobileSettings: { mode: 'fade' },
-    });
-    gallery.open(0);
-
-    gallery.next();
-    expect(ghost()!.style.opacity).toBe('0'); // fade, not slide's opacity:1
-
-    settleAnyGhost();
-    gallery.destroy();
-  });
-
-  it('mobileSettings.mode has no effect on a fine-pointer (desktop) device', () => {
-    mockMatchMedia(false);
-    const gallery = new Gallery(document.body, {
-      items: items(3),
-      preload: 0,
-      mode: 'slide',
-      mobileSettings: { mode: 'fade' },
-    });
-    gallery.open(0);
-
-    gallery.next();
-    expect(ghost()!.style.opacity).toBe('1'); // still slide, not overridden
-
-    settleAnyGhost();
-    gallery.destroy();
-  });
-
-  it('mobileSettings.controls: false starts controls hidden on a coarse-pointer device via the existing auto-hide mechanism', () => {
-    mockMatchMedia(true);
-    const gallery = new Gallery(document.body, {
-      items: items(2),
-      preload: 0,
-      mobileSettings: { controls: false },
-    });
-    gallery.open(0);
-
-    const dialog = document.querySelector('.shoji-dialog') as HTMLElement;
-    expect(dialog.classList.contains('shoji-controls-hidden')).toBe(true);
-    gallery.destroy();
-  });
-
-  it('mobileSettings.controls: false is overridden by autoHideDelay: false — the stronger, more explicit "never automatically hide controls" statement wins over the narrower mobile-only start-hidden convenience', () => {
-    mockMatchMedia(true);
-    const gallery = new Gallery(document.body, {
-      items: items(2),
-      preload: 0,
-      autoHideDelay: false,
-      mobileSettings: { controls: false },
-    });
-    gallery.open(0);
-
-    const dialog = document.querySelector('.shoji-dialog') as HTMLElement;
-    expect(dialog.classList.contains('shoji-controls-hidden')).toBe(false);
-    gallery.destroy();
-  });
-
-  it('mobileSettings.controls: false has no effect on a fine-pointer device', () => {
-    mockMatchMedia(false);
-    const gallery = new Gallery(document.body, {
-      items: items(2),
-      preload: 0,
-      mobileSettings: { controls: false },
-    });
-    gallery.open(0);
-
-    const dialog = document.querySelector('.shoji-dialog') as HTMLElement;
-    expect(dialog.classList.contains('shoji-controls-hidden')).toBe(false);
     gallery.destroy();
   });
 

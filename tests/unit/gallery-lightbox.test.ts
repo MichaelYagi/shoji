@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../src/core';
+import type { ShojiPlugin } from '../../src/core';
 
 beforeEach(() => {
   HTMLImageElement.prototype.decode = vi.fn().mockResolvedValue(undefined);
@@ -573,6 +574,228 @@ describe('Gallery — toolbar height measurement for caption sizing (DESIGN.md �
 
     gallery.destroy();
     expect(disconnect).toHaveBeenCalled();
+  });
+});
+
+describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
+  const originalRaf = window.requestAnimationFrame;
+
+  afterEach(() => {
+    window.requestAnimationFrame = originalRaf;
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * `scheduleToolbarOverflowMeasure()` coalesces same-tick calls behind a
+   * `toolbarHeightFrame !== null` guard, exactly like a real (async) rAF
+   * would — several plugins registering synchronously in the constructor
+   * schedule only ONE measurement, which then runs against the final state.
+   * A mock that ran the callback synchronously inline broke that: the
+   * `this.toolbarHeightFrame = requestAnimationFrame(cb)` assignment
+   * completes *after* `cb` already ran and reset the field to `null`,
+   * clobbering it back to non-null and silently swallowing every
+   * registration after the first. Other unrelated code (e.g. `open()`'s own
+   * transition) also calls `requestAnimationFrame` — a single-slot mock lets
+   * that clobber the still-pending toolbar callback before it ever runs.
+   * Queuing every scheduled callback and flushing them all, in order, once
+   * after setup — mirroring how real, independently-fired frames actually
+   * land — avoids both traps.
+   */
+  function mockRaf(): { flush: () => void } {
+    const queue: FrameRequestCallback[] = [];
+    let nextId = 1;
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      queue.push(cb);
+      return nextId++;
+    }) as typeof window.requestAnimationFrame;
+    return {
+      flush: () => queue.splice(0).forEach((cb) => cb(0)),
+    };
+  }
+
+  /**
+   * jsdom has no real layout engine — `getBoundingClientRect()` is 0 for
+   * everything by default, so `measureToolbarOverflow()` never sees a slot
+   * wrap. Simulates it: `.shoji-close` (the row-height reference) is a fixed
+   * 44px; any `.shoji-toolbar-slot` reports a height driven by how many of
+   * its *visible* (`!hidden`) children there are, wrapping every
+   * `buttonsPerRow`.
+   */
+  function mockToolbarWrap(buttonsPerRow: number): void {
+    // jsdom defines getBoundingClientRect as an own property of
+    // Element.prototype, not HTMLElement.prototype — spying on the latter
+    // silently never intercepts real element instances.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ): DOMRect {
+      const base = {
+        x: 0,
+        y: 0,
+        width: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        toJSON: () => ({}),
+      };
+      if (this.classList.contains('shoji-toolbar-slot')) {
+        const visible = Array.from(this.children).filter(
+          (child) => !(child as HTMLElement).hidden,
+        ).length;
+        const rows = Math.max(1, Math.ceil(visible / buttonsPerRow));
+        return { ...base, height: rows * 44 } as DOMRect;
+      }
+      return { ...base, height: 44 } as DOMRect;
+    });
+  }
+
+  function makeButtonPlugins(n: number): ShojiPlugin[] {
+    return Array.from({ length: n }, (_, i) => ({
+      name: `btn-${i}`,
+      init(ctx) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'shoji-toolbar-button';
+        button.dataset.testId = `btn-${i}`;
+        ctx.ui.toolbar('right', button);
+      },
+    }));
+  }
+
+  function panelIds(dialog: HTMLElement | Document = document): string[] {
+    return Array.from(dialog.querySelectorAll('.shoji-toolbar-overflow-panel [data-test-id]')).map(
+      (el) => (el as HTMLElement).dataset.testId!,
+    );
+  }
+
+  function pinnedIds(): string[] {
+    return Array.from(document.querySelectorAll('.shoji-toolbar-right [data-test-id]')).map(
+      (el) => (el as HTMLElement).dataset.testId!,
+    );
+  }
+
+  it('leaves every plugin button pinned and the caret hidden when the row already fits', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(8);
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(3) });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    expect(caret.hidden).toBe(true);
+    expect(pinnedIds()).toEqual(['btn-0', 'btn-1', 'btn-2']);
+    expect(panelIds()).toEqual([]);
+
+    gallery.destroy();
+  });
+
+  it('collapses down to MIN_PINNED_PLUGIN_BUTTONS (1) pinned button plus close and the caret when it overflows, latest-registered first', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    expect(caret.hidden).toBe(false);
+    // Exactly 3 icons share the row once collapsed: 1 pinned plugin button,
+    // close, and the caret — requested directly, see MIN_PINNED_PLUGIN_BUTTONS.
+    expect(pinnedIds()).toEqual(['btn-0']);
+    // Collapsed latest-registered first (btn-6 drops off the row before
+    // btn-1 does), but the panel itself reads in the same ascending
+    // registration order the toolbar row would have shown, not reversed.
+    expect(panelIds()).toEqual(['btn-1', 'btn-2', 'btn-3', 'btn-4', 'btn-5', 'btn-6']);
+
+    gallery.destroy();
+  });
+
+  it('restores collapsed buttons to the toolbar and re-hides the caret once they fit again (e.g. after a plugin unsubscribes)', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    let unsubscribeExtra: (() => void) | undefined;
+    const extraPlugin: ShojiPlugin = {
+      name: 'extra',
+      init(ctx) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.testId = 'extra';
+        unsubscribeExtra = ctx.ui.toolbar('right', button);
+      },
+    };
+    const gallery = makeGallery(3, { plugins: [...makeButtonPlugins(2), extraPlugin] });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    expect(caret.hidden).toBe(false);
+
+    unsubscribeExtra!();
+    flush();
+    expect(caret.hidden).toBe(true);
+    expect(pinnedIds()).toEqual(['btn-0', 'btn-1']);
+    expect(panelIds()).toEqual([]);
+
+    gallery.destroy();
+  });
+
+  it('opens the popover on caret click, closes it on Escape, and does not lose the underlying gallery on either', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    const panel = document.querySelector('.shoji-toolbar-overflow-panel') as HTMLElement;
+    caret.click();
+    expect(panel.hidden).toBe(false);
+    expect(caret.getAttribute('aria-expanded')).toBe('true');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(panel.hidden).toBe(true);
+    expect(caret.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+
+    gallery.destroy();
+  });
+
+  it('closes the popover on an outside click, but a click on one of its own buttons does not close it or the gallery', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    const panel = document.querySelector('.shoji-toolbar-overflow-panel') as HTMLElement;
+    caret.click();
+    expect(panel.hidden).toBe(false);
+
+    (panel.querySelector('[data-test-id]') as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(false);
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+
+    (document.querySelector('.shoji-backdrop') as HTMLElement).click();
+    expect(panel.hidden).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('destroying the gallery while the popover is open removes its document-level Escape listener — no leak', () => {
+    const { flush } = mockRaf();
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
+    gallery.open(0);
+    flush();
+
+    (document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement).click();
+    expect((document.querySelector('.shoji-toolbar-overflow-panel') as HTMLElement).hidden).toBe(
+      false,
+    );
+
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    gallery.destroy();
+    expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
   });
 });
 

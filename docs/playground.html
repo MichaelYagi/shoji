@@ -215,17 +215,6 @@ its own id) rather than a real function input.
         </fieldset>
 
         <fieldset>
-          <legend>mobileSettings (coarse pointer only)</legend>
-          <div class="row">
-            <label
-              >mode
-              <select id="opt-mobileMode"></select
-            ></label>
-            <label><input type="checkbox" id="opt-mobileControls" checked /> controls</label>
-          </div>
-        </fieldset>
-
-        <fieldset>
           <legend>gestures (blank = default)</legend>
           <div class="row">
             <label
@@ -720,19 +709,14 @@ its own id) rather than a real function input.
       };
 
       function populatePresetSelects() {
-        for (const select of [
-          document.getElementById('opt-mode'),
-          document.getElementById('opt-mobileMode'),
-        ]) {
-          for (const preset of TRANSITION_PRESETS) {
-            const option = document.createElement('option');
-            option.value = preset;
-            option.textContent = preset;
-            select.appendChild(option);
-          }
+        const select = document.getElementById('opt-mode');
+        for (const preset of TRANSITION_PRESETS) {
+          const option = document.createElement('option');
+          option.value = preset;
+          option.textContent = preset;
+          select.appendChild(option);
         }
-        document.getElementById('opt-mode').value = 'rotateLeft';
-        document.getElementById('opt-mobileMode').value = 'rotate';
+        select.value = 'rotateLeft';
       }
 
       const $ = (id) => document.getElementById(id);
@@ -790,10 +774,6 @@ its own id) rather than a real function input.
             ? false
             : Number($('opt-autoHideDelay').value),
           mode: $('opt-mode').value,
-          mobileSettings: {
-            mode: $('opt-mobileMode').value,
-            controls: checked('opt-mobileControls'),
-          },
           plugins,
           zoom: {
             maxScale: Number($('opt-zoom-maxScale').value),

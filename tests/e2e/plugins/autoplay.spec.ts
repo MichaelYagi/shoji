@@ -1,4 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
+import {
+  revealToolbarButton,
+  revealAndClickToolbarButton,
+  closeToolbarOverflowIfOpen,
+} from '../helpers';
 
 /**
  * Real timer-driven advance — the video-interrupt state machine (§4.1) is
@@ -15,13 +20,29 @@ async function openLightbox(page: Page): Promise<void> {
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 }
 
+// Autoplay is the fourth (last) of four toolbar plugins in the fixture
+// (DESIGN.md §3.1a) — its play/pause button is the first to collapse into
+// the overflow popover on any viewport too narrow to fit all four
+// (mobile-chrome's own default viewport included). `revealToolbarButton`
+// opens the popover first (only if the target isn't already on the row,
+// same as a real viewer would) before a click; navigating to a new slide
+// auto-closes it again (its position depends on the current toolbar
+// height), which can happen mid-test once autoplay is actually running, so
+// a click can need a fresh reveal even after an earlier one already
+// happened. Post-click *state* is checked via `toHaveCount(1)` (matching
+// the single toggling button node by its current aria-label) rather than
+// `toBeVisible()` — what these tests care about is whether play/pause
+// state flipped, not whether the toolbar happens to be showing it at that
+// exact moment.
+
 test('play button starts auto-advance and flips to a pause label', async ({ page }) => {
   await openLightbox(page);
   const button = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
 
   await expect(page.locator('.shoji-counter')).toHaveText('1 / 4');
+  await revealToolbarButton(page, button);
   await button.click();
-  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
 
   await expect
     .poll(() => page.locator('.shoji-counter').textContent(), { timeout: 3000 })
@@ -30,13 +51,20 @@ test('play button starts auto-advance and flips to a pause label', async ({ page
 
 test('pause stops the advance', async ({ page }) => {
   await openLightbox(page);
-  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await revealToolbarButton(page, playButton);
+  await playButton.click();
   await expect
     .poll(() => page.locator('.shoji-counter').textContent(), { timeout: 3000 })
     .toBe('2 / 4');
 
-  await page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]').click();
-  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toBeVisible();
+  // revealAndClickToolbarButton, not the plain reveal-then-click pair used
+  // elsewhere in this file: autoplay is actively running at this point, so
+  // a navigate() (which auto-closes the popover) can land in the gap
+  // between a one-shot reveal check and the click itself.
+  const pauseButton = page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]');
+  await revealAndClickToolbarButton(page, pauseButton);
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1);
 
   const afterPause = await page.locator('.shoji-counter').textContent();
   await page.waitForTimeout(700); // several intervals' worth — must not have advanced
@@ -45,12 +73,19 @@ test('pause stops the advance', async ({ page }) => {
 
 test('Space toggles play/pause', async ({ page }) => {
   await openLightbox(page);
+  // Deliberately does NOT reveal the button first: while the overflow
+  // popover is open, its own keydown handler swallows every key but
+  // Escape in the capture phase (DESIGN.md §3.1a, same isolation the
+  // caption modal's own keydown handling established) — opening it here
+  // would break the very shortcut this test exists to check. The toggle is
+  // verified on the DOM state itself (the aria-label the single button
+  // node swaps between), not visibility, since the button may be sitting
+  // collapsed, off-screen, in a closed popover on a narrow viewport.
+  await page.keyboard.press('Space');
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
 
   await page.keyboard.press('Space');
-  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toBeVisible();
-
-  await page.keyboard.press('Space');
-  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toBeVisible();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1);
 });
 
 test('loops back to the first slide after the last, by default (loop: true)', async ({ page }) => {
@@ -59,7 +94,9 @@ test('loops back to the first slide after the last, by default (loop: true)', as
   await expect(page.locator('.shoji-dialog')).toBeVisible();
   await expect(page.locator('.shoji-counter')).toHaveText('4 / 4');
 
-  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await revealToolbarButton(page, playButton);
+  await playButton.click();
   await expect
     .poll(() => page.locator('.shoji-counter').textContent(), { timeout: 3000 })
     .toBe('1 / 4');
@@ -87,7 +124,9 @@ test('the progress bar fades out with the rest of the controls when the close an
   await page.goto('/pages/e2e-plugins.html?interval=60000'); // long enough it never advances mid-test
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
-  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await revealToolbarButton(page, playButton);
+  await playButton.click();
 
   const progress = page.locator('.shoji-autoplay-progress');
   await expect(progress).toBeVisible();
@@ -132,7 +171,12 @@ test('the progress bar stays visible through ordinary idle auto-hide, unlike the
   await page.goto('/pages/e2e-plugins.html?interval=60000&autoHideDelay=600');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
-  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await revealToolbarButton(page, playButton);
+  await playButton.click();
+  // Not what this test is about — an open popover would itself block idle
+  // auto-hide (DESIGN.md §3.1a), silently defeating the assertions below.
+  await closeToolbarOverflowIfOpen(page);
   await page.mouse.move(5, 5); // off any control, so idle auto-hide isn't paused by hover
 
   const progress = page.locator('.shoji-autoplay-progress');

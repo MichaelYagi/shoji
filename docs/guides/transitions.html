@@ -227,17 +227,6 @@
       <code>@keyframes</code> animation both work.
     </p>
 
-    <h2>Per-device override</h2>
-    <p>
-      <code>mobileSettings.mode</code> overrides <code>mode</code> on a coarse-pointer device
-      (touch-primary, checked via <code>(pointer: coarse)</code> — not a viewport-width breakpoint,
-      so a narrow desktop window doesn't count):
-    </p>
-    <pre><code>new Shoji('#gallery', {
-  mode: 'cube',
-  mobileSettings: { mode: 'fade' }, // simpler animation on touch devices
-});</code></pre>
-
     <h2>Timing, easing, and reduced motion</h2>
     <p>
       Duration and easing are CSS custom properties, not JS options —

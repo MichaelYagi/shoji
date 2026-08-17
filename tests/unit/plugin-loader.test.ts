@@ -170,7 +170,7 @@ describe('Plugin loader', () => {
     gallery.destroy();
   });
 
-  it("multiple plugins using 'right' preserve registration order, immediately followed by close — [A, B, C] reads A, B, C, close", () => {
+  it("multiple plugins using 'right' preserve registration order, immediately followed by the overflow caret then close — [A, B, C] reads A, B, C, caret, close", () => {
     const makeButtonPlugin = (name: string, label: string): ShojiPlugin =>
       stubPlugin({
         name,
@@ -189,9 +189,11 @@ describe('Plugin loader', () => {
 
     const children = Array.from(document.querySelector('.shoji-toolbar-right')!.children);
     // Leading '' — core's own video-caption toggle button (hidden here, no
-    // video slide active, but still a real child of this slot); trailing
-    // '' — close, both icon-only, no text.
-    expect(children.map((el) => el.textContent)).toEqual(['', 'A', 'B', 'C', '']);
+    // video slide active, but still a real child of this slot); trailing two
+    // '' — the (also hidden here) toolbar-overflow caret, then close, per
+    // DESIGN.md §3.1a — all icon-only, no text.
+    expect(children.map((el) => el.textContent)).toEqual(['', 'A', 'B', 'C', '', '']);
+    expect(children.at(-2)!.classList.contains('shoji-toolbar-overflow')).toBe(true);
     expect(children.at(-1)!.classList.contains('shoji-close')).toBe(true);
 
     gallery.destroy();

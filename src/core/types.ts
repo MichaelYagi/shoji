@@ -105,9 +105,8 @@ export interface GalleryOptions {
    * on open and stay hidden permanently, regardless of activity. `false` is
    * the actual "always visible" value: the idle timer never arms at all, so
    * controls just stay shown, same as if activity kept resetting it forever
-   * (other explicit hides — `mobileSettings.controls: false`,
-   * `hideControls()`, drag-to-close's own live cue — are unrelated to this
-   * option and still work regardless).
+   * (other explicit hides — `hideControls()`, drag-to-close's own live cue —
+   * are unrelated to this option and still work regardless).
    */
   autoHideDelay?: number | false;
   /**
@@ -178,21 +177,6 @@ export interface GalleryOptions {
    * needed on the host's end.
    */
   mode?: string;
-  /**
-   * DESIGN.md §2.5 — overrides `mode`/hides baseline controls (§2.6a) under
-   * a `(pointer: coarse)` device (touch-primary, not a viewport-width
-   * breakpoint — a narrow desktop window isn't "mobile" here). Deliberately
-   * scoped to just these two fields, matching this section's own example,
-   * rather than a general "override any GalleryOptions field under a media
-   * query" mechanism — nothing in the roster needs broader coverage yet,
-   * and that would be a substantially larger, riskier feature to build
-   * speculatively (CLAUDE.md).
-   */
-  mobileSettings?: {
-    mode?: string;
-    /** `false` starts controls hidden on a coarse-pointer device (via the existing §2.8 auto-hide, not a separate permanent-hide state) — they still reveal on any activity, same as normal auto-hide; a viewer is never actually stranded without a way to reach Close. */
-    controls?: boolean;
-  };
   [key: string]: unknown;
 }
 

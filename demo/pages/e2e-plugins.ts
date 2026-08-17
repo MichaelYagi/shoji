@@ -1,5 +1,5 @@
 import Shoji from '../../src/index';
-import type { Gallery, GalleryItem } from '../../src/core';
+import type { Gallery, GalleryItem, ShojiPlugin } from '../../src/core';
 import { wireStatus } from '../status';
 
 const thumbs = document.querySelector<HTMLDivElement>('#thumbs');
@@ -62,6 +62,27 @@ if (thumbs && status) {
   // real wait — same override pattern as ?interval= above.
   const autoHideDelayParam = Number(new URLSearchParams(location.search).get('autoHideDelay'));
   const autoHideDelay = autoHideDelayParam > 0 ? autoHideDelayParam : undefined;
+  // DESIGN.md §3.1a — deterministically forces the toolbar to overflow,
+  // same override pattern as ?interval=/?autoHideDelay= above: a handful of
+  // inert `ctx.ui.toolbar('right', ...)` buttons, one plugin per button so
+  // registration order (the popover's own collapse priority) is legible in
+  // a test. Absent by default — the five real plugins below don't overflow
+  // a normal viewport on their own.
+  const extraButtonsParam = Number(new URLSearchParams(location.search).get('extraToolbarButtons'));
+  const extraButtonPlugins: ShojiPlugin[] = Array.from(
+    { length: extraButtonsParam > 0 ? extraButtonsParam : 0 },
+    (_, i) => ({
+      name: `e2e-extra-button-${i}`,
+      init(ctx) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'shoji-toolbar-button e2e-extra-button';
+        button.dataset.e2eButton = String(i);
+        button.textContent = String(i);
+        ctx.ui.toolbar('right', button);
+      },
+    }),
+  );
   const gallery = new Shoji(thumbs, {
     items,
     plugins: [
@@ -70,6 +91,7 @@ if (thumbs && status) {
       Shoji.RotateFlip,
       Shoji.Autoplay,
       Shoji.ActiveThumbnail,
+      ...extraButtonPlugins,
     ],
     autoplay: { interval },
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),

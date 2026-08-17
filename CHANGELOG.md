@@ -21,6 +21,19 @@ still include breaking changes).
   can't be misread as a tap-to-toggle on the photo underneath), and
   suspends drag-to-navigate/close the same way the Zoom plugin's own pan
   gesture already does. See DESIGN.md §2.3a.
+- A toolbar with more plugin buttons than a narrow viewport has room for no
+  longer wraps to a second/third row — once the row measurably doesn't fit,
+  buttons collapse (latest-registered first) into a floating popover
+  revealed by a caret just to the left of the close button, keeping exactly the pinned
+  button, close, and the caret sharing the toolbar's own row — the popover
+  itself lists them in the same order they'd have read on the toolbar, not
+  reversed. Opens on caret click, closes on Escape/an outside click,
+  keyboard-confined while open
+  (Tab cycling narrows to it, matching the caption modal's own focus-trap
+  behavior), and restores every button to its normal slot the moment it fits
+  again. Replaces the removed `mobileSettings.controls` (see "Removed"
+  below) as the actual, measured-overflow answer to a busy toolbar. See
+  DESIGN.md §3.1a.
 
 ### Changed
 
@@ -38,16 +51,24 @@ still include breaking changes).
   vertically-centered nav arrows sharing the caption's own left edge.
   Beyond that, see "Added" above — it truncates and opens a modal instead
   of scrolling in place. See DESIGN.md §2.3a.
-- Core's size budget raised 26.9 kB → 33 kB (min+gzip) for the caption
-  modal above and the real bugs fixed while testing it end to end (see
-  "Fixed" below) — real, deliberate growth, not incidental. See DESIGN.md's
-  own budget-history note.
+- Core's size budget raised 26.9 kB → 35 kB (min+gzip) — 26.9 kB → 33 kB for
+  the caption modal above and the real bugs fixed while testing it end to
+  end, then 33 kB → 35 kB for the hover-tracking rewrite (see "Fixed" below)
+  and the toolbar overflow popover above — real, deliberate growth, not
+  incidental. See DESIGN.md's own budget-history note.
 
 ### Removed
 
 - `Autoplay`'s tap/click-to-toggle-play/pause on an image slide — requested
   directly ("too disruptive"). The toolbar play/pause button and the
   `Space` shortcut are unaffected; only the tap-on-the-photo path is gone.
+- **Breaking:** `mobileSettings` (`{ mode?, controls? }`) removed entirely.
+  Neither field's motivation held up under review: `mode` only ever
+  affected _programmatic_ navigation (a gesture-completed swipe always
+  plays its own animation regardless of `mode`), and `controls: false`
+  only ever affected the very first instant of `open()`, not persisted
+  per-slide. Neither had a validated use case behind it. See DESIGN.md
+  §2.5.
 
 ### Fixed
 
