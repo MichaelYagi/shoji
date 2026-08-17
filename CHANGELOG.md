@@ -7,6 +7,21 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- A long caption now truncates (with a visible `…`) instead of growing
+  tall enough to risk covering the nav arrows or scrolling forever in
+  place — click, tap, or `Enter`/`Space` on a truncated caption opens a
+  scrollable modal with the full text (rich HTML/links included, same
+  rendering as the caption itself). Only ever shown/interactive when the
+  caption genuinely doesn't fit; a caption that already fits is unaffected.
+  While open, the modal fully isolates the background gallery from both
+  keyboard input (nothing leaks through to shortcuts like Autoplay's own
+  `Space` play/pause) and gesture/tap recognition (clicking inside it
+  can't be misread as a tap-to-toggle on the photo underneath), and
+  suspends drag-to-navigate/close the same way the Zoom plugin's own pan
+  gesture already does. See DESIGN.md §2.3a.
+
 ### Changed
 
 - The caption box's default max-width now narrows to roughly a quarter of
@@ -16,16 +31,46 @@ still include breaking changes).
   a bar rather than a caption sized to its own content. Desktop-only: a
   narrow/mobile viewport still spans (almost) the full width, unchanged.
 - The caption box's default max-height no longer caps early at a fixed
-  `min(8rem, 30%)` — it now grows naturally with its content on every
-  viewport, only capping (and scrolling) once it would reach up under the
-  toolbar. The toolbar's real rendered height is now measured (a new
-  `ResizeObserver` in `Gallery.ts`) rather than assumed as a fixed
-  single-row figure, so this stays correct even when a busy toolbar (many
-  plugins' buttons) wraps to multiple rows on a narrow viewport. See
-  DESIGN.md §2.3a.
+  `min(8rem, 30%)` — it now grows naturally with its content up to
+  whichever is smaller: the toolbar's real measured height (a new
+  `ResizeObserver` in `Gallery.ts`, correct even when a busy toolbar wraps
+  to multiple rows) or a pure-geometry ceiling that stays clear of the
+  vertically-centered nav arrows sharing the caption's own left edge.
+  Beyond that, see "Added" above — it truncates and opens a modal instead
+  of scrolling in place. See DESIGN.md §2.3a.
+- Core's size budget raised 26.9 kB → 31 kB (min+gzip) for the caption
+  modal above and the real bugs fixed while testing it end to end (see
+  "Fixed" below) — real, deliberate growth, not incidental. See DESIGN.md's
+  own budget-history note.
+
+### Removed
+
+- `Autoplay`'s tap/click-to-toggle-play/pause on an image slide — requested
+  directly ("too disruptive"). The toolbar play/pause button and the
+  `Space` shortcut are unaffected; only the tap-on-the-photo path is gone.
 
 ### Fixed
 
+- A truncated caption could show a sliver of clipped text bleeding through
+  below its own `…` ellipsis, in a real browser, not just this project's
+  own sandbox — a plain pixel `max-height` clip doesn't know where a line
+  of text actually ends. Fixed by measuring the browser's own real line
+  geometry (`Range.getClientRects()`) and snapping the cap to an exact line
+  boundary, rather than assuming one arithmetically. See DESIGN.md §2.3a.
+- Reopening the same already-loaded slide (e.g. clicking the same
+  thumbnail twice) could show its caption with no truncation/ellipsis at
+  all, inconsistent with that same slide's first open — the measurement
+  could run before the dialog had actually finished laying out, on a path
+  a fresh (slower, async) first open doesn't hit. See DESIGN.md §2.3a.
+- The cursor (and the rest of the gallery's controls) could vanish while
+  the caption modal was open and being read, if an idle auto-hide timer
+  from before the modal opened was still in flight — `hideControls()`
+  didn't know to stay a no-op for the modal's own lifetime. See DESIGN.md
+  §2.3a/§2.8.
+- `destroy()` while the caption modal was open left its document-level
+  keydown listener attached forever — `teardown()` closes the lightbox via
+  a different path than a normal close, one that skipped the modal
+  cleanup. See DESIGN.md §2.3a.
 - `Zoom`'s pan-while-zoomed gesture never called `setPointerCapture`, unlike
   every other pointer-driven gesture in the codebase: a fast pan whose
   pointer exited the lightbox's bounds mid-drag stopped receiving further

@@ -8,6 +8,7 @@ export interface LightboxLabels {
   next: string;
   showCaption: string;
   hideCaption: string;
+  fullCaption: string; // DESIGN.md §2.3a — aria-label for the caption modal's own dialog role
 }
 
 export interface LightboxDom {
@@ -20,6 +21,11 @@ export interface LightboxDom {
   prevButton: HTMLButtonElement;
   nextButton: HTMLButtonElement;
   captionToggleButton: HTMLButtonElement; // DESIGN.md §2.3a
+  /** DESIGN.md §2.3a — a truncated caption's click/Enter/Space target opens this, showing the full text scrollable, so a long caption never has to cover the nav arrows to be readable. Hidden (`[hidden]`) whenever not open. */
+  captionModal: HTMLElement;
+  captionModalPanel: HTMLElement;
+  captionModalContent: HTMLElement;
+  captionModalCloseButton: HTMLButtonElement;
   /** The whole toolbar bar — DESIGN.md §2.3a's toolbar-height measurement observes this, not any one slot, since it's what actually wraps to multiple rows. */
   toolbar: HTMLElement;
   /** DESIGN.md §3 — `ctx.ui.toolbar(slot, ...)` inserts into these; close lives in `right`. */
@@ -101,6 +107,22 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
   caption.className = 'shoji-caption';
   dialog.appendChild(caption);
 
+  const captionModal = document.createElement('div');
+  captionModal.className = 'shoji-caption-modal';
+  captionModal.hidden = true;
+  const captionModalPanel = document.createElement('div');
+  captionModalPanel.className = 'shoji-caption-modal-panel';
+  captionModalPanel.setAttribute('role', 'dialog');
+  captionModalPanel.setAttribute('aria-modal', 'true');
+  captionModalPanel.setAttribute('aria-label', labels.fullCaption);
+  captionModalPanel.tabIndex = -1;
+  const captionModalCloseButton = iconButton('shoji-caption-modal-close', CLOSE_ICON, labels.close);
+  const captionModalContent = document.createElement('div');
+  captionModalContent.className = 'shoji-caption-modal-content';
+  captionModalPanel.append(captionModalCloseButton, captionModalContent);
+  captionModal.appendChild(captionModalPanel);
+  dialog.appendChild(captionModal);
+
   outer.appendChild(dialog);
 
   return {
@@ -109,6 +131,10 @@ export function buildLightboxDom(slides: HTMLElement, labels: LightboxLabels): L
     dialog,
     counter,
     caption,
+    captionModal,
+    captionModalPanel,
+    captionModalContent,
+    captionModalCloseButton,
     closeButton,
     prevButton,
     nextButton,

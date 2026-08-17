@@ -94,9 +94,15 @@ test('a very long caption stays height-capped and scrollable, instead of growing
   // height}, not a DOMRect — bottom computed manually.
   expect(box.y).toBeGreaterThanOrEqual(toolbarBox.y + toolbarBox.height);
 
-  // The full text is still reachable — scrollable, not truncated/lost.
-  const isScrollable = await caption.evaluate((el) => el.scrollHeight > el.clientHeight);
-  expect(isScrollable).toBe(true);
+  // Confirms the cap actually engaged (this caption genuinely doesn't fit),
+  // not that it's scrollable in place — DESIGN.md §2.3a's later truncated-
+  // caption-modal work replaced in-place scrolling with truncate + a
+  // separate modal to read the rest; that modal's own reachability (click/
+  // tap/Enter, focus, content) is covered by tests/unit/gallery-lightbox.test.ts
+  // and tests/e2e/core-caption-modal.spec.ts instead, not here.
+  const stillOverflows = await caption.evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(stillOverflows).toBe(true);
+  expect(caption).toHaveClass(/shoji-caption--truncated/);
 });
 
 test('regression: even a short caption on a full-bleed video click-throughs to the video, not just the space around it', async ({

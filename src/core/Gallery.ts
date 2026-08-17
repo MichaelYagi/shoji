@@ -51,6 +51,7 @@ const DEFAULT_LOCALE = {
   playVideo: 'Play video',
   showCaption: 'Show caption',
   hideCaption: 'Hide caption',
+  fullCaption: 'Full caption', // DESIGN.md §2.3a
 };
 
 /**
@@ -149,6 +150,10 @@ export class Gallery {
   /** DESIGN.md §2.3a — measures `.shoji-toolbar`'s real rendered height (it can wrap to multiple rows on a narrow viewport with many toolbar buttons registered) so the caption's own height cap can reserve exactly that much space, not a fixed single-row guess. */
   private toolbarHeightObserver: ResizeObserver | null = null;
   private toolbarHeightFrame: number | null = null;
+  private captionTruncationFrame: number | null = null;
+  /** DESIGN.md §2.3a — a truncated caption's own click/Enter/Space target opens this; also gates `GestureController`'s `isZoomed` (alongside the real zoom gate) so a drag over the open modal can't also navigate/close the lightbox underneath it. */
+  private captionModalOpen = false;
+  private captionModalReturnFocus: HTMLElement | null = null;
   private readonly shortcuts = new Map<string, (e: KeyboardEvent) => void>();
   private readonly pluginStorage = new Map<string, unknown>();
   /** Backs `getActivePlugins()`. */
@@ -193,7 +198,14 @@ export class Gallery {
       this.autoHideDelay === 0 ||
       this.autoHideDelay === false ||
       this.isClosing ||
-      this.controlsHiddenByDrag
+      this.controlsHiddenByDrag ||
+      // DESIGN.md §2.3a — requested directly: mouse movement/interaction
+      // over the open caption modal shouldn't re-reveal controls already
+      // hidden behind it — `dom.outer`'s own pointermove/pointerdown/etc.
+      // listeners (below) still see it bubble through, same as any other
+      // activity, so without this an idle-hidden toolbar would pop back
+      // the instant the viewer so much as moved the mouse to read.
+      this.captionModalOpen
     )
       return;
     this.showControls();
@@ -243,6 +255,31 @@ export class Gallery {
       }
     }
     event.preventDefault();
+  };
+
+  /**
+   * DESIGN.md §2.3a — capture phase, added only while the caption modal is
+   * open (not from `open()` onward like `onKeydown`, which is bubble
+   * phase): capture always finishes before bubble starts, so
+   * `stopPropagation()` here reliably beats `onKeydown`'s own bubble-phase
+   * handling regardless of where in the dialog focus happens to be. A real
+   * bug, reported from real usage: an earlier version of this only special-
+   * cased `Escape`, leaving every other key (`Space` — Autoplay's own
+   * play/pause shortcut if that plugin's loaded, arrow keys, `w`/`s` for
+   * Zoom, any plugin-registered shortcut) to fall straight through to
+   * `onKeydown` while the modal sat open on screen. A modal dialog should
+   * make the background fully inert to keyboard input while it's open, not
+   * just for one key — so this now stops propagation for *every* key
+   * unconditionally, closing the modal as the one piece of extra behavior
+   * layered on top for `Escape` specifically. Deliberately no
+   * `preventDefault()` here — the modal's own contents (the close button,
+   * a scrollable panel) keep their normal native key behavior (Space
+   * activating a focused button, arrow/Space scrolling), only the
+   * *background* gallery is what this isolates it from.
+   */
+  private readonly onCaptionModalKeydown = (event: KeyboardEvent): void => {
+    event.stopPropagation();
+    if (event.key === 'Escape') this.closeCaptionModal();
   };
 
   constructor(target: HTMLElement | string, options: GalleryOptions = {}) {
@@ -378,6 +415,19 @@ export class Gallery {
       this.captionVisibleOnVideo = !this.captionVisibleOnVideo;
       this.updateCaptionVisibility();
     });
+    dom.caption.addEventListener('click', this.onCaptionActivate);
+    dom.caption.addEventListener('keydown', this.onCaptionActivate);
+    dom.captionModalCloseButton.addEventListener('click', () => this.closeCaptionModal());
+    // Closes on a genuine backdrop click (the modal element itself, not a
+    // descendant) — always stops propagation regardless, since without it
+    // *any* click anywhere inside the modal (the panel, its content, even
+    // the close button) would keep bubbling up to onOuterClick below and
+    // get misread as "clicked outside the real content," closing the whole
+    // lightbox out from under it.
+    dom.captionModal.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (event.target === dom.captionModal) this.closeCaptionModal();
+    });
     dom.outer.addEventListener('click', this.onOuterClick);
     dom.outer.addEventListener('pointermove', this.onActivity, { passive: true });
     // Registered before onActivity's own pointerdown listener — order matters, see captureGestureStartState's doc comment.
@@ -399,6 +449,7 @@ export class Gallery {
       dom.nextButton,
       dom.captionToggleButton,
       dom.caption,
+      dom.captionModalPanel,
       dom.counter,
       dom.toolbarLeft,
       dom.toolbarCenter,
@@ -449,7 +500,11 @@ export class Gallery {
         setControlsHiddenForDrag: (hidden) => this.setControlsHiddenForDrag(hidden),
         canClose: () => this.closable,
         onActivity: () => this.onActivity(),
-        isZoomed: () => this.zoomGate?.() ?? false,
+        // DESIGN.md §2.3a — also suspends drag-to-navigate/close while the
+        // caption modal is open, same mechanism the Zoom plugin's own gate
+        // already uses, so a drag starting over the modal can't also
+        // navigate/close the lightbox underneath it.
+        isZoomed: () => (this.zoomGate?.() ?? false) || this.captionModalOpen,
       },
       {
         onTap: (x, y) =>
@@ -669,7 +724,22 @@ export class Gallery {
    * check this — direct user actions with their own feedback, not auto-hide.
    */
   hideControls(): void {
-    if (!this.dom || this.autoHidden || this.isControlActive() || this.autoHideDelay === false)
+    // A real bug, reported from real usage: an idle timer already ticking
+    // down before the caption modal opened isn't cancelled by opening it
+    // (DESIGN.md §2.3a) — `onActivity()`'s own `captionModalOpen` guard
+    // only stops a *new* timer being armed while it's open, it doesn't stop
+    // one already in flight from firing. Left unguarded here, that timer
+    // could still call this mid-read, and `.shoji-controls-hidden`'s own
+    // `cursor: none` (shoji.css) applies to the whole dialog including the
+    // modal's own backdrop/panel — the cursor visibly vanishing over text
+    // the viewer is actively reading, not idling on.
+    if (
+      !this.dom ||
+      this.autoHidden ||
+      this.isControlActive() ||
+      this.autoHideDelay === false ||
+      this.captionModalOpen
+    )
       return;
     this.autoHidden = true;
     this.dom.dialog.classList.add('shoji-controls-hidden');
@@ -752,6 +822,213 @@ export class Gallery {
         ? this.locale.hideCaption
         : this.locale.showCaption;
     }
+    this.updateCaptionTruncation();
+    // A real bug, reported from real usage: reopening an already-loaded
+    // slide (e.g. clicking the same thumbnail twice) skips the async
+    // image-decode path entirely — nothing re-runs this measurement once
+    // the dialog actually finishes laying out, so the synchronous call
+    // above can catch it mid-layout (still effectively 0×0 at that exact
+    // point, even though `hidden` itself is already correctly false) and
+    // wrongly conclude nothing overflows. A fresh *first* open happens to
+    // dodge this because real image decode work is slow enough that by the
+    // time it resolves, layout has already settled — not something a
+    // reopen (cached, near-instant) can rely on. Re-checking one frame
+    // later, after layout has actually been committed, catches the case the
+    // synchronous read above can miss without regressing it (the sync call
+    // already got it right whenever it can, so this is a rarely-needed
+    // correction, not a routine double-measurement).
+    if (this.captionTruncationFrame !== null) cancelAnimationFrame(this.captionTruncationFrame);
+    this.captionTruncationFrame = requestAnimationFrame(() => {
+      this.captionTruncationFrame = null;
+      this.updateCaptionTruncation();
+    });
+  }
+
+  /**
+   * DESIGN.md §2.3a — the caption's own default height cap (above) already
+   * keeps it clear of the toolbar, but says nothing about the vertically-
+   * centered prev/next nav arrows sharing its same left edge; a long
+   * enough caption could still grow up over one of those. `--shoji-*`
+   * collapses it to roughly one line by default (shoji.css) regardless, so
+   * this only ever needs to detect whether that collapse actually clipped
+   * something — `scrollHeight > clientHeight` after layout, the same
+   * technique already used elsewhere in this codebase (and its own tests)
+   * to detect caption overflow. Marks it truncated/interactive only when
+   * there's genuinely more to read; a caption that already fits shouldn't
+   * look or behave clickable.
+   *
+   * A real bug, reported from real usage: the first version only capped
+   * `max-height` + `overflow: hidden` — a plain pixel clip with no regard
+   * for where a line of text actually ends, so the cutoff routinely sliced
+   * straight through the middle of the last visible line instead of
+   * stopping at a clean line boundary, reading as broken rather than
+   * intentionally truncated.
+   *
+   * Two follow-up attempts, both also wrong, both worth recording so they
+   * aren't retried: `-webkit-line-clamp` never cleanly stopped at a line
+   * boundary here regardless of the line count fed into it. Replacing it
+   * with `lines * lineHeight + paddingY` arithmetic (using
+   * `getComputedStyle(el).lineHeight`) still left a sliver of the next
+   * line visible in a real browser — confirmed by screenshot, not just
+   * this sandbox. Root cause: a browser doesn't necessarily lay out N
+   * stacked lines at exactly N times the CSS `line-height` value: text
+   * layout does its own sub-pixel rounding per line, so arithmetic
+   * multiplication drifts from the real rendered geometry by enough to
+   * expose part of an extra line, and no fixed safety margin is correct
+   * for every font/zoom/line-count combination.
+   *
+   * This version doesn't compute line boundaries at all — it reads them
+   * straight from the browser's own layout via `Range.getClientRects()`,
+   * which returns one rect per actual rendered line fragment (rich
+   * captions with inline markup can put more than one rect on the same
+   * visual row; each is handled independently below rather than grouped,
+   * since only the topmost/bottommost edges per row matter here). The cap
+   * is set to the bottom edge of the last line whose bottom still fits
+   * inside the current (arbitrary, CSS-calc'd) height budget — a real
+   * measured boundary, never an assumed one.
+   *
+   * A third real bug, caught after switching to this measured approach:
+   * padding the box out by a full `padding-bottom` past that last line's
+   * *measured* bottom still isn't safe, because line boxes butt up much
+   * closer together than the padding value — the next (excluded) line's
+   * own top can fall well inside that padding band, so its glyph
+   * ascenders paint into what was supposed to be empty breathing room.
+   * Fixed by also finding that next line's top and never letting the cap
+   * reach it, regardless of how much of `padding-bottom` that leaves.
+   */
+  private updateCaptionTruncation(): void {
+    if (!this.dom) return;
+    const el = this.dom.caption;
+    el.style.removeProperty('max-height');
+    const truncated = !el.hidden && el.scrollHeight > el.clientHeight;
+    if (truncated) {
+      const paddingBottom = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      const budget = el.clientHeight - paddingBottom;
+      const elTop = el.getBoundingClientRect().top;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      let lastFittingBottom = 0;
+      let nextLineTop = Infinity;
+      for (const rect of range.getClientRects()) {
+        if (rect.height === 0) continue;
+        const relTop = rect.top - elTop;
+        const relBottom = rect.bottom - elTop;
+        if (relBottom <= budget) {
+          if (relBottom > lastFittingBottom) lastFittingBottom = relBottom;
+        } else if (relTop < nextLineTop) {
+          nextLineTop = relTop;
+        }
+      }
+      const cutBottom = lastFittingBottom > 0 ? lastFittingBottom : budget;
+      const desired = cutBottom + paddingBottom;
+      const cap = Number.isFinite(nextLineTop) ? Math.min(desired, nextLineTop) : desired;
+      el.style.maxHeight = `${Math.max(0, Math.floor(cap) - 1)}px`;
+    }
+    el.classList.toggle('shoji-caption--truncated', truncated);
+    if (truncated) {
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-haspopup', 'dialog');
+    } else {
+      el.removeAttribute('tabindex');
+      el.removeAttribute('role');
+      el.removeAttribute('aria-haspopup');
+      if (this.captionModalOpen) this.closeCaptionModal();
+    }
+  }
+
+  private readonly onCaptionActivate = (event: Event): void => {
+    if (!this.dom?.caption.classList.contains('shoji-caption--truncated')) return;
+    if (event instanceof KeyboardEvent) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+    } else {
+      // A mouse-drag that ended in a real text selection is not a click to
+      // open — `.shoji-caption` is deliberately excluded from drag-to-
+      // navigate (GestureController's INTERACTIVE_CONTROL_SELECTOR) so the
+      // viewer can select/copy caption text; without this check, finishing
+      // that selection would also toggle the modal open on every drag.
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      // A link/button inside a rich-HTML caption keeps its own click
+      // behavior — this only opens the modal for a click on the caption
+      // itself, not one that's actually aimed at interactive content
+      // inside it.
+      if (event.target instanceof Element && event.target.closest('a, button')) return;
+    }
+    this.openCaptionModal();
+  };
+
+  /**
+   * DESIGN.md §2.3a — shows the full caption (re-rendered via the same
+   * `renderCaption()` the truncated one already used, so a rich-HTML
+   * caption's own links/formatting are identical in both places) in a
+   * small nested dialog, scrollable if it's still taller than the
+   * viewport allows. `FocusTrap.retarget()` narrows Tab-cycling to just
+   * this modal without touching the outer trap's own focus-restore state
+   * (see its own doc comment for why a second `FocusTrap` instance isn't
+   * used instead). Requested directly: the modal *replaces* the truncated
+   * caption rather than just visually sitting on top of it — hiding
+   * `dom.caption` too, not only because the modal's own opaque backdrop
+   * already covers it, but so it can't still be reached by a screen
+   * reader's browse-mode cursor (unlike Tab, `FocusTrap`/`retarget()`
+   * don't affect that) while a completely different dialog is the one
+   * actually open.
+   */
+  private openCaptionModal(): void {
+    if (!this.dom || this.captionModalOpen) return;
+    const item = this.itemList[this.activeIndex];
+    this.renderCaption(this.dom.captionModalContent, item?.caption);
+    this.dom.captionModal.hidden = false;
+    // Captured before hiding the caption below (a real bug, caught by e2e
+    // regression: hiding the currently-focused caption blurs it immediately
+    // — a hidden element can't hold focus — so reading `activeElement`
+    // *after* that line ended up capturing wherever the browser's own
+    // focus-loss fallback landed (the dialog), not the caption itself.
+    // Escape/close-button/backdrop then "restored" focus to the dialog
+    // instead of back to the caption that was actually focused when this
+    // opened.
+    this.captionModalReturnFocus = document.activeElement as HTMLElement | null;
+    this.dom.caption.hidden = true;
+    // A real bug, caught testing this: the click that opens the modal
+    // typically leaves the pointer sitting right over the caption —
+    // hiding it out from under a *stationary* cursor never fires the
+    // `pointerleave` `wireControlHover()` needs to decrement
+    // `hoveredControlCount` back down (browsers only fire that on actual
+    // pointer movement past an element's edge, not on the element
+    // disappearing). Left alone, that stuck count makes `isControlActive()`
+    // permanently true, silently blocking `hideControls()` for as long as
+    // the modal stays open. Nothing meaningful should still read as
+    // "hovered" once the modal has taken over anyway, so this just resets
+    // it outright rather than trying to reach into that closure's own
+    // private hover-tracking state from here.
+    this.hoveredControlCount = 0;
+    this.captionModalOpen = true;
+    this.focusTrap.retarget(this.dom.captionModalPanel);
+    document.addEventListener('keydown', this.onCaptionModalKeydown, true);
+  }
+
+  /**
+   * Requested directly: closing should leave the viewer looking at a fully
+   * normal, fully visible gallery — not just the modal gone, but the
+   * truncated caption back (via `updateCaptionVisibility()`, which
+   * recomputes its real hidden state from scratch rather than blindly
+   * flipping a flag back — the more robust "recompute from source of
+   * truth" this codebase already prefers elsewhere) and any auto-hidden
+   * toolbar/nav explicitly re-shown (`onActivity()`, same pairing every
+   * other real interaction already uses) rather than left hidden until
+   * the viewer happens to move the mouse.
+   */
+  private closeCaptionModal(): void {
+    if (!this.dom || !this.captionModalOpen) return;
+    document.removeEventListener('keydown', this.onCaptionModalKeydown, true);
+    this.dom.captionModal.hidden = true;
+    this.captionModalOpen = false;
+    this.updateCaptionVisibility();
+    this.focusTrap.retarget(this.dom.dialog);
+    this.captionModalReturnFocus?.focus({ preventScroll: true });
+    this.captionModalReturnFocus = null;
+    this.onActivity();
   }
 
   private renderCurrentSlide(openPlaceholderSrc?: string): void {
@@ -887,6 +1164,11 @@ export class Gallery {
     if (this.destroyed || !this.opened || this.itemList.length === 0) return;
     const clamped = this.clampToRange(target);
     if (clamped === this.activeIndex) return;
+    // DESIGN.md §2.3a — the modal shows a specific slide's caption; leaving
+    // it open across a navigation (arrow keys reach it even while the
+    // gesture gate above suspends drag-navigate) would keep showing the
+    // outgoing slide's text over the new slide.
+    if (this.captionModalOpen) this.closeCaptionModal();
     const from = this.activeIndex;
     // beforeSlide fires first so a listener (e.g. Autoplay) can detach its
     // own 'pause' listener from the outgoing video before pauseMedia() below
@@ -979,6 +1261,11 @@ export class Gallery {
    */
   private beginClose(frozenDrag?: FrozenDragTransform): void {
     if (this.destroyed || !this.opened || this.isClosing) return;
+    // DESIGN.md §2.3a — every close path (button, swipe, Escape, backdrop
+    // click, destroy-while-open) funnels through here; the modal must not
+    // linger past the lightbox itself closing, and its own document-level
+    // keydown listener needs removing before that.
+    if (this.captionModalOpen) this.closeCaptionModal();
     this.bus.emit('beforeClose', {});
 
     // .shoji-outer must stay display:block for the zoom-out to be visible,
@@ -1178,6 +1465,20 @@ export class Gallery {
   /** Shared by `destroy()`/`reinit()` (§2.7): force-close, run plugin cleanups, drop gesture/transition/slide/dialog. */
   private teardown(): void {
     if (this.opened) {
+      // A real bug, caught by cross-test interference in the unit suite —
+      // never reproduced as a simple direct assertion because the existing
+      // "destroy() while the modal is open" test's `removeEventListener`
+      // spy assertion was too loose to actually catch it (FocusTrap's own
+      // unrelated document keydown listener removal satisfied the same
+      // `expect.any(Function)` matcher). `beginClose()` closes the caption
+      // modal first (DESIGN.md §2.3a) — `teardown()` calls `finishClose()`
+      // directly instead, skipping `beginClose()` and its own close-path
+      // entirely, so destroying a gallery while its caption modal was open
+      // never removed that modal's document-level keydown listener. Left
+      // unfixed, it leaks forever: a capture-phase listener bound to the
+      // destroyed instance, `stopPropagation()`-ing every future keydown on
+      // the page regardless of what it's for.
+      if (this.captionModalOpen) this.closeCaptionModal();
       if (!this.isClosing) this.bus.emit('beforeClose', {});
       this.finishClose();
     }
@@ -1197,6 +1498,8 @@ export class Gallery {
     this.toolbarHeightObserver = null;
     if (this.toolbarHeightFrame !== null) cancelAnimationFrame(this.toolbarHeightFrame);
     this.toolbarHeightFrame = null;
+    if (this.captionTruncationFrame !== null) cancelAnimationFrame(this.captionTruncationFrame);
+    this.captionTruncationFrame = null;
     this.slides?.destroy();
     this.dom?.outer.remove();
     this.slides = null;

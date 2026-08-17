@@ -44,6 +44,25 @@ export class FocusTrap {
     container.focus();
   }
 
+  /**
+   * DESIGN.md §2.3a — narrows (or widens back) which subtree Tab cycles
+   * within, without touching `previouslyFocused`/the listener registration
+   * — a caption modal nested inside the already-trapped dialog needs Tab
+   * confined to just itself while open, then back to the whole dialog on
+   * close, but must NOT trigger `activate()`'s own focus-capture (that's
+   * reserved for the real open/close boundary; re-running it mid-session
+   * would capture the wrong "previously focused" element and restore focus
+   * to it too early). `getFocusable()` reads `this.container` fresh on
+   * every keydown, so simply reassigning it is enough — no need for a
+   * second, independent `FocusTrap` instance, which would double-handle
+   * every Tab keypress (two capture-phase `document` listeners, each
+   * computing its own overlapping focusable list).
+   */
+  retarget(container: HTMLElement): void {
+    this.container = container;
+    container.focus();
+  }
+
   deactivate(): void {
     document.removeEventListener('keydown', this.onKeydown, true);
     this.container = null;

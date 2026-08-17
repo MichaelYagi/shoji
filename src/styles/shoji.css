@@ -24,6 +24,7 @@
   --shoji-z-overlay: 20;
   --shoji-z-toolbar: 30;
   --shoji-z-toast: 40;
+  --shoji-z-caption-modal: 50; /* DESIGN.md §2.3a — above everything else in the dialog, a nested dialog of its own */
 
   --shoji-color-bg: #0b0b0d;
   --shoji-color-fg: #f5f5f5;
@@ -66,6 +67,30 @@
      narrow/mobile viewport the caption still spans (almost) the full
      width, unchanged from before. */
   --shoji-caption-max-width: calc(100% - 2 * var(--shoji-spacing-md));
+  /* DESIGN.md §2.3a — the collapsed default height, applied on top of
+     --shoji-caption-max-height (which only ever guards against reaching
+     the toolbar above, not the vertically-centered nav arrows sharing the
+     caption's own left edge). Requested directly, after a first version
+     that always collapsed to one line regardless of how much real room
+     existed: grow as tall as it can while staying clear of the nav
+     arrow's own footprint — `50%` (the dialog's own height, the
+     containing block `.shoji-caption`'s percentages resolve against) is
+     exactly where `.shoji-nav`'s own `top: 50%` sits, so `50%` minus half
+     its 44px height minus the caption's own bottom inset minus a small
+     breathing gap is the real ceiling, not an arbitrary line count. Pure
+     geometry — the arrow is always dead-center regardless of viewport, no
+     measurement needed the way the toolbar's own wrapping needs
+     `--shoji-toolbar-height` (Gallery.ts's ResizeObserver) to answer.
+     Floored (`max()`) at roughly one line + padding so a pathologically
+     short dialog can't collapse this to zero — the arrow may end up
+     slightly covered in that extreme case, but showing no caption at all
+     would be worse. A caption tall enough to still clip past all of this
+     gets `.shoji-caption--truncated` (Gallery.ts) and its own modal to
+     read the rest. */
+  --shoji-caption-collapsed-max-height: max(
+    calc(50% - 22px - var(--shoji-spacing-md) - var(--shoji-spacing-sm)),
+    calc(1.6em + 2 * var(--shoji-spacing-sm))
+  );
   /* DESIGN.md §2.4 — the gesture engine's own documented default easing for
      drag-to-navigate/drag-to-close settle animations specifically (a snap
      tuned for "released mid-motion," distinct from --shoji-easing's
@@ -224,7 +249,8 @@
 
 .shoji-close,
 .shoji-nav,
-.shoji-toolbar-button {
+.shoji-toolbar-button,
+.shoji-caption-modal-close {
   appearance: none;
   border: none;
   padding: 0;
@@ -241,13 +267,15 @@
 
 .shoji-close:hover,
 .shoji-nav:hover,
-.shoji-toolbar-button:hover {
+.shoji-toolbar-button:hover,
+.shoji-caption-modal-close:hover {
   background: rgba(0, 0, 0, 0.6);
 }
 
 .shoji-close:focus-visible,
 .shoji-nav:focus-visible,
-.shoji-toolbar-button:focus-visible {
+.shoji-toolbar-button:focus-visible,
+.shoji-caption-modal-close:focus-visible {
   outline: var(--shoji-focus-ring);
   outline-offset: 2px;
 }
@@ -528,9 +556,13 @@
   z-index: var(--shoji-z-toolbar);
   width: fit-content;
   max-width: var(--shoji-caption-max-width);
-  max-height: var(--shoji-caption-max-height);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: min(var(--shoji-caption-max-height), var(--shoji-caption-collapsed-max-height));
+  /* DESIGN.md §2.3a — a clean clip, not a scrollbar: the collapsed cap is
+     now small (~1 line) by design, so almost any real caption exceeds it;
+     a visible scrollbar on that tiny a box would look broken. Reading the
+     rest is what `.shoji-caption-modal` (Gallery.ts) is for instead — its
+     own content area is where `overflow-y: auto` still applies. */
+  overflow: hidden;
   padding: var(--shoji-spacing-sm) var(--shoji-spacing-md);
   /* A real bug, caught by an e2e regression test: without this, max-height
      only constrains the content box — the element's own padding (16px,
@@ -542,6 +574,15 @@
   border-radius: 8px;
   background: var(--shoji-color-toolbar-bg);
   text-align: left;
+  /* A real bug, caught testing the truncated-caption line-clamp
+     (DESIGN.md §2.3a): left unset, `line-height` computes to the literal
+     keyword "normal" rather than a resolved px value, so
+     `updateCaptionTruncation()`'s own line-height measurement (Gallery.ts)
+     could only ever approximate it — close enough to be off by a
+     fractional line, letting one extra partial line bleed in below the
+     clamp's own ellipsis instead of cutting cleanly. An explicit value
+     here makes that measurement exact instead of estimated. */
+  line-height: 1.4;
 }
 
 /* A real bug: height-capping the caption (above) still isn't enough on its
@@ -562,6 +603,74 @@
 
 .shoji-caption--video > * {
   pointer-events: auto;
+}
+
+/* DESIGN.md §2.3a — only ever added once content genuinely overflows the
+   collapsed clip (Gallery.ts measures scrollHeight vs. clientHeight), so a
+   caption that already fits never looks or behaves clickable. On a video
+   slide `.shoji-caption--video`'s own pointer-events: none (above) already
+   makes this a no-op for pointer input there, on purpose — reaching the
+   native video controls underneath still wins; a keyboard user can still
+   Tab to it and open the modal regardless, since that's not competing for
+   the same physical space a click would be. */
+.shoji-caption--truncated {
+  cursor: pointer;
+}
+
+/* A visible cue, not just a silent clip. `-webkit-line-clamp` (the
+   standard tool for this) was tried first but didn't reliably stop at a
+   clean line boundary here — regardless of how precisely the line count
+   fed into it was computed, a partial extra line kept bleeding through
+   below its own ellipsis. Gallery.ts's updateCaptionTruncation() instead
+   snaps `max-height` itself down to an exact whole-line multiple, so a
+   plain clip can never land mid-line — this "…" chip is what actually
+   supplies the visible cue for that, pinned over the last visible line's
+   corner, background-matched so it masks whatever text it sits on. */
+.shoji-caption--truncated::after {
+  content: '…';
+  position: absolute;
+  right: var(--shoji-spacing-sm);
+  bottom: var(--shoji-spacing-sm);
+  padding-left: 0.5em;
+  background: var(--shoji-color-toolbar-bg);
+}
+
+/* DESIGN.md §2.3a — the truncated caption's own expanded view. A real
+   backdrop over the whole dialog, not an in-place taller caption: growing
+   the caption itself tall enough to show everything would risk covering
+   the nav arrows again, exactly the bug this feature exists to avoid. */
+.shoji-caption-modal {
+  position: absolute;
+  inset: 0;
+  z-index: var(--shoji-z-caption-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--shoji-spacing-lg);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.shoji-caption-modal[hidden] {
+  display: none;
+}
+
+.shoji-caption-modal-panel {
+  position: relative;
+  max-width: 32rem;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--shoji-spacing-lg);
+  padding-inline-end: calc(44px + var(--shoji-spacing-lg));
+  border-radius: 8px;
+  background: var(--shoji-color-bg);
+  color: var(--shoji-color-fg);
+}
+
+.shoji-caption-modal-close {
+  position: absolute;
+  top: var(--shoji-spacing-sm);
+  right: var(--shoji-spacing-sm);
 }
 
 .shoji-caption[hidden] {

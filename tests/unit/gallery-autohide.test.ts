@@ -156,7 +156,7 @@ describe('Gallery — auto-hide controls', () => {
     gallery.destroy();
   });
 
-  it("autoHideDelay:false makes the public hideControls() itself a no-op, not just the idle timer — a real bug, reported from real usage: Autoplay's own tap-to-toggle-chrome behavior called hideControls() directly and ignored autoHideDelay entirely, since only the timer checked it. 'Always visible' has to mean any caller of this public method, not just the automatic one, or a host's explicit request is silently overridable by any plugin (see tests/unit/plugins/autoplay.test.ts for that exact regression). forceHideControls()/setControlsHiddenForDrag() (close, drag-to-close — tests/unit/gallery-zoom.test.ts, tests/unit/gallery-gestures.test.ts) are deliberately unaffected — those are direct user actions with their own feedback, not an auto-hide convenience.", () => {
+  it("autoHideDelay:false makes the public hideControls() itself a no-op, not just the idle timer — a real bug, reported from real usage: a plugin (Autoplay's own tap-to-toggle-chrome behavior, since removed) called hideControls() directly and ignored autoHideDelay entirely, since only the timer checked it. 'Always visible' has to mean any caller of this public method, not just the automatic one, or a host's explicit request is silently overridable by any plugin. forceHideControls()/setControlsHiddenForDrag() (close, drag-to-close — tests/unit/gallery-zoom.test.ts, tests/unit/gallery-gestures.test.ts) are deliberately unaffected — those are direct user actions with their own feedback, not an auto-hide convenience.", () => {
     const gallery = makeGallery({ autoHideDelay: false });
     gallery.open(0);
 

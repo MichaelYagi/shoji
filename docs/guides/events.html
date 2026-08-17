@@ -174,8 +174,9 @@ off(); // stop listening</code></pre>
             <code>{ x, y, controlsWereHidden }</code> — <code>controlsWereHidden</code> is a
             snapshot from <em>before</em> this same tap's own pointerdown-triggered controls reveal
             ran (a live read of <code>gallery.controlsHidden</code> at tap time would always say
-            <code>false</code>, since that reveal already happened by then). The Autoplay plugin
-            uses this for its own tap-to-toggle-controls behavior.
+            <code>false</code>, since that reveal already happened by then). Useful for a plugin
+            that wants to tell "this tap was just revealing hidden controls" apart from "this tap
+            landed on an already-visible gallery."
           </td>
         </tr>
         <tr>

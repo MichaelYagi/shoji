@@ -575,3 +575,234 @@ describe('Gallery — toolbar height measurement for caption sizing (DESIGN.md �
     expect(disconnect).toHaveBeenCalled();
   });
 });
+
+describe('Gallery — truncated-caption modal (DESIGN.md §2.3a)', () => {
+  // No file-level vi.restoreAllMocks() — the prototype-level scrollHeight/
+  // clientHeight/getSelection spies below would otherwise leak into
+  // whichever test runs next.
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // vi.restoreAllMocks() only undoes vi.spyOn() wrapping — getClientRects
+    // was assigned outright (jsdom's Range never had it to spy on), so it
+    // has to be deleted explicitly or it leaks into every test file after
+    // this one for the rest of the run.
+    delete (Range.prototype as { getClientRects?: unknown }).getClientRects;
+  });
+
+  // jsdom has no real layout engine — scrollHeight/clientHeight are always 0
+  // there, so truncation can't be exercised end to end the way
+  // tests/e2e/core-caption-modal.spec.ts does against a real browser. This
+  // mocks the comparisons updateCaptionTruncation() actually makes, so the
+  // DOM-state behavior built on top of it (class/attrs/click/keyboard/
+  // focus/cleanup) is still covered here without needing real geometry.
+  // jsdom also has no `Range.prototype.getClientRects()` at all (throws,
+  // not just returns empty) — mocked to an empty list, which exercises the
+  // same "found no fitting line" fallback path real code takes when a
+  // caption is a single unbroken run with no wrap point below the budget.
+  function mockTruncated(truncated: boolean): void {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(truncated ? 100 : 10);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(10);
+    // Not vi.spyOn — jsdom's Range doesn't define this method at all (spyOn
+    // requires an existing property to wrap), so it has to be added outright.
+    Range.prototype.getClientRects = vi.fn().mockReturnValue([]);
+  }
+
+  function caption(): HTMLElement {
+    return document.querySelector('.shoji-caption') as HTMLElement;
+  }
+
+  function modal(): HTMLElement {
+    return document.querySelector('.shoji-caption-modal') as HTMLElement;
+  }
+
+  it('marks a genuinely overflowing caption truncated — class, tabindex, role, aria-haspopup — and a fitting one plain', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'long one' }],
+    });
+    gallery.open(0);
+    await flush(); // caption stays `hidden` (isActiveReady() false) until decode() resolves
+
+    expect(caption().classList.contains('shoji-caption--truncated')).toBe(true);
+    expect(caption().tabIndex).toBe(0);
+    expect(caption().getAttribute('role')).toBe('button');
+    expect(caption().getAttribute('aria-haspopup')).toBe('dialog');
+
+    gallery.destroy();
+
+    mockTruncated(false);
+    const gallery2 = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'short' }] });
+    gallery2.open(0);
+    await flush();
+
+    expect(caption().classList.contains('shoji-caption--truncated')).toBe(false);
+    expect(caption().hasAttribute('tabindex')).toBe(false);
+    expect(caption().hasAttribute('role')).toBe(false);
+    expect(caption().hasAttribute('aria-haspopup')).toBe(false);
+
+    gallery2.destroy();
+  });
+
+  it('a click on a truncated caption opens the modal with that slide’s full caption re-rendered into it; a click on a non-truncated one does nothing', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'the full text' }],
+    });
+    gallery.open(0);
+    await flush();
+
+    expect(modal().hidden).toBe(true);
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(false);
+    expect(document.querySelector('.shoji-caption-modal-content')?.textContent).toBe(
+      'the full text',
+    );
+
+    gallery.destroy();
+
+    mockTruncated(false);
+    const gallery2 = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'short' }] });
+    gallery2.open(0);
+    await flush();
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(true);
+
+    gallery2.destroy();
+  });
+
+  it('Enter/Space open it when the caption is focused; other keys do not', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+
+    caption().dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(modal().hidden).toBe(true);
+
+    caption().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(modal().hidden).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('a text selection does not count as a click-to-open — the drag-to-select behavior stays intact', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+    } as unknown as Selection);
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('closes on Escape (and only the modal — the lightbox itself stays open), on a backdrop click, and on the close button', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(modal().hidden).toBe(true);
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    modal().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(true);
+
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document
+      .querySelector('.shoji-caption-modal-close')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('any other key is absorbed while the modal is open — never reaches the gallery’s own shortcut handling', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const closeSpy = vi.spyOn(gallery, 'close');
+    // ' ' (Space) would otherwise be a plugin-registered shortcut in a real
+    // integration (e.g. Autoplay's play/pause) — nothing is registered
+    // here, so the meaningful assertion is that it doesn't fall through to
+    // close()/navigate either, not a specific plugin's own reaction.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    expect(modal().hidden).toBe(false);
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    gallery.destroy();
+  });
+
+  it('closing (however it happens) removes the document-level keydown listener — no leak', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+
+    gallery.destroy();
+  });
+
+  it('destroy() while the modal is open cleans it up too — no dangling listener left on document', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(false);
+
+    gallery.destroy();
+
+    // A real bug, caught here: asserting only that *some*
+    // `removeEventListener('keydown', ..., true)` call happened (the
+    // original version of this test) passed even when the modal's own
+    // listener specifically leaked — FocusTrap's own unrelated document
+    // keydown listener removal satisfied the same loose matcher. The
+    // leaked listener's own damage is specifically a *capture-phase*
+    // `stopPropagation()` on `document` swallowing a keydown before it
+    // ever reaches a descendant's own bubble-phase listener — dispatching
+    // straight on `document` itself wouldn't exercise that (same-node
+    // listeners all run regardless of an earlier one's stopPropagation());
+    // a descendant is what actually proves the leaked listener is gone.
+    const probe = document.body.appendChild(document.createElement('div'));
+    let reached = false;
+    probe.addEventListener('keydown', () => (reached = true));
+    probe.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    probe.remove();
+    expect(reached).toBe(true);
+  });
+
+  it('navigating away from the slide the modal is showing closes it first', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(2, {
+      items: [
+        { id: 'a', src: 'a.jpg', caption: 'first' },
+        { id: 'b', src: 'b.jpg', caption: 'second' },
+      ],
+    });
+    gallery.open(0);
+    await flush();
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(false);
+
+    gallery.next();
+    expect(modal().hidden).toBe(true);
+
+    gallery.destroy();
+  });
+});

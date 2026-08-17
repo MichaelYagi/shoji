@@ -238,8 +238,9 @@ export interface GalleryEvents extends Record<string, unknown> {
    * pointerdown-triggered reveal (Gallery.ts's `onActivity`) ran — a live
    * read of `gallery.controlsHidden` at tap time would always say "visible"
    * regardless, since that reveal already happened by then. Lets a consumer
-   * (e.g. Autoplay's tap-to-hide on an image slide) implement real toggle
-   * semantics instead of just re-hiding whatever this tap itself revealed.
+   * tell "this tap was just revealing hidden controls" apart from "this tap
+   * landed on an already-visible gallery," rather than treating every tap
+   * the same regardless of what it just did.
    */
   tap: { x: number; y: number; controlsWereHidden: boolean };
   doubleTap: { x: number; y: number };

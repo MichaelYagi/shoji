@@ -20,9 +20,20 @@ const VERTICAL_FEEDBACK_DISTANCE = 160;
  * its own narrower list (missing select/input/textarea/a[href]) — a
  * plugin-mounted non-button control got misread as a backdrop click and
  * closed the gallery. One shared selector so that can't recur.
+ *
+ * `.shoji-caption-modal` (DESIGN.md §2.3a) — a real bug, reported from real
+ * usage: `GestureEngine`'s own tap recognition (`ignore` gates it before
+ * any pointer tracking starts, `GestureEngine.ts`) runs entirely on
+ * pointer events, independent of whatever a click listener's own
+ * `stopPropagation()` does — a tap anywhere inside the caption modal
+ * (its content area specifically; the close button was already covered as
+ * a real `<button>`) still read as a legitimate tap on the dialog and fired
+ * the `tap` bus event, which the Autoplay plugin listens to for its own
+ * tap-to-toggle-play/pause. Excluding the whole modal here is what
+ * actually stops that, not anything at the click-event layer.
  */
 export const INTERACTIVE_CONTROL_SELECTOR =
-  'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption';
+  'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption, .shoji-caption-modal';
 
 /** A click/drag starting on a real control shouldn't also be captured as a gesture — see `INTERACTIVE_CONTROL_SELECTOR`. */
 function shouldIgnoreGesture(event: PointerEvent): boolean {

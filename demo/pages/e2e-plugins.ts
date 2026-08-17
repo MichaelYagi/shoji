@@ -52,12 +52,16 @@ function renderThumbs(gallery: Gallery, items: GalleryItem[]): void {
 if (thumbs && status) {
   const items = buildItems();
   // 300 by default — short, so most e2e assertions here don't need to wait
-  // out a real 5s default. A test whose own timing (e.g. Autoplay's
-  // tap-to-toggle 300ms decision window) would otherwise race that fixed
-  // interval can override it via ?interval=<ms> instead of this page
+  // out a real 5s default. A test whose own timing would otherwise race that
+  // fixed interval can override it via ?interval=<ms> instead of this page
   // guessing a value that avoids every possible collision for every test.
   const intervalParam = Number(new URLSearchParams(location.search).get('interval'));
   const interval = intervalParam > 0 ? intervalParam : 300;
+  // Undefined (the default, Gallery's own 5000ms) unless a test needs a
+  // short one to exercise the idle auto-hide timer without a multi-second
+  // real wait — same override pattern as ?interval= above.
+  const autoHideDelayParam = Number(new URLSearchParams(location.search).get('autoHideDelay'));
+  const autoHideDelay = autoHideDelayParam > 0 ? autoHideDelayParam : undefined;
   const gallery = new Shoji(thumbs, {
     items,
     plugins: [
@@ -68,6 +72,7 @@ if (thumbs && status) {
       Shoji.ActiveThumbnail,
     ],
     autoplay: { interval },
+    ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),
   });
 
   renderThumbs(gallery, items);
