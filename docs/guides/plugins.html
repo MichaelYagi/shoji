@@ -255,6 +255,47 @@ requires: ['zoom', 'myOtherPlugin']</code></pre>
       runs — and every <code>ctx.ui.toolbar()</code> button still lands — in exactly the order the
       <code>plugins</code> array itself declares.
     </blockquote>
+    <h2>Why declare <code>requires</code> at all?</h2>
+    <p>
+      <code>requires</code> doesn't hand you a reference to the other plugin, and it doesn't wire
+      anything up — a plugin can call <code>ctx.on(...)</code> for an event another plugin emits
+      whether or not it's listed in <code>requires</code>, and it works exactly the same either way
+      once that other plugin is actually loaded. What <code>requires</code> buys you is a fail-fast
+      guard for the case where it <em>isn't</em> loaded: instead of your plugin quietly initializing
+      anyway and sitting there doing nothing (a subscription that never fires, a button that never
+      updates — no error, no obvious symptom), it gets skipped up front with a clear console error
+      naming exactly what's missing.
+    </p>
+    <p>
+      For example, a toolbar readout that shows the current zoom level only makes sense once
+      <a href="../api/variables/plugins_zoom.Zoom.html"><code>Shoji.Zoom</code></a> is also loaded —
+      it works purely by listening for Zoom's own <code>zoomChange</code> event:
+    </p>
+    <pre><code>const ZoomIndicator = {
+  name: 'zoomIndicator',
+  requires: ['zoom'], // reads Zoom's own zoomChange event — pointless without it
+
+  init(ctx) {
+    const unsubscribe = ctx.ui.toolbar('left', { label: '100%', onClick: () =&gt; {} });
+    const off = ctx.on('zoomChange', ({ scale }) =&gt; {
+      // update the toolbar label to `${Math.round(scale * 100)}%`
+    });
+
+    return () =&gt; {
+      unsubscribe();
+      off();
+    };
+  },
+};</code></pre>
+    <p>
+      Leave out <code>requires: ['zoom']</code> and the code above still behaves identically
+      whenever <code>Shoji.Zoom</code> <em>is</em> in <code>plugins</code>. The difference only
+      shows up when it isn't: without <code>requires</code>, <code>ZoomIndicator</code> still
+      initializes, its button still renders, and it just sits stuck at <code>100%</code> forever —
+      <code>zoomChange</code> never fires, with nothing telling you why. With
+      <code>requires: ['zoom']</code>, that same misconfiguration gets skipped entirely, logged as
+      an unmet dependency instead of a silently dead button.
+    </p>
     <p>What <code>ctx</code> gives you:</p>
     <ul>
       <li>
