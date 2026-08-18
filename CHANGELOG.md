@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.15] - 2026-08-18
+
 ### Added
 
 - A long caption now truncates (with a visible `…`) instead of growing
@@ -58,12 +60,13 @@ still include breaking changes).
   vertically-centered nav arrows sharing the caption's own left edge.
   Beyond that, see "Added" above — it truncates and opens a modal instead
   of scrolling in place. See DESIGN.md §2.3a.
-- Core's size budget raised 26.9 kB → 35.2 kB (min+gzip) — 26.9 kB → 33 kB
+- Core's size budget raised 26.9 kB → 36.2 kB (min+gzip) — 26.9 kB → 33 kB
   for the caption modal above and the real bugs fixed while testing it end
   to end, then 33 kB → 35 kB for the hover-tracking rewrite (see "Fixed"
   below) and the toolbar overflow popover above, then 35 kB → 35.2 kB for
   that popover's own collapse-policy inversion (`maxPinnedToolbarButtons`
-  and the never-wrap guarantee) — real, deliberate growth, not incidental.
+  and the never-wrap guarantee), then 35.2 kB → 36.2 kB for the `requires`
+  order-independence fix below — real, deliberate growth, not incidental.
   See DESIGN.md's own budget-history note.
 
 ### Removed
@@ -169,6 +172,19 @@ still include breaking changes).
   caret's own live location every time it opens, keeping its icon columns
   genuinely aligned with the toolbar row's icons above them. See DESIGN.md
   §3.1a.
+- A `ShojiPlugin`'s `requires` only worked if every dependency happened to
+  be declared _earlier_ in the `plugins` array than the plugin that needed
+  it — checked against whichever plugins had already been processed in the
+  same pass, not the full list. Reported directly as real integration
+  friction: nothing about a dependency needing to _run_ first requires it
+  to be _declared_ first, so hosts had to hand-order an otherwise-arbitrary
+  `plugins` array purely to satisfy this check. `requires` is now resolved
+  against the whole declared list up front (a fixed-point pass — repeatedly
+  drops anything whose `requires` isn't met, so a chain of failures still
+  cascades correctly), independent of position. Plugin `init()` still runs,
+  and every `ctx.ui.toolbar()` button still lands, in exactly the order the
+  `plugins` array declares — toolbar/collapse-priority order (§3.1a) is
+  unaffected either way. See DESIGN.md §3.1.
 
 ## [0.1.0-alpha.14] - 2026-08-15
 

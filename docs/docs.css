@@ -79,14 +79,33 @@ th {
   opacity: 0.7;
 }
 
+/* One scrollable row instead of wrapping to two/three — with 12 pages
+   listed, `flex-wrap: wrap` pushed real content down by however many
+   extra rows the viewport forced, worse the narrower the screen got (a
+   real complaint on mobile specifically, and it was already double-row on
+   an ordinary desktop width once Architecture landed as the 12th entry).
+   A single horizontally-scrolling strip is the same fix at every width —
+   desktop and mobile share this one rule, no separate breakpoint/JS
+   needed. `scroll-padding-inline` keeps a link from landing flush against
+   the edge when scrolled/focused into view; the mask fades each edge as a
+   "there's more this way" cue that costs nothing when unsupported (the
+   row's still fully scrollable either way, just without the hint). */
 .docs-nav {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
   margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  mask-image: linear-gradient(to right, transparent, black 1.5rem, black 98%, transparent);
 }
 
 .docs-nav a {
+  flex-shrink: 0;
   text-decoration: none;
   padding: 0.4rem 0.8rem;
   border: 1px solid #8886;
@@ -97,6 +116,62 @@ th {
 .docs-nav a[aria-current='page'] {
   background: #4da3ff22;
   border-color: #4da3ff;
+}
+
+/* docs.js's auto-built "On this page" — a plain <details> for the
+   collapse (no JS needed for that part, only for building the list
+   itself). `columns` on the top-level <ul> lets a page with enough
+   headings spread across 2-3 columns instead of one tall list, adapting
+   to both viewport width and heading count automatically — no JS deciding
+   a column count. `break-inside: avoid` on each top-level <li> keeps an h2
+   and its own nested h3s together in one column rather than splitting
+   mid-group. */
+.toc {
+  margin: 1.5rem 0;
+  border: 1px solid #8886;
+  border-radius: 8px;
+  padding: 0 1rem;
+}
+
+.toc summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.75rem 0;
+}
+
+.toc[open] summary {
+  border-bottom: 1px solid #8886;
+  margin-bottom: 0.75rem;
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.75rem;
+  columns: 200px;
+  column-gap: 1.5rem;
+}
+
+.toc li {
+  break-inside: avoid;
+  margin: 0.3rem 0;
+}
+
+.toc li > ul {
+  columns: initial;
+  margin: 0.3rem 0 0.3rem 1.1rem;
+  padding: 0;
+}
+
+.toc a {
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.toc a:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 .guide-list {
@@ -145,6 +220,50 @@ footer {
   border-top: 1px solid #8886;
   opacity: 0.7;
   font-size: 0.9em;
+}
+
+/* Shared by docs/architecture/*.html — a bordered box around an inline SVG
+   diagram or an ASCII DOM-tree, same treatment `pre`/`table` already get
+   elsewhere on this site (a contained, scrollable box, never a page-wide
+   horizontal scroll). SVG diagrams use currentColor/no fill on strokes and
+   text so they follow :root's light/dark color-scheme for free, same as
+   the rest of the page. */
+.arch-diagram {
+  border: 1px solid #8886;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+/* A real bug, found in dark mode: SVG's own initial `fill` value is black,
+   not `currentColor` — every <rect>/<line>/<path> below has an explicit
+   `stroke="currentColor"`, but the <text> labels never got a matching
+   explicit `fill`, so they silently fell back to literal black. Invisible
+   by luck in light mode (black text over a light/transparent box reads
+   fine); black-on-near-black in dark mode reads as the whole diagram being
+   blank. One rule here, rather than annotating every <text> tag by hand. */
+.arch-diagram svg text {
+  fill: currentColor;
+}
+
+.arch-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 480px;
+}
+
+.arch-caption {
+  margin: 0.75rem 0 0;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+.arch-tree {
+  margin: 0;
+  background: none;
+  padding: 0;
 }
 
 /* Shared by docs/examples/*.html — a real, runnable gallery grid + a status

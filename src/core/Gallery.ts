@@ -4,7 +4,7 @@ import { buildLightboxDom, type LightboxDom } from './dom';
 import { FocusTrap } from './FocusTrap';
 import { GestureController, INTERACTIVE_CONTROL_SELECTOR } from './GestureController';
 import { LiveRegion } from './LiveRegion';
-import type { ButtonSpec, PluginContext, VideoProviderRenderer } from './plugin';
+import type { ButtonSpec, PluginContext, ShojiPlugin, VideoProviderRenderer } from './plugin';
 import { DEFAULT_SELECTOR, resolveDynamicVideoItems, scanContainer } from './scan';
 import { pauseMedia, SlideManager } from './SlideManager';
 import type {
@@ -603,11 +603,64 @@ export class Gallery {
     this.initPlugins();
   }
 
-  /** DESIGN.md §3 — plugins init here, not the constructor. `requires` checks names loaded earlier; an unmet one is skipped (logged), not thrown. Cleared up front so a `reinit()` doesn't inherit names from before. */
+  /**
+   * DESIGN.md §3 — which of `declared`'s plugins will actually load,
+   * resolved as a fixed point rather than a single pass: start with every
+   * *structurally* valid entry (a real object with an `init` function),
+   * then repeatedly drop any whose `requires` points at a name no longer
+   * in the set, until a full pass drops nothing. That repetition is what
+   * makes a chain cascade correctly — if a plugin gets dropped because
+   * *its* own requirement failed, anything requiring that plugin drops on
+   * the very next pass, the same as if the original problem were its own.
+   * A genuine mutual requirement (A needs B, B needs A, both otherwise
+   * fine) never gets caught in this — each still finds the other present
+   * whenever it's checked, so both stay valid. That's correct, not a
+   * missed case: this only ever decides *whether* something loads, never
+   * *when* — nothing here reorders execution, so two plugins depending on
+   * each other creates no actual ordering conflict to detect in the first
+   * place.
+   */
+  private resolveValidPluginNames(declared: readonly ShojiPlugin[]): Set<string> {
+    const validNames = new Set<string>();
+    for (const plugin of declared) {
+      if (plugin && typeof plugin.init === 'function') validNames.add(plugin.name);
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const plugin of declared) {
+        if (!plugin || typeof plugin.init !== 'function' || !validNames.has(plugin.name)) continue;
+        const unmet = (plugin.requires ?? []).some((name) => !validNames.has(name));
+        if (unmet) {
+          validNames.delete(plugin.name);
+          changed = true;
+        }
+      }
+    }
+    return validNames;
+  }
+
+  /**
+   * DESIGN.md §3 — plugins init here, not the constructor. `requires` is
+   * resolved against the *whole* declared `plugins` list up front, not
+   * registration order — a real friction point, reported directly: a host
+   * with a `requires` chain had to carefully order the array by hand, with
+   * no actual reason to (nothing about *execution* order needs to match
+   * declaration order for a name-presence check). `resolveValidPluginNames()`
+   * decides who's actually going to load, independent of position; this
+   * loop still runs — and every `ctx.ui.toolbar()` registration still
+   * lands — in exactly the array's own order regardless, so toolbar/
+   * collapse-priority order (also array-order-driven, DESIGN.md §3.1a)
+   * is completely unaffected by this. Cleared up front so a `reinit()`
+   * doesn't inherit names from before.
+   */
   private initPlugins(): void {
     this.activePluginNames.clear();
     this.videoProviders.clear();
-    for (const plugin of this.options.plugins ?? []) {
+    const declared = this.options.plugins ?? [];
+    const validNames = this.resolveValidPluginNames(declared);
+
+    for (const plugin of declared) {
       // Guards a real, easy-to-hit host mistake: `plugins: [Shoji.SomePlugin]`
       // silently becomes `plugins: [undefined]` if the referenced static
       // (e.g. Shoji.Autoplay) doesn't actually exist yet — a stale dist
@@ -620,10 +673,10 @@ export class Gallery {
         );
         continue;
       }
-      const missing = (plugin.requires ?? []).filter((name) => !this.activePluginNames.has(name));
-      if (missing.length > 0) {
+      if (!validNames.has(plugin.name)) {
+        const missing = (plugin.requires ?? []).filter((name) => !validNames.has(name));
         console.error(
-          `Shoji: plugin "${plugin.name}" requires [${missing.join(', ')}] to be registered first — skipping.`,
+          `Shoji: plugin "${plugin.name}" requires [${missing.join(', ')}], which failed to load (missing, invalid, or itself had an unmet requires) — skipping.`,
         );
         continue;
       }

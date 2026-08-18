@@ -69,7 +69,7 @@ describe('Plugin loader', () => {
     gallery.destroy();
   });
 
-  it('skips a plugin whose requires dependency was not registered first, without throwing', () => {
+  it('skips a plugin whose requires dependency is missing from the plugins array entirely, without throwing', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const dependent = stubPlugin({ name: 'dependent', requires: ['missing-dep'] });
     const gallery = makeGallery([dependent]);
@@ -100,7 +100,7 @@ describe('Plugin loader', () => {
     errorSpy.mockRestore();
   });
 
-  it('a satisfied requires dependency (declared earlier in the array) still initializes', () => {
+  it('a satisfied requires dependency declared earlier in the array still initializes', () => {
     const base = stubPlugin({ name: 'base' });
     const dependent = stubPlugin({ name: 'dependent', requires: ['base'] });
     const gallery = makeGallery([base, dependent]);
@@ -109,6 +109,49 @@ describe('Plugin loader', () => {
 
     expect(base.initCalls).toHaveLength(1);
     expect(dependent.initCalls).toHaveLength(1);
+    gallery.destroy();
+  });
+
+  it('a satisfied requires dependency declared LATER in the array also initializes — requires is resolved against the whole list, not registration order', () => {
+    const dependent = stubPlugin({ name: 'dependent', requires: ['base'] });
+    const base = stubPlugin({ name: 'base' });
+    const gallery = makeGallery([dependent, base]); // dependent declared first, on purpose
+
+    gallery.open(0);
+
+    expect(dependent.initCalls).toHaveLength(1);
+    expect(base.initCalls).toHaveLength(1);
+    // init() still runs in declared array order regardless — dependent's
+    // own init() isn't deferred until after base's, only the *validity*
+    // check is order-independent, not execution order.
+    expect(gallery.getActivePlugins()).toEqual(['dependent', 'base']);
+    gallery.destroy();
+  });
+
+  it('a requires chain cascades: if the required plugin itself has an unmet requires, the plugin depending on it is skipped too', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const b = stubPlugin({ name: 'plugin-b', requires: ['nonexistent'] });
+    const c = stubPlugin({ name: 'plugin-c', requires: ['plugin-b'] });
+    const gallery = makeGallery([b, c]);
+
+    expect(b.initCalls).toHaveLength(0);
+    expect(c.initCalls).toHaveLength(0);
+    expect(gallery.getActivePlugins()).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('plugin-b'));
+
+    gallery.destroy();
+    errorSpy.mockRestore();
+  });
+
+  it('a genuine mutual requirement (A requires B, B requires A) — both otherwise valid — loads both, not neither', () => {
+    const a = stubPlugin({ name: 'plugin-a', requires: ['plugin-b'] });
+    const b = stubPlugin({ name: 'plugin-b', requires: ['plugin-a'] });
+    const gallery = makeGallery([a, b]);
+
+    expect(a.initCalls).toHaveLength(1);
+    expect(b.initCalls).toHaveLength(1);
+    expect(gallery.getActivePlugins()).toEqual(['plugin-a', 'plugin-b']);
     gallery.destroy();
   });
 

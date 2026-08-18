@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Architecture</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="../guides/getting-started.html">Getting started</a>
+      <a href="../guides/plugins.html">Plugins</a>
+      <a href="../guides/layout.html">Layout plugin</a>
+      <a href="../guides/transitions.html">Transitions</a>
+      <a href="../guides/methods.html">Methods</a>
+      <a href="../guides/events.html">Events</a>
+      <a href="../guides/settings.html">Settings</a>
+      <a href="../guides/theming.html">Theming</a>
+      <a href="./index.html" aria-current="page">Architecture</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../playground.html">Playground</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Architecture</h1>
+    <p>
+      How the pieces fit together — core, plugins, the event bus, options, and what actually ends up
+      on screen. This is the shape of the system for someone <em>integrating</em> Shoji; if you're
+      changing Shoji's own source, <code>DESIGN.md</code> in the repo root is the real spec (every
+      behavior, every real bug that shaped it, and why). This page is the map; that one's the
+      territory.
+    </p>
+
+    <h2>The big picture</h2>
+    <p>
+      <code>new Shoji(el, options)</code> builds one <strong>core</strong> instance and, eagerly,
+      every <strong>plugin</strong> named in <code>options.plugins</code> — in that array's order,
+      which is also priority order everywhere it matters (toolbar-collapse priority, §3.1a).
+      Everything a plugin can affect goes back through <em>core</em>, either by calling
+      <code>ctx.gallery</code>'s own public methods or by emitting/listening on the shared event bus
+      — plugins never import or call each other directly.
+    </p>
+    <div class="arch-diagram">
+      <svg
+        viewBox="0 0 720 420"
+        role="img"
+        aria-label="Host page calls new Shoji, which builds core and every listed plugin; plugins register UI and behavior back through core, which renders the lightbox."
+      >
+        <defs>
+          <marker
+            id="arrow1"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+        <g font-family="ui-monospace, monospace" font-size="14">
+          <rect x="270" y="10" width="180" height="46" rx="8" fill="none" stroke="currentColor" />
+          <text x="360" y="38" text-anchor="middle">Host page</text>
+
+          <line x1="360" y1="56" x2="360" y2="98" stroke="currentColor" marker-end="url(#arrow1)" />
+          <text x="372" y="82" font-size="12" opacity="0.75">new Shoji(el, options)</text>
+
+          <rect
+            x="120"
+            y="98"
+            width="480"
+            height="94"
+            rx="8"
+            fill="#4da3ff22"
+            stroke="#4da3ff"
+            stroke-width="1.5"
+          />
+          <text x="360" y="128" text-anchor="middle" font-weight="600">Core (Gallery)</text>
+          <text x="360" y="154" text-anchor="middle" font-size="12" opacity="0.75">
+            state · DOM · event bus
+          </text>
+          <text x="360" y="174" text-anchor="middle" font-size="12" opacity="0.75">
+            gestures · slide pool · a11y
+          </text>
+
+          <line
+            x1="360"
+            y1="192"
+            x2="360"
+            y2="234"
+            stroke="currentColor"
+            marker-end="url(#arrow1)"
+          />
+          <text x="374" y="218" font-size="12" opacity="0.75">
+            a PluginContext each, at construction
+          </text>
+
+          <rect x="30" y="234" width="660" height="94" rx="8" fill="none" stroke="currentColor" />
+          <text x="360" y="264" text-anchor="middle" font-weight="600">
+            Plugins — opt-in, in array order
+          </text>
+          <text x="360" y="290" text-anchor="middle" font-size="12" opacity="0.75">
+            Zoom · Fullscreen · RotateFlip · Autoplay
+          </text>
+          <text x="360" y="310" text-anchor="middle" font-size="12" opacity="0.75">
+            ActiveThumbnail · Layout · Video · yours
+          </text>
+
+          <line
+            x1="360"
+            y1="328"
+            x2="360"
+            y2="370"
+            stroke="currentColor"
+            marker-end="url(#arrow1)"
+          />
+          <text x="270" y="354" font-size="12" opacity="0.75">
+            register UI / behavior back through ctx
+          </text>
+        </g>
+      </svg>
+    </div>
+    <p>
+      Plugins run <code>init()</code> synchronously at construction time, not lazily on first
+      <code>open()</code> — the lightbox DOM already exists (hidden) by then, so
+      <code>ctx.ui.*</code> has real elements to act on immediately, with no queueing. That's also
+      why a plugin like Layout can act on the inline thumbnail grid before the lightbox has ever
+      been opened at all — it isn't waiting for anything.
+    </p>
+
+    <h2>Core's own modules</h2>
+    <p>
+      "Core" isn't one file — <code>Gallery.ts</code> is the orchestrator, but it delegates real
+      work to focused modules underneath it, none of which know about plugins at all:
+    </p>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Owns</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Gallery.ts</code></td>
+          <td>
+            Public API, lifecycle (open/close/navigate), options merging, wiring every other module
+            together.
+          </td>
+        </tr>
+        <tr>
+          <td><code>dom.ts</code></td>
+          <td>Builds the lightbox's actual DOM tree once — see the structure below.</td>
+        </tr>
+        <tr>
+          <td><code>SlideManager.ts</code></td>
+          <td>
+            The slide pool — only <code>currentIndex ± preload</code> ever exist in the DOM (default
+            <code>preload: 1</code>, so 3 slots). Reuses/relabels slots instead of destroying and
+            rebuilding on every navigation.
+          </td>
+        </tr>
+        <tr>
+          <td><code>GestureEngine.ts</code> / <code>GestureController.ts</code></td>
+          <td>
+            One Pointer-Events state machine feeding drag-to-navigate, drag-to-close, pinch, and tap
+            detection — mouse and touch share the same code path.
+          </td>
+        </tr>
+        <tr>
+          <td><code>zoomTransition.ts</code></td>
+          <td>The open/close zoom-from-thumbnail math (FLIP-style transform computation).</td>
+        </tr>
+        <tr>
+          <td><code>EventBus.ts</code></td>
+          <td>
+            The typed pub/sub every <code>gallery.on()</code>/<code>ctx.on()</code> call reads from.
+          </td>
+        </tr>
+        <tr>
+          <td><code>FocusTrap.ts</code> / <code>LiveRegion.ts</code></td>
+          <td>
+            Keyboard focus containment and screen-reader announcements — not a plugin, not optional
+            (CLAUDE.md).
+          </td>
+        </tr>
+        <tr>
+          <td><code>plugin.ts</code></td>
+          <td>
+            The <code>ShojiPlugin</code>/<code>PluginContext</code> contract itself — the interface
+            plugins are written against.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>The event bus</h2>
+    <p>
+      One <code>EventBus&lt;GalleryEvents&gt;</code> instance per gallery. Core emits
+      lifecycle/slide/ gesture events (full catalog in the
+      <a href="../guides/events.html">Events guide</a>); plugins can emit their own on top of it
+      (Autoplay's <code>autoplayStart</code>/<code>autoplayStop</code>, for example) through the
+      exact same bus, via <code>ctx.emit()</code>. A host listens with
+      <code>gallery.on(event, fn)</code> — the same method a plugin's own <code>ctx.on()</code>
+      forwards to.
+    </p>
+    <div class="arch-diagram">
+      <svg
+        viewBox="0 0 720 220"
+        role="img"
+        aria-label="Core and every plugin both emit to and listen on one shared typed event bus; the host listens via gallery.on."
+      >
+        <defs>
+          <marker
+            id="arrow2"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+        <g font-family="ui-monospace, monospace" font-size="13">
+          <rect x="20" y="20" width="140" height="46" rx="8" fill="none" stroke="currentColor" />
+          <text x="90" y="48" text-anchor="middle">Core</text>
+
+          <rect x="20" y="150" width="140" height="46" rx="8" fill="none" stroke="currentColor" />
+          <text x="90" y="178" text-anchor="middle">Plugin A</text>
+
+          <rect x="560" y="150" width="140" height="46" rx="8" fill="none" stroke="currentColor" />
+          <text x="630" y="178" text-anchor="middle">Plugin B</text>
+
+          <rect
+            x="280"
+            y="87"
+            width="160"
+            height="46"
+            rx="8"
+            fill="#4da3ff22"
+            stroke="#4da3ff"
+            stroke-width="1.5"
+          />
+          <text x="360" y="115" text-anchor="middle" font-weight="600">EventBus</text>
+
+          <line
+            x1="160"
+            y1="43"
+            x2="280"
+            y2="100"
+            stroke="currentColor"
+            marker-end="url(#arrow2)"
+          />
+          <line
+            x1="160"
+            y1="173"
+            x2="280"
+            y2="118"
+            stroke="currentColor"
+            marker-end="url(#arrow2)"
+          />
+          <line
+            x1="560"
+            y1="173"
+            x2="440"
+            y2="118"
+            stroke="currentColor"
+            marker-end="url(#arrow2)"
+          />
+
+          <rect x="480" y="20" width="140" height="46" rx="8" fill="none" stroke="currentColor" />
+          <text x="550" y="48" text-anchor="middle">Host page</text>
+          <line
+            x1="480"
+            y1="43"
+            x2="440"
+            y2="100"
+            stroke="currentColor"
+            marker-end="url(#arrow2)"
+          />
+        </g>
+      </svg>
+      <p class="arch-caption">
+        Arrows point toward the bus — every side both emits and subscribes through it the same way;
+        nothing here is a one-way broadcast. There's no line from Plugin A to Plugin B directly —
+        that path doesn't exist.
+      </p>
+    </div>
+    <p>
+      This is also why cross-plugin dependencies are declared, not assumed:
+      <code>requires: ['otherPlugin']</code> on a <code>ShojiPlugin</code> is checked against the
+      whole declared <code>plugins</code> list at construction, not registration order — a missing
+      or failed dependency logs an error and skips that one plugin without taking the rest of the
+      gallery down. No plugin can reach into another's internals even if it wanted to; the event bus
+      is the only channel.
+    </p>
+
+    <h2>Options: two layers, one merge</h2>
+    <p>
+      <code>GalleryOptions</code>' own top-level fields (<code>preload</code>,
+      <code>autoHideDelay</code>, <code>mode</code>, and so on — full list in the
+      <a href="../guides/settings.html">Settings guide</a>) are core's alone; plugins never see
+      them. A plugin's <em>own</em> options nest under a key matching its <code>name</code> —
+      <code>zoom: {...}</code> for the plugin named <code>'zoom'</code> — and get merged over that
+      plugin's own <code>defaults</code> before <code>init()</code> ever runs:
+    </p>
+    <pre><code>new Shoji('#gallery', {
+  preload: 2,                 // core option — GalleryOptions
+  plugins: [Shoji.Zoom],
+  zoom: { maxScale: 8 },      // plugin option — merged over Zoom's own defaults
+});</code></pre>
+    <p>
+      Inside Zoom's <code>init(ctx)</code>, <code>ctx.options</code> is already that merged result —
+      <code>{ maxScale: 8, doubleTapScale: 2, buttonStep: 1.5, ... }</code> — read-only, and scoped
+      to that one plugin; it can't see <code>preload</code>, and it can't see another plugin's
+      options either. Every official plugin's <code>defaults</code> are chosen so that just listing
+      it in <code>plugins</code> is already a complete, working config — the options object is only
+      ever for overriding something.
+    </p>
+
+    <h2>What actually renders</h2>
+    <p>
+      <code>dom.ts</code> builds this once, up front, hidden until the first <code>open()</code>.
+      Plugins never build lightbox chrome themselves — <code>ctx.ui.toolbar()</code>/
+      <code>ctx.ui.overlay()</code> insert into slots this structure already reserves.
+    </p>
+    <div class="arch-diagram">
+      <pre class="arch-tree"><code>.shoji-outer
+├─ .shoji-backdrop
+└─ .shoji-dialog                     (role="dialog", focus-trapped)
+   ├─ .shoji-toolbar
+   │  ├─ .shoji-toolbar-left         ← ctx.ui.toolbar('left', …)
+   │  ├─ .shoji-toolbar-center       ← ctx.ui.toolbar('center', …)
+   │  └─ .shoji-toolbar-right        ← ctx.ui.toolbar('right', …), close button always last
+   ├─ .shoji-slides                  (SlideManager's pool — preload × 2 + 1 slots)
+   │  └─ .shoji-slide  × N           (only one holds offset 0, the active slide)
+   ├─ .shoji-nav-prev / .shoji-nav-next
+   ├─ .shoji-caption  (+ .shoji-caption-modal when truncated, §2.3a)
+   └─ .shoji-toolbar-overflow-panel  (collapsed toolbar buttons, §3.1a)</code></pre>
+    </div>
+    <p>
+      Every visual property is a <code>--shoji-*</code> CSS custom property (full catalog in the
+      <a href="../guides/theming.html">Theming guide</a>) — core and every official plugin read from
+      these instead of hardcoding colors/sizes, so a host re-themes by overriding custom properties,
+      never by fighting specificity.
+    </p>
+
+    <h2>Distribution shape</h2>
+    <p>
+      The same source compiles to two different consumption shapes, and both always ship together —
+      neither is allowed to lag behind the other:
+    </p>
+    <ul>
+      <li>
+        <strong>Single-file</strong> (<code>dist/shoji.js</code> + <code>shoji.css</code>, and their
+        <code>.min</code> pair) — core and all seven official plugins in one file, self-registering.
+        <code>Shoji</code> is a single UMD global; official plugins are attached as static
+        properties (<code>Shoji.Zoom</code>) via
+        <code>Object.assign(Gallery, { Zoom, Fullscreen, ... })</code> — this is what a plain
+        <code>&lt;script&gt;</code> tag gets, and what the demo/docs site itself loads.
+      </li>
+      <li>
+        <strong>Tree-shakable ESM</strong> — <code>src/core/index.ts</code> plus a separate entry
+        per official plugin (<code>shoji/plugins/zoom</code>, etc.), for a bundler-based host that
+        only wants the plugins it actually uses compiled in.
+      </li>
+    </ul>
+
+    <footer>Next: <a href="../guides/plugins.html">the plugin contract</a>, in depth.</footer>
+  </body>
+</html>

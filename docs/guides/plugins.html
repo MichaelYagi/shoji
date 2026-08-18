@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shoji Docs — Plugins</title>
     <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
   </head>
   <body>
     <h1>Shoji</h1>
@@ -18,6 +19,7 @@
       <a href="./events.html">Events</a>
       <a href="./settings.html">Settings</a>
       <a href="./theming.html">Theming</a>
+      <a href="../architecture/index.html">Architecture</a>
       <a href="../examples/index.html">Examples</a>
       <a href="../playground.html">Playground</a>
       <a href="../api/index.html">API reference</a>
@@ -153,9 +155,11 @@
     </table>
 
     <h2>Writing a custom plugin</h2>
-    <p>A plugin is a plain object — no base class:</p>
+    <p>A plugin is a plain object — no base class. The full shape:</p>
     <pre><code>const MyPlugin = {
   name: 'myPlugin',
+  version: '1.0.0',   // optional — yours to track; core never reads it
+  requires: [],        // optional — other plugin names that must also be in `plugins`
   defaults: { message: 'Hello from a plugin' },
 
   init(ctx) {
@@ -170,6 +174,87 @@
 };
 
 new Shoji('#gallery', { plugins: [MyPlugin], myPlugin: { message: 'Hi!' } });</code></pre>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Required</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>name</code></td>
+          <td>Yes</td>
+          <td>
+            Unique identifier. The key <code>options[name]</code> is read from, what
+            <code>requires</code>/<code>getActivePlugins()</code> refer to it by, and what shows up
+            in the "unmet dependency" error if something else's <code>requires</code> names it and
+            it's missing.
+          </td>
+        </tr>
+        <tr>
+          <td><code>version</code></td>
+          <td>No</td>
+          <td>
+            A string you set for your own tracking/debugging. Purely informational — nothing in core
+            reads it today.
+          </td>
+        </tr>
+        <tr>
+          <td><code>requires</code></td>
+          <td>No</td>
+          <td>
+            <code>string[]</code> — the required plugins' own <code>name</code> <em>strings</em>,
+            e.g. <code>['zoom']</code>, never the plugin objects themselves (not
+            <code>[Shoji.Zoom]</code>). Checked against the whole declared
+            <code>plugins</code> array — position doesn't matter, a dependency can be listed before
+            <em>or</em> after the plugin that needs it. See the callout just below.
+          </td>
+        </tr>
+        <tr>
+          <td><code>defaults</code></td>
+          <td>No</td>
+          <td>
+            This plugin's own default options — merged underneath whatever the host passed as
+            <code>options[name]</code> before <code>ctx.options</code> is built. Omit it entirely if
+            your plugin takes no options.
+          </td>
+        </tr>
+        <tr>
+          <td><code>init(ctx)</code></td>
+          <td>Yes</td>
+          <td>
+            Runs once, synchronously, at <code>new Shoji()</code> construction time (not lazily on
+            first <code>open()</code>). Return nothing, or return a cleanup function — called on
+            <code>destroy()</code>/<code>reinit()</code> for anything you set up by hand outside
+            <code>ctx</code> (everything registered <em>through</em> <code>ctx</code> is already
+            disposed automatically, see below).
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <blockquote>
+      <strong>The one easy way to get <code>requires</code> wrong</strong> — it fails silently
+      (logged to the console, not thrown), which is exactly what makes it easy to miss: the
+      dependent plugin's <code>init()</code> just never runs, so whatever it registers (a toolbar
+      button, in this example) simply never appears, with no error visible unless you're looking at
+      the console.
+      <pre><code>// Wrong — plugin objects, not their name strings:
+requires: [Shoji.Zoom, MyOtherPlugin]
+
+// Right — name strings. Position in `plugins` doesn't matter either way —
+// MyOtherPlugin can be listed before *or* after ThisPlugin, both work:
+requires: ['zoom', 'myOtherPlugin']</code></pre>
+      <code>requires</code> is checked against the <em>whole</em> declared <code>plugins</code>
+      array, not registration order — a dependency only needs to be somewhere in the list, not
+      listed earlier than whatever needs it. It even resolves chains correctly: if
+      <code>myOtherPlugin</code> itself had an unmet <code>requires</code>,
+      <code>ThisPlugin</code> would be skipped too, not just left silently assuming a broken
+      dependency was fine. What never changes regardless: every plugin's <code>init()</code> still
+      runs — and every <code>ctx.ui.toolbar()</code> button still lands — in exactly the order the
+      <code>plugins</code> array itself declares.
+    </blockquote>
     <p>What <code>ctx</code> gives you:</p>
     <ul>
       <li>
@@ -220,11 +305,13 @@ new Shoji('#gallery', { plugins: [MyPlugin], myPlugin: { message: 'Hi!' } });</c
     </ul>
     <p>
       Rules worth knowing: plugins talk to each other only through events, never direct imports —
-      <code>requires: ['otherPlugin']</code> declares a hard dependency (checked against load order
-      in the <code>plugins</code> array; a missing dependency logs an error and skips that plugin,
-      without taking down the rest). Everything registered through <code>ctx</code> is disposed
-      automatically on <code>destroy()</code>/<code>reinit()</code> — the function your
-      <code>init()</code> returns is for anything else you set up by hand.
+      <code>requires: ['otherPlugin']</code> declares a hard dependency (checked against the whole
+      declared <code>plugins</code> array, not registration order; a missing or failed dependency
+      logs an error and skips that plugin, without taking down the rest). Everything registered
+      through <code>ctx</code> is disposed automatically on <code>destroy()</code>/<code
+        >reinit()</code
+      >
+      — the function your <code>init()</code> returns is for anything else you set up by hand.
     </p>
     <p>
       Plugins init eagerly, at construction time — not lazily on first <code>open()</code> — so
