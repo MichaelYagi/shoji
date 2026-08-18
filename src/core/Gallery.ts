@@ -131,8 +131,8 @@ export class Gallery {
   private loop = true;
   private closable = true;
   private autoHideDelay: number | false = 5000;
-  /** DESIGN.md §3.1a — GalleryOptions.minPinnedToolbarButtons; see measureToolbarOverflow(). */
-  private minPinnedToolbarButtons = 2;
+  /** DESIGN.md §3.1a — GalleryOptions.maxPinnedToolbarButtons; see measureToolbarOverflow(). */
+  private maxPinnedToolbarButtons = 2;
   private readonly focusTrap = new FocusTrap();
   private readonly liveRegion = new LiveRegion();
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -195,9 +195,9 @@ export class Gallery {
    * DESIGN.md §3.1a — every `ctx.ui.toolbar()`-registered button, in
    * registration order, alongside the slot it was registered into (so a
    * collapsed one can be restored to the right place, not just anywhere).
-   * Registration order is what decides overflow priority: the first
-   * `minPinnedToolbarButtons` always stay pinned, the rest collapse into
-   * the popover before them, latest-registered first — see
+   * Registration order is what decides overflow priority: up to
+   * `maxPinnedToolbarButtons` stay pinned, the rest collapse into the
+   * popover before them, latest-registered first — see
    * `measureToolbarOverflow()`.
    */
   private readonly pluginToolbarButtons: Array<{
@@ -353,7 +353,7 @@ export class Gallery {
     this.loop = options.loop ?? true;
     this.closable = options.closable ?? true;
     this.autoHideDelay = options.autoHideDelay ?? 5000;
-    this.minPinnedToolbarButtons = options.minPinnedToolbarButtons ?? 2;
+    this.maxPinnedToolbarButtons = options.maxPinnedToolbarButtons ?? 2;
     // Reset explicitly — a reinit() call must not inherit these from before.
     this.activeIndex = 0;
     this.scannedElements = [];
@@ -758,14 +758,17 @@ export class Gallery {
    *
    * Collapses latest-registered first (DESIGN.md §3's own registration-
    * order-is-priority convention — `plugins: [A, B, C]` keeps A pinned
-   * before B/C), stopping the instant it fits — never below
-   * `minPinnedToolbarButtons` pinned, even if that still leaves a slot
-   * wrapped on a pathologically narrow viewport; losing access to a button
-   * entirely is worse than an occasional short second row. Requested
-   * directly: `minPinnedToolbarButtons` plugin buttons (default 2, see
-   * `GalleryOptions.minPinnedToolbarButtons`) stay pinned on the toolbar's
-   * own row once overflow is active, alongside `closeButton` and
-   * `toolbarOverflowButton` themselves — everything else relocates into the
+   * before B/C). `maxPinnedToolbarButtons` (default 2, see
+   * `GalleryOptions.maxPinnedToolbarButtons`) is a ceiling, not a
+   * guarantee: collapsing always goes down to at most that many pinned,
+   * but keeps going *below* it — down to zero if it must — whenever even
+   * that many still leaves a slot wrapped. `closeButton` and the counter
+   * (`toolbarLeft`) must never wrap onto their own line, and `fitsOneRow()`
+   * already checks every slot's height, not just `toolbarRight`'s, so a
+   * wide counter or other left-slot content competing for the same row
+   * pushes the pinned count down too, not just the right slot's own
+   * button count. `closeButton`/`toolbarOverflowButton` themselves are
+   * never candidates for collapse — everything else relocates into the
    * popover, which renders directly below that row.
    */
   private measureToolbarOverflow(): void {
@@ -785,11 +788,15 @@ export class Gallery {
         (slotEl) => slotEl.getBoundingClientRect().height <= rowHeight + 1,
       );
 
-    if (this.pluginToolbarButtons.length <= this.minPinnedToolbarButtons || fitsOneRow()) return;
+    if (fitsOneRow()) return;
 
+    const pinnedCeiling = Math.min(this.maxPinnedToolbarButtons, this.pluginToolbarButtons.length);
     dom.toolbarOverflowButton.hidden = false;
-    for (let i = this.pluginToolbarButtons.length - 1; i >= this.minPinnedToolbarButtons; i--) {
-      if (fitsOneRow()) break;
+    for (let i = this.pluginToolbarButtons.length - 1; i >= 0; i--) {
+      // Below the ceiling, stop as soon as it fits; at/above it, keep
+      // collapsing regardless of fit — the ceiling is enforced first, then
+      // fit is what decides whether to go further still.
+      if (i < pinnedCeiling && fitsOneRow()) break;
       // Collapsed latest-registered first (the decision above), but
       // inserted at the *front* of the panel each time — the panel should
       // read in the same left-to-right registration order the toolbar row
@@ -816,10 +823,65 @@ export class Gallery {
     if (!this.dom || this.toolbarOverflowOpen) return;
     this.toolbarOverflowReturnFocus = document.activeElement as HTMLElement | null;
     this.dom.toolbarOverflowPanel.hidden = false;
+    this.positionToolbarOverflowPanel();
     this.dom.toolbarOverflowButton.setAttribute('aria-expanded', 'true');
     this.toolbarOverflowOpen = true;
     this.focusTrap.retarget(this.dom.toolbarOverflowPanel);
     document.addEventListener('keydown', this.onToolbarOverflowKeydown, true);
+  }
+
+  /**
+   * DESIGN.md §3.1a — the panel's `right` offset is set here, per open,
+   * rather than as a fixed CSS value: the caret's own x-position isn't
+   * fixed, it shifts with how many buttons are pinned ahead of it
+   * (`maxPinnedToolbarButtons` is host-configurable, and can itself be
+   * reduced further at measure time, DESIGN.md §3.1a), so a static
+   * `right: var(--shoji-spacing-md)` only happened to line up with the
+   * caret at one particular pinned-button count and viewport width. It
+   * otherwise anchored to the toolbar/dialog's own right edge — under
+   * `closeButton`, which sits to the right of the caret, not under the
+   * caret that actually opens it.
+   *
+   * Aligns the panel's own *content* edge (inside its padding), not just
+   * its border box, with the caret's right edge — the panel's grid pitch
+   * (44px columns, `--shoji-spacing-sm` gaps, `.shoji-toolbar-overflow-
+   * panel` in shoji.css) already matches the toolbar row's own button
+   * size/gap, so subtracting the panel's own right padding here is what
+   * makes the popover's icon columns actually line up with the toolbar
+   * row's icons above them, not just the panel block sitting roughly
+   * nearby.
+   *
+   * Also sets the grid's own column count to match the toolbar row's own
+   * column count right now: however many buttons are *actually* still
+   * pinned on `toolbarRight` (excluding `closeButton`, which never moves
+   * and never collapses, and the video caption-toggle button, which isn't
+   * part of the pinned/collapsed set `measureToolbarOverflow()` manages at
+   * all), *plus the caret itself* — requested directly: the popover should
+   * read as the same row of columns continuing downward, caret included,
+   * not a fixed 3 columns regardless of how many ended up pinned. At the
+   * default `maxPinnedToolbarButtons` (2), that's 2 pinned + the caret = 3
+   * columns. Collapsed buttons beyond that count still wrap onto further
+   * rows within it, same as before.
+   */
+  private positionToolbarOverflowPanel(): void {
+    if (!this.dom) return;
+    const { dialog, toolbarOverflowButton, toolbarOverflowPanel, toolbarRight, closeButton } =
+      this.dom;
+    const dialogRight = dialog.getBoundingClientRect().right;
+    const caretRight = toolbarOverflowButton.getBoundingClientRect().right;
+    const paddingRight = parseFloat(getComputedStyle(toolbarOverflowPanel).paddingRight) || 0;
+    const right = dialogRight - caretRight - paddingRight;
+    toolbarOverflowPanel.style.right = `${Math.max(0, right)}px`;
+
+    const pinnedCount = Array.from(toolbarRight.children).filter(
+      (el): el is HTMLElement =>
+        el instanceof HTMLElement &&
+        el !== toolbarOverflowButton &&
+        el !== closeButton &&
+        !el.hidden,
+    ).length;
+    const columnCount = pinnedCount + 1; // + the caret itself
+    toolbarOverflowPanel.style.gridTemplateColumns = `repeat(${columnCount}, 44px)`;
   }
 
   private closeToolbarOverflow(): void {

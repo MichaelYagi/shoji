@@ -24,14 +24,21 @@ still include breaking changes).
 - A toolbar with more plugin buttons than a narrow viewport has room for no
   longer wraps to a second/third row — once the row measurably doesn't fit,
   buttons collapse (latest-registered first) into a floating popover
-  revealed by a caret just to the left of the close button, keeping
-  `minPinnedToolbarButtons` (new `GalleryOptions` field, default 2) plugin
-  buttons plus close and the caret sharing the toolbar's own row — the
-  popover itself lists them in the same order they'd have read on the
-  toolbar, not reversed. Opens on caret click, closes on Escape/an outside
-  click, keyboard-confined while open (Tab cycling narrows to it, matching
-  the caption modal's own focus-trap behavior), and restores every button
-  to its normal slot the moment it fits again. Replaces the removed
+  revealed by a caret just to the left of the close button. The popover
+  itself lists them in the same order they'd have read on the toolbar, not
+  reversed. `maxPinnedToolbarButtons` (new `GalleryOptions` field, default 2) caps how many plugin buttons stay pinned on the row — a ceiling, not
+  a guarantee: if pinning even that many would still wrap the row (e.g. a
+  wide counter leaves less room than usual), more collapse into the
+  popover until it fits, down to zero if it must. The counter and close
+  button are never allowed to wrap onto their own line. The popover opens
+  anchored to the caret's own live position (not a fixed offset from the
+  toolbar's edge), and its grid is exactly as many columns wide as the
+  toolbar row's own pinned-buttons-plus-caret count, so it reads as that
+  same row continuing downward rather than an independently-sized box.
+  Opens on caret click, closes on Escape/an outside click, keyboard-
+  confined while open (Tab cycling narrows to it, matching the caption
+  modal's own focus-trap behavior), and restores every button to its
+  normal slot the moment it fits again. Replaces the removed
   `mobileSettings.controls` (see "Removed" below) as the actual,
   measured-overflow answer to a busy toolbar. See DESIGN.md §3.1a.
 
@@ -51,11 +58,13 @@ still include breaking changes).
   vertically-centered nav arrows sharing the caption's own left edge.
   Beyond that, see "Added" above — it truncates and opens a modal instead
   of scrolling in place. See DESIGN.md §2.3a.
-- Core's size budget raised 26.9 kB → 35 kB (min+gzip) — 26.9 kB → 33 kB for
-  the caption modal above and the real bugs fixed while testing it end to
-  end, then 33 kB → 35 kB for the hover-tracking rewrite (see "Fixed" below)
-  and the toolbar overflow popover above — real, deliberate growth, not
-  incidental. See DESIGN.md's own budget-history note.
+- Core's size budget raised 26.9 kB → 35.2 kB (min+gzip) — 26.9 kB → 33 kB
+  for the caption modal above and the real bugs fixed while testing it end
+  to end, then 33 kB → 35 kB for the hover-tracking rewrite (see "Fixed"
+  below) and the toolbar overflow popover above, then 35 kB → 35.2 kB for
+  that popover's own collapse-policy inversion (`maxPinnedToolbarButtons`
+  and the never-wrap guarantee) — real, deliberate growth, not incidental.
+  See DESIGN.md's own budget-history note.
 
 ### Removed
 
@@ -120,10 +129,19 @@ still include breaking changes).
 - The toolbar overflow popover above didn't reliably fit even its own
   default pinned-button count on a real narrow phone (reported and
   reproduced directly at a 360×640 viewport): `.shoji-toolbar-slot`'s own
-  `max-width: 45%`, a pre-existing cap from before the popover replaced
-  the old wrap-to-a-second-row fallback, was narrower than what the
-  _default, unconfigured_ `minPinnedToolbarButtons` (2) plus close plus
-  the caret need. Raised to 60%. See DESIGN.md §3.1a.
+  `max-width` (a pre-existing cap from before the popover replaced the old
+  wrap-to-a-second-row fallback) was a flat percentage of the toolbar's
+  width, unrelated to how much room the _other_ slot's content (the
+  counter) actually needed — the right slot could get capped well below
+  the real available space regardless of `maxPinnedToolbarButtons`. A
+  first attempt raised the percentage from 45% to 60%, which only patched
+  the specific default-pinned-count case; a follow-up report at a higher
+  configured `maxPinnedToolbarButtons` (real usage: 4 pinned buttons
+  configured, only 2 actually shown) exposed the same root cause. Removed
+  the cap entirely — `measureToolbarOverflow()`'s own real, measured
+  fit-check (already reading every slot's actual rendered height) is what
+  decides how many buttons stay pinned now, not a static percentage
+  assumption. See DESIGN.md §3.1a.
 - The popover's own outside-click-to-close listener used `event.target`,
   which can already be a detached node by the time a bubble-phase listener
   runs if the clicked element replaces its own innerHTML synchronously
@@ -143,6 +161,14 @@ still include breaking changes).
   the wider grouping and letting `minRowHeight` yield instead, the same
   precedent already used for a single tile too wide to fit at
   `minRowHeight` at all. See DESIGN.md §5.2.
+- The toolbar overflow popover opened aligned under the close button
+  instead of the caret that actually reveals it — its position was a fixed
+  offset from the toolbar's own right edge rather than anchored to the
+  caret, which can itself sit at a different position depending on
+  `maxPinnedToolbarButtons`/viewport width. Now positioned relative to the
+  caret's own live location every time it opens, keeping its icon columns
+  genuinely aligned with the toolbar row's icons above them. See DESIGN.md
+  §3.1a.
 
 ## [0.1.0-alpha.14] - 2026-08-15
 

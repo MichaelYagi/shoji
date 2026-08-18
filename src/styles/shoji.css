@@ -250,7 +250,6 @@
   align-items: center;
   gap: var(--shoji-spacing-sm);
   pointer-events: auto;
-  max-width: 60%;
 }
 
 .shoji-toolbar-left {
@@ -701,7 +700,17 @@
 /* 3 columns, wrapping to as many rows as needed — requested directly.
    Width is content-driven (3 * 44px + 2 gaps + padding), not clamped to a
    fraction of the dialog, since it never grows past that regardless of how
-   many buttons collapse into it. */
+   many buttons collapse into it. Columns are 44px with `--shoji-spacing-sm`
+   gaps — deliberately the same pitch as a toolbar button's own size and
+   `.shoji-toolbar-slot`'s own gap, so the popover's icon columns actually
+   line up with the toolbar row's icons above them.
+
+   `right` here is only a pre-open fallback — Gallery.ts's
+   `positionToolbarOverflowPanel()` sets it inline every time the panel
+   opens, anchored to the caret's own live position (which shifts with
+   `minPinnedToolbarButtons` and viewport width) rather than this fixed
+   offset from the dialog's edge, which otherwise lined up under
+   `closeButton` instead of the caret that actually opens it. */
 .shoji-toolbar-overflow-panel {
   position: absolute;
   top: var(--shoji-toolbar-height, 56px);

@@ -61,7 +61,7 @@ test('zoom in / zoom out toolbar buttons toggle the zoomed state', async ({ page
 
   // Zoom is the first-registered plugin (DESIGN.md §3.1a) — "Zoom in" and
   // "Zoom out", its first two buttons, are always among the pinned ones
-  // (the fixture doesn't override minPinnedToolbarButtons, default 2);
+  // (the fixture doesn't override maxPinnedToolbarButtons, default 2);
   // revealToolbarButton() below is a
   // harmless no-op wherever that's already true, and only does real work on
   // a viewport narrow enough that even these don't fit (unlikely, but not

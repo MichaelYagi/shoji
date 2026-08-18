@@ -12,7 +12,7 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 async function openOverflowing(page: Page): Promise<void> {
-  // Wide enough that the pinned set itself (minPinnedToolbarButtons (2) +
+  // Wide enough that the pinned set itself (maxPinnedToolbarButtons (2) +
   // close + caret = 4 icons) still fits comfortably in one row — this is
   // about the *extra* buttons overflowing, not the pinned ones.
   await page.setViewportSize({ width: 500, height: 700 });
@@ -55,7 +55,7 @@ test('an overflowing toolbar collapses buttons (latest-registered first) into th
 
   // The fixture registers 15 plugin buttons total (Zoom 3, Fullscreen 1,
   // RotateFlip 4, Autoplay 1, plus the 6 forced extras) — the default
-  // minPinnedToolbarButtons (2) keeps only Zoom's own first 2 pinned; the
+  // maxPinnedToolbarButtons (2) keeps only Zoom's own first 2 pinned; the
   // latest-registered extra button (#5) is nowhere near that front, so
   // it's collapsed into the popover.
   await expect(page.locator('.shoji-toolbar-right [data-e2e-button="5"]')).toHaveCount(0);
@@ -141,6 +141,57 @@ test('Tab stays confined to the open popover, and focus returns to the caret on 
     () => document.activeElement === document.querySelector('.shoji-toolbar-overflow'),
   );
   expect(focusReturned).toBe(true);
+});
+
+test('regression: the popover opens aligned under the caret, not the close button further to its right', async ({
+  page,
+}) => {
+  await openOverflowing(page);
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  const closeButton = page.locator('.shoji-close').last();
+  const panel = page.locator('.shoji-toolbar-overflow-panel').last();
+
+  await caret.click();
+  await expect(panel).toBeVisible();
+
+  const caretBox = (await caret.boundingBox())!;
+  const closeBox = (await closeButton.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  const paddingRight = await panel.evaluate(
+    (el) => parseFloat(getComputedStyle(el).paddingRight) || 0,
+  );
+
+  // The panel's own padding sits outside its grid content, so the panel's
+  // border-box right edge lands one padding-width past the caret's own
+  // right edge — that's what puts the *grid content* (the actual icon
+  // columns) flush with the caret, not the panel's outer box. That
+  // padding (--shoji-spacing-sm) happens to equal the toolbar's own
+  // inter-button gap, so in practice the panel's border-box edge lands
+  // exactly flush against the close button's own left edge — real,
+  // confirmed behavior, not a bug — hence `toBeLessThanOrEqual`, not a
+  // strict `toBeLessThan`: it must never land *past* the close button's
+  // edge (an actual overlap), but landing exactly on it is fine.
+  expect(panelBox.x + panelBox.width).toBeCloseTo(caretBox.x + caretBox.width + paddingRight, 0);
+  expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(closeBox.x + 1);
+});
+
+test('regression: the popover grid is as many columns wide as the pinned buttons plus the caret, not a fixed count', async ({
+  page,
+}) => {
+  await openOverflowing(page);
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  const panel = page.locator('.shoji-toolbar-overflow-panel').last();
+
+  await caret.click();
+  await expect(panel).toBeVisible();
+
+  // openOverflowing()'s fixture keeps the default maxPinnedToolbarButtons
+  // (2) — 2 pinned plugin buttons + the caret itself = 3 columns. The
+  // close button is never one of them.
+  const columns = await panel.evaluate(
+    (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length,
+  );
+  expect(columns).toBe(3);
 });
 
 test('navigating to another slide closes the popover rather than leaving it stranded', async ({

@@ -110,11 +110,14 @@
           </td>
         </tr>
         <tr>
-          <td><code>minPinnedToolbarButtons</code></td>
+          <td><code>maxPinnedToolbarButtons</code></td>
           <td><code>2</code></td>
           <td>
-            How many <code>ctx.ui.toolbar('right', ...)</code>-registered plugin buttons stay pinned
-            directly on the toolbar row (in registration order) once it doesn't fit — the rest
+            The most <code>ctx.ui.toolbar('right', ...)</code>-registered plugin buttons (in
+            registration order) that stay pinned directly on the toolbar row once it doesn't fit — a
+            ceiling, not a guarantee. If even that many would still wrap the row (e.g. a wide
+            counter leaves less room than usual), more collapse into the popover until it fits, down
+            to zero if it must; the counter and <code>closeButton</code> never wrap. The rest
             collapse into an overflow popover behind a caret, latest-registered first.
             <code>closeButton</code> and the caret itself are always on the row regardless; a host
             with more toolbar plugins than the default fits might raise this. See the

@@ -110,14 +110,18 @@ export interface GalleryOptions {
    */
   autoHideDelay?: number | false;
   /**
-   * DESIGN.md §3.1a — how many `ctx.ui.toolbar('right', ...)`-registered
-   * plugin buttons stay pinned directly on the toolbar row (in registration
-   * order) once it overflows; default 2. The rest collapse into the
-   * overflow popover, latest-registered first. `closeButton` and the
-   * overflow caret itself are never counted against this — they're always
-   * on the row regardless.
+   * DESIGN.md §3.1a — the most `ctx.ui.toolbar('right', ...)`-registered
+   * plugin buttons (in registration order) that stay pinned directly on
+   * the toolbar row once it overflows; default 2. A ceiling, not a
+   * guarantee — if pinning even this many would still wrap the row (e.g.
+   * a wide counter or other left-slot content leaves less room than
+   * usual), more collapse into the popover until it fits, down to zero if
+   * it must; the counter and `closeButton` are never allowed to wrap.
+   * The rest collapse into the overflow popover, latest-registered first.
+   * `closeButton` and the overflow caret itself are never counted against
+   * this — they're always on the row regardless.
    */
-  minPinnedToolbarButtons?: number;
+  maxPinnedToolbarButtons?: number;
   /**
    * DESIGN.md §2.3 — how many slides on each side of the active one are
    * kept mounted *and* proactively decoded ahead of time; default 1.

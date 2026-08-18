@@ -689,9 +689,13 @@ describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
     gallery.destroy();
   });
 
-  it('collapses down to the default minPinnedToolbarButtons (2) pinned buttons plus close and the caret when it overflows, latest-registered first', () => {
+  it('collapses down to at most the default maxPinnedToolbarButtons (2) pinned buttons plus close and the caret when it overflows, latest-registered first', () => {
     const { flush } = mockRaf();
-    mockToolbarWrap(3);
+    // buttonsPerRow(4): 2 pinned + close + caret (4 visible children) is
+    // exactly one row here — enough room for the default ceiling to be
+    // honored in full, not reduced further. See the "ceiling, not a
+    // guarantee" test below for the case where even that doesn't fit.
+    mockToolbarWrap(4);
     const gallery = makeGallery(3, { plugins: makeButtonPlugins(7) });
     gallery.open(0);
     flush();
@@ -699,7 +703,7 @@ describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
     const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
     expect(caret.hidden).toBe(false);
     // 4 icons share the row once collapsed: 2 pinned plugin buttons, close,
-    // and the caret — requested directly, see GalleryOptions.minPinnedToolbarButtons.
+    // and the caret — requested directly, see GalleryOptions.maxPinnedToolbarButtons.
     expect(pinnedIds()).toEqual(['btn-0', 'btn-1']);
     // Collapsed latest-registered first (btn-6 drops off the row before
     // btn-2 does), but the panel itself reads in the same ascending
@@ -709,18 +713,85 @@ describe('Gallery — toolbar overflow popover (DESIGN.md §3.1a)', () => {
     gallery.destroy();
   });
 
-  it('GalleryOptions.minPinnedToolbarButtons overrides the default pinned-button floor', () => {
+  it('GalleryOptions.maxPinnedToolbarButtons raises the ceiling when there is room for it', () => {
     const { flush } = mockRaf();
-    mockToolbarWrap(3);
+    // buttonsPerRow(6): 4 pinned + close + caret (6 visible children) is
+    // exactly one row — room enough to honor the raised ceiling in full.
+    mockToolbarWrap(6);
     const gallery = makeGallery(3, {
       plugins: makeButtonPlugins(7),
-      minPinnedToolbarButtons: 4,
+      maxPinnedToolbarButtons: 4,
     });
     gallery.open(0);
     flush();
 
     expect(pinnedIds()).toEqual(['btn-0', 'btn-1', 'btn-2', 'btn-3']);
     expect(panelIds()).toEqual(['btn-4', 'btn-5', 'btn-6']);
+
+    gallery.destroy();
+  });
+
+  it('maxPinnedToolbarButtons is a ceiling, not a guarantee — collapses below it (down to zero if it must) when even that many still wraps the row', () => {
+    const { flush } = mockRaf();
+    // buttonsPerRow(3): even 2 pinned + close + caret (4 visible children)
+    // is already 2 rows here — a configured ceiling of 4 can't possibly be
+    // honored; the algorithm keeps reducing past it instead of ever
+    // leaving the row wrapped (DESIGN.md §3.1a).
+    mockToolbarWrap(3);
+    const gallery = makeGallery(3, {
+      plugins: makeButtonPlugins(7),
+      maxPinnedToolbarButtons: 4,
+    });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    expect(caret.hidden).toBe(false);
+    expect(pinnedIds()).toEqual(['btn-0']);
+    expect(panelIds()).toEqual(['btn-1', 'btn-2', 'btn-3', 'btn-4', 'btn-5', 'btn-6']);
+
+    gallery.destroy();
+  });
+
+  it('a wide counter (or other left-slot content) counts toward the fit check too — right-slot buttons keep collapsing below the ceiling, down to zero, to try to make room for it', () => {
+    const { flush } = mockRaf();
+    // .shoji-toolbar-left is pinned at a permanent 2 rows here, regardless
+    // of how many right-slot buttons collapse — simulating a counter (or
+    // other left-slot content) wide enough that no amount of reducing the
+    // right side alone can ever satisfy fitsOneRow(). The algorithm still
+    // tries, all the way to zero pinned, since it has no way to know in
+    // advance that collapsing further won't help.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ): DOMRect {
+      const base = {
+        x: 0,
+        y: 0,
+        width: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        toJSON: () => ({}),
+      };
+      if (this.classList.contains('shoji-toolbar-left')) return { ...base, height: 88 } as DOMRect;
+      if (this.classList.contains('shoji-toolbar-slot')) {
+        const visible = Array.from(this.children).filter(
+          (child) => !(child as HTMLElement).hidden,
+        ).length;
+        const rows = Math.max(1, Math.ceil(visible / 8));
+        return { ...base, height: rows * 44 } as DOMRect;
+      }
+      return { ...base, height: 44 } as DOMRect;
+    });
+    const gallery = makeGallery(3, { plugins: makeButtonPlugins(3) });
+    gallery.open(0);
+    flush();
+
+    const caret = document.querySelector('.shoji-toolbar-overflow') as HTMLButtonElement;
+    expect(caret.hidden).toBe(false);
+    expect(pinnedIds()).toEqual([]);
+    expect(panelIds()).toEqual(['btn-0', 'btn-1', 'btn-2']);
 
     gallery.destroy();
   });
