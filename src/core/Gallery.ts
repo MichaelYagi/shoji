@@ -128,6 +128,16 @@ export class Gallery {
   private locale: typeof DEFAULT_LOCALE = DEFAULT_LOCALE;
   private showCounter = true;
   private captionVisibleOnVideo = false; // DESIGN.md §2.3a
+  // DESIGN.md §2.5 — true from the moment transitionCaption()/open()'s own
+  // fade-in starts hiding the caption until the midpoint (or, for open(),
+  // the end) where content is swapped and it's revealed again. The async
+  // image-load callback in renderCurrentSlide() checks this too, not just
+  // the synchronous call in the same function — decode() resolves on a
+  // microtask, which can beat the caption's own self-timed reveal for an
+  // already-preloaded slide, and updating caption content the instant it
+  // fires would show the *new* slide's caption fading, not the outgoing
+  // one — same content-swap-timing bug either call site could cause alone.
+  private captionFadePending = false;
   private loop = true;
   private closable = true;
   private autoHideDelay: number | false = 5000;
@@ -452,6 +462,10 @@ export class Gallery {
     if (this.options.backdropOpacity != null) {
       const clamped = Math.min(Math.max(this.options.backdropOpacity, 0), 1);
       dom.outer.style.setProperty('--shoji-backdrop-opacity', String(clamped));
+    }
+    if (this.options.transitionDuration != null) {
+      const clamped = Math.max(this.options.transitionDuration, 0);
+      dom.outer.style.setProperty('--shoji-duration', `${clamped}ms`);
     }
     // DESIGN.md §2.8 — autoHideDelay: 0 means Shoji's own controls stay
     // permanently invisible (a host building fully custom chrome), not that
@@ -1157,6 +1171,61 @@ export class Gallery {
   }
 
   /**
+   * DESIGN.md §2.5 — the caption's disappear-then-reappear fits inside the
+   * *same* `--shoji-duration` window the slide's own mode animation runs
+   * in, not a separate one after it: fades out over the first half, swaps
+   * content invisibly at the midpoint, fades back in over the second half
+   * — timed to finish exactly when the mode animation does, not still
+   * catching up a beat behind it. Self-timed off the resolved
+   * `--shoji-duration` value rather than hooked to the mode animation's
+   * own completion event: both are driven by the same duration either way,
+   * and the fade-in's own completion is what has to line up, which a
+   * "start on completion, then animate" hook can't give — by definition,
+   * a fade started only once something else finishes hasn't finished
+   * *with* it.
+   */
+  private transitionCaption(): void {
+    const dom = this.dom;
+    if (!dom) return;
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return; // --shoji-duration is already 0ms; nothing to sequence
+    }
+
+    // .shoji-caption's own `transition: opacity var(--shoji-duration) ...`
+    // rule transitions a single property, so the computed shorthand
+    // resolves to exactly --shoji-duration's own value — same read as
+    // `zoomTransition.ts`/`SlideTransition.ts` already use elsewhere,
+    // rather than `getPropertyValue('--shoji-duration')` directly.
+    const raw = getComputedStyle(dom.caption).transitionDuration.split(',')[0]?.trim() ?? '';
+    const fullMs = raw.endsWith('ms')
+      ? parseFloat(raw)
+      : raw.endsWith('s')
+        ? parseFloat(raw) * 1000
+        : 0;
+    const half = fullMs / 2;
+
+    this.captionFadePending = true;
+    dom.caption.style.transitionDuration = `${half}ms`;
+    dom.caption.style.opacity = '0';
+
+    setTimeout(() => {
+      if (!this.dom) return;
+      this.captionFadePending = false;
+      this.updateCaptionVisibility();
+      this.dom.caption.style.opacity = '';
+      setTimeout(() => {
+        // Only the temporary half-duration override — restores the
+        // caption's normal full-duration transition (e.g. for idle
+        // auto-hide) once this fade-in has actually finished with it.
+        if (this.dom) this.dom.caption.style.transitionDuration = '';
+      }, half);
+    }, half);
+  }
+
+  /**
    * Content is always kept current (correct the instant loading finishes,
    * no text flash) — only `hidden` also gates on `isActiveReady()`, so a
    * caption for the *new* slide can't sit there readable while the
@@ -1396,7 +1465,12 @@ export class Gallery {
         if (loadedIndex === this.activeIndex) {
           this.bus.emit('slideItemLoad', { index: loadedIndex });
           this.setSlideLoading(false);
-          this.updateCaptionVisibility();
+          // captionFadePending: skip here too, not just the synchronous
+          // call below — decode() resolves on a microtask, which can win
+          // the race against the mode animation's own onComplete (the one
+          // that's actually supposed to update it), especially for an
+          // already-preloaded slide.
+          if (!this.captionFadePending) this.updateCaptionVisibility();
         }
       },
       openPlaceholderSrc,
@@ -1407,7 +1481,12 @@ export class Gallery {
     const total = this.itemList.length;
     dom.counter.textContent = total > 0 ? `${this.activeIndex + 1} / ${total}` : '';
     dom.counter.hidden = !this.showCounter || total === 0;
-    this.updateCaptionVisibility();
+    // navigate()'s animated path already faded the outgoing caption out
+    // and updates content itself, once that fade (and the slide's own mode
+    // transition) actually finishes — updating it here too, immediately,
+    // would flash the new caption's text mid-fade instead of the outgoing
+    // one.
+    if (!this.captionFadePending) this.updateCaptionVisibility();
     const label = `Image ${this.activeIndex + 1} of ${total}${item?.alt ? `: ${item.alt}` : ''}`;
     this.liveRegion.announce(label);
 
@@ -1437,6 +1516,22 @@ export class Gallery {
     // disconnected transition" reasoning the placeholder-to-real-image
     // handoff already uses elsewhere).
     const naturalSize = this.resolveNaturalSize(index);
+    // The first slide's caption fades in alongside zoomIn() the same way a
+    // navigated-to one fades in alongside the mode transition (§2.5) —
+    // only when there's actually a zoom to sync with, same "no second,
+    // disconnected transition" reasoning as the comment above: nothing
+    // grows in from the thumbnail without known dimensions, so nothing
+    // should fade in disconnected from that either.
+    const fadeInOnOpen =
+      !!(origin && naturalSize) &&
+      !(
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      );
+    if (fadeInOnOpen && this.dom) {
+      this.captionFadePending = true;
+      this.dom.caption.style.opacity = '0';
+    }
     this.renderCurrentSlide(
       naturalSize ? this.resolveOpenPlaceholderSrc(this.itemList[index], origin) : undefined,
     );
@@ -1453,6 +1548,15 @@ export class Gallery {
         aspectRatio: this.resolveAspectRatio(index, origin),
         naturalSize,
       });
+    }
+    if (fadeInOnOpen && this.dom) {
+      // No half-duration split here, unlike transitionCaption() — there's
+      // no outgoing caption to fade out first, just this one fading in
+      // from nothing, over the same full --shoji-duration zoomIn() itself
+      // runs on.
+      this.captionFadePending = false;
+      this.updateCaptionVisibility();
+      this.dom.caption.style.opacity = '';
     }
 
     this.bus.emit('open', { index });
@@ -1547,8 +1651,11 @@ export class Gallery {
     pauseMedia(this.slides?.getActiveMedia() ?? null);
     this.activeIndex = clamped;
 
-    const swap = (): void => this.renderCurrentSlide();
     if (animate && this.transition) {
+      // Not layered onto a gesture-completed swipe (the `else` branch) —
+      // same scoping as the mode transition itself (§2.4/§2.5).
+      this.transitionCaption();
+      const swap = (): void => this.renderCurrentSlide();
       const modeName = this.resolveTransitionMode();
       const builtin = TRANSITION_PRESETS[modeName];
       if (builtin) {
@@ -1557,6 +1664,7 @@ export class Gallery {
         this.transition.animateCustom(modeName, direction, swap);
       }
     } else {
+      const swap = (): void => this.renderCurrentSlide();
       swap();
     }
 
@@ -1859,6 +1967,7 @@ export class Gallery {
     this.toolbarHeightFrame = null;
     if (this.captionTruncationFrame !== null) cancelAnimationFrame(this.captionTruncationFrame);
     this.captionTruncationFrame = null;
+    this.captionFadePending = false;
     this.slides?.destroy();
     this.dom?.outer.remove();
     this.slides = null;

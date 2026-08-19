@@ -27,6 +27,18 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+/**
+ * DESIGN.md §2.5 — a navigated-to caption's content/class/hidden-state
+ * changes are deferred (`captionFadePending`, `Gallery.ts`) until the
+ * fade-out's own half-duration timer fires, not applied synchronously
+ * inside next()/prev() itself anymore. This file doesn't mock
+ * getComputedStyle, so that half-duration reads as ~0ms here — still a
+ * real macrotask away, not synchronous, hence still needing a flush.
+ */
+async function flushCaptionFade(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 describe('Gallery — lightbox DOM', () => {
   it('builds the dialog with role/aria-modal on first open, appended to body', () => {
     const gallery = makeGallery();
@@ -72,7 +84,7 @@ describe('Gallery — lightbox DOM', () => {
     expect(document.querySelector('.shoji-outer')).toBeNull();
   });
 
-  it('updates counter and caption text on open and navigate', () => {
+  it('updates counter and caption text on open and navigate', async () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [
@@ -86,13 +98,14 @@ describe('Gallery — lightbox DOM', () => {
     expect(document.querySelector('.shoji-caption')?.textContent).toBe('First');
 
     gallery.next();
-    expect(document.querySelector('.shoji-counter')?.textContent).toBe('2 / 2');
+    expect(document.querySelector('.shoji-counter')?.textContent).toBe('2 / 2'); // synchronous, unlike the caption
+    await flushCaptionFade();
     expect(document.querySelector('.shoji-caption')?.textContent).toBe('Second');
 
     gallery.destroy();
   });
 
-  it('regression: a video slide (HTML5 or provider, e.g. YouTube) marks its caption with shoji-caption--video so it click-throughs to the video underneath (shoji.css); a photo slide never does', () => {
+  it('regression: a video slide (HTML5 or provider, e.g. YouTube) marks its caption with shoji-caption--video so it click-throughs to the video underneath (shoji.css); a photo slide never does', async () => {
     // A real bug: even height-capped (shoji.css §2.3a), the caption's
     // opaque background could still sit directly over a video's native
     // control bar — a video filling most of the dialog leaves little to no
@@ -125,17 +138,20 @@ describe('Gallery — lightbox DOM', () => {
     ).toBe(false);
 
     gallery.next(); // html5 video
+    await flushCaptionFade();
     expect(
       document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
     ).toBe(true);
 
     gallery.next(); // youtube (provider) video
+    await flushCaptionFade();
     expect(
       document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
     ).toBe(true);
 
     gallery.prev();
     gallery.prev(); // back to the photo
+    await flushCaptionFade();
     expect(
       document.querySelector('.shoji-caption')?.classList.contains('shoji-caption--video'),
     ).toBe(false);
@@ -207,7 +223,7 @@ describe('Gallery — lightbox DOM', () => {
       gallery.destroy();
     });
 
-    it('the toggle button itself is hidden entirely on a photo slide, and on a video slide with no caption at all', () => {
+    it('the toggle button itself is hidden entirely on a photo slide, and on a video slide with no caption at all', async () => {
       const el = document.createElement('div');
       const gallery = new Gallery(el, { items: videoItems });
 
@@ -215,15 +231,17 @@ describe('Gallery — lightbox DOM', () => {
       expect(captionToggleButton().hidden).toBe(true);
 
       gallery.next(); // captioned video
+      await flushCaptionFade();
       expect(captionToggleButton().hidden).toBe(false);
 
       gallery.next(); // video with no caption
+      await flushCaptionFade();
       expect(captionToggleButton().hidden).toBe(true);
 
       gallery.destroy();
     });
 
-    it('persists across slide navigation within one open session — toggling on for one video keeps it on for the next', () => {
+    it('persists across slide navigation within one open session — toggling on for one video keeps it on for the next', async () => {
       const el = document.createElement('div');
       const gallery = new Gallery(el, {
         items: [
@@ -237,6 +255,7 @@ describe('Gallery — lightbox DOM', () => {
       expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
 
       gallery.next();
+      await flushCaptionFade();
       expect(document.querySelector('.shoji-caption')?.hasAttribute('hidden')).toBe(false);
       expect(document.querySelector('.shoji-caption')?.textContent).toBe('Second');
 

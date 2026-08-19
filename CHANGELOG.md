@@ -7,6 +7,23 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Added
+
+- `transitionDuration` (`GalleryOptions`, ms, default `300`) — a convenience
+  that sets the `--shoji-duration` CSS custom property for you, rather than
+  a separate JS-side timing mechanism (CLAUDE.md's "no hardcoded
+  colors/sizes/timings in JS" still holds — this only ever writes into the
+  same CSS var every transition already reads). Same pattern
+  `backdropOpacity` already uses for `--shoji-backdrop-opacity`: only
+  applied when explicitly set, otherwise `--shoji-duration` (and its own
+  `prefers-reduced-motion` override) is left untouched.
+- A navigated-to slide's caption now fades out and back in alongside the
+  `mode` transition, instead of swapping its text instantly mid-animation
+  (a jump-cut against the otherwise-smooth slide). The very first `open()`
+  fades its caption in too, alongside `zoomIn()` — only when there's
+  actually a zoom to sync with (known dimensions), same as `zoomIn()`
+  itself. See DESIGN.md §2.5.
+
 ## [0.1.0-alpha.15] - 2026-08-18
 
 ### Added

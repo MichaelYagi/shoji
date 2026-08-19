@@ -190,6 +190,18 @@ export interface GalleryOptions {
    * needed on the host's end.
    */
   mode?: string;
+  /**
+   * DESIGN.md §2.5 — milliseconds for `mode`'s transition, plus open/close
+   * zoom and Layout's own FLIP reflow (they all key off the same
+   * `--shoji-duration`). Default `300`, matching `--shoji-duration`'s own
+   * CSS default — this option doesn't move timing into JS, it's a
+   * convenience that sets that same CSS custom property for you, the same
+   * way `backdropOpacity` sets `--shoji-backdrop-opacity`. Unset leaves
+   * `--shoji-duration` (and `prefers-reduced-motion`'s own `0ms` override
+   * of it) untouched, so a host already theming it directly in CSS is
+   * unaffected either way. Clamped to a minimum of `0`.
+   */
+  transitionDuration?: number;
   [key: string]: unknown;
 }
 

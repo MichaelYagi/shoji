@@ -231,12 +231,24 @@
 
     <h2>Timing, easing, and reduced motion</h2>
     <p>
-      Duration and easing are CSS custom properties, not JS options —
+      Duration and easing are CSS custom properties —
       <code>--shoji-duration</code>/<code>--shoji-easing</code>, documented on the
-      <a href="./theming.html">Theming guide</a>. Every built-in preset, and the
-      <code>transitionend</code>-based cleanup for custom ones, respects
+      <a href="./theming.html">Theming guide</a> — not a separate JS-side timing mechanism.
+      <code>transitionDuration</code> (a <code>GalleryOptions</code> number, in ms) is a convenience
+      for setting <code>--shoji-duration</code> from JS instead of your own CSS, same idea as
+      <code>backdropOpacity</code> for <code>--shoji-backdrop-opacity</code> — leave it unset and a
+      host theming <code>--shoji-duration</code> directly is unaffected either way. Every built-in
+      preset, and the <code>transitionend</code>-based cleanup for custom ones, respects
       <code>prefers-reduced-motion: reduce</code> automatically — content just swaps instantly, no
       animation attempted.
+    </p>
+    <p>
+      The active caption fades alongside the transition too — out over the first half of
+      <code>--shoji-duration</code>, back in over the second half once the new slide's content has
+      swapped in, so both finish together rather than the caption trailing a beat behind. The very
+      first <code>open()</code> fades its caption in the same way, alongside the zoom-from-thumbnail
+      animation, whenever there's a known size to zoom from at all (see
+      <a href="./getting-started.html">Getting started</a>'s <code>GalleryItem</code> fields table).
     </p>
 
     <footer>Next: <a href="./methods.html">Methods</a>.</footer>

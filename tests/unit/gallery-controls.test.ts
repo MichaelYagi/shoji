@@ -22,6 +22,11 @@ function makeGallery(count = 5, options: Record<string, unknown> = {}) {
   return new Gallery(el, { items, ...options });
 }
 
+/** DESIGN.md §2.5 — a navigated-to caption's content is deferred (`captionFadePending`, `Gallery.ts`) until its half-duration fade-out timer fires, not applied synchronously inside next()/prev() anymore. */
+async function flushCaptionFade(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 function click(el: Element): void {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
@@ -287,7 +292,7 @@ describe('Gallery — counter & caption', () => {
     gallery.destroy();
   });
 
-  it('swaps cleanly from an HTMLElement caption to a string caption on navigation', () => {
+  it('swaps cleanly from an HTMLElement caption to a string caption on navigation', async () => {
     const el = document.createElement('div');
     const rich = document.createElement('span');
     rich.textContent = 'Rich';
@@ -299,6 +304,7 @@ describe('Gallery — counter & caption', () => {
     });
     gallery.open(0);
     gallery.next();
+    await flushCaptionFade();
 
     const caption = document.querySelector('.shoji-caption') as HTMLElement;
     expect(caption.querySelector('span')).toBeNull();
@@ -560,6 +566,35 @@ describe('Gallery — backdropOpacity', () => {
     gallery.open(0);
 
     expect(backdrop().getAttribute('style')).toBeNull();
+    gallery.destroy();
+  });
+});
+
+describe('Gallery — transitionDuration', () => {
+  it('sets the --shoji-duration custom property (in ms) on .shoji-outer', () => {
+    const gallery = makeGallery(3, { transitionDuration: 150 });
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-duration')).toBe('150ms');
+    gallery.destroy();
+  });
+
+  it('clamps a negative value up to 0', () => {
+    const gallery = makeGallery(3, { transitionDuration: -50 });
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-duration')).toBe('0ms');
+    gallery.destroy();
+  });
+
+  it('leaves the custom property unset when the option is omitted — a host theming --shoji-duration directly in CSS is unaffected', () => {
+    const gallery = makeGallery(3);
+    gallery.open(0);
+
+    const outer = document.querySelector('.shoji-outer') as HTMLElement;
+    expect(outer.style.getPropertyValue('--shoji-duration')).toBe('');
     gallery.destroy();
   });
 });
