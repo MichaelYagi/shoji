@@ -1,3 +1,31 @@
+// Single source for the version stamped into every page's footer — kept in
+// sync with package.json's own "version" by hand, alongside CHANGELOG.md
+// and .size-limit.json, as part of this project's existing release-prep
+// convention (there's no build step over docs/ to template it in instead).
+const DOCS_VERSION = 'v0.1.0-alpha.15';
+
+(function stampVersion() {
+  let footer = document.querySelector('body > footer');
+  if (!footer) {
+    footer = document.createElement('footer');
+    document.body.append(footer);
+  } else if (footer.childNodes.length) {
+    // A flex container makes every child TEXT RUN its own anonymous item,
+    // separate from any inline <a>/<code> sibling it sits next to — so
+    // "Next: <a>...</a>, in depth." was landing as three separate items,
+    // spread apart by justify-content: space-between right along with the
+    // version. Wrap whatever's already here into one item first, so the
+    // row only ever has exactly two: existing content, then the version.
+    const content = document.createElement('span');
+    content.append(...footer.childNodes);
+    footer.append(content);
+  }
+  const version = document.createElement('span');
+  version.className = 'docs-version';
+  version.textContent = DOCS_VERSION;
+  footer.append(version);
+})();
+
 // docs.css's own .docs-nav is a single horizontally-scrolling row (not
 // wrap-to-multiple-rows) — with 12 pages listed, the current page's own
 // pill can start scrolled off-screen to the right, since the row always
@@ -19,6 +47,7 @@ document.querySelectorAll('.docs-nav [aria-current="page"]').forEach((el) => {
 // real content starts — on any page with more than one heading; a page
 // with zero or one doesn't have anything worth jumping around to.
 (function buildToc() {
+  if ('noToc' in document.body.dataset) return;
   const headings = document.querySelectorAll('h2, h3');
   if (headings.length < 2) return;
 
