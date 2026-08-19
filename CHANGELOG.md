@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.16] - 2026-08-18
+
 ### Added
 
 - `transitionDuration` (`GalleryOptions`, ms, default `300`) — a convenience
