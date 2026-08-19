@@ -237,6 +237,46 @@ footer {
   font-family: ui-monospace, monospace;
 }
 
+/* Injected by docs.js on every page — hidden until scrolled past its own
+   threshold, so a page too short to need it never shows it in the first
+   place. Fixed, not sticky/in-flow, so it stays reachable at a constant
+   spot regardless of how far down the page you are. */
+.scroll-top-btn {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid #4da3ff;
+  border-radius: 999px;
+  background: #4da3ff22;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(0.5rem);
+  pointer-events: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.scroll-top-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-top-btn {
+    transition: none;
+  }
+}
+
 /* Shared by docs/architecture/*.html — a bordered box around an inline SVG
    diagram or an ASCII DOM-tree, same treatment `pre`/`table` already get
    elsewhere on this site (a contained, scrollable box, never a page-wide

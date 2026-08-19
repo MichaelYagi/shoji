@@ -104,3 +104,30 @@ document.querySelectorAll('.docs-nav [aria-current="page"]').forEach((el) => {
 
   headings[0].before(nav);
 })();
+
+// A fixed "back to top" button, present on every page (not just the ones
+// long enough to need it) — it self-hides via the scroll threshold below,
+// so a short page never shows it in the first place without a separate
+// per-page "is this scrollable" check. Deliberately out of scope for
+// docs/api/'s own typedoc-generated pages, same call as the footer version
+// above: they don't load this script at all.
+(function scrollToTopButton() {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'scroll-top-btn';
+  button.textContent = '↑ Top';
+  button.setAttribute('aria-label', 'Scroll to top');
+  document.body.append(button);
+
+  const SHOW_AFTER_PX = 400;
+  const toggle = () => {
+    button.classList.toggle('is-visible', window.scrollY > SHOW_AFTER_PX);
+  };
+  document.addEventListener('scroll', toggle, { passive: true });
+  toggle();
+
+  button.addEventListener('click', () => {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  });
+})();
