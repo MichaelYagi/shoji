@@ -294,11 +294,29 @@ export const RotateFlip: ShojiPlugin = {
     );
 
     const offOpen = ctx.on('afterOpen', reset);
+    // Un-animated, and on beforeSlide rather than only afterSlide below —
+    // same fix, same reasoning, as the Zoom plugin's own identical bug
+    // (zoom/index.ts's own beforeSlide handler): SlideManager.render()
+    // (called synchronously between the two) reuses a still-cached slide's
+    // node via a plain reparent (moveIn(), no state clearing of its own)
+    // into whichever pool slot its new offset needs — there is no code
+    // path afterward that can still find *this* slide to reset it.
+    // Reported from real usage: rotate, click next — the old, still-
+    // rotated slide, now reparented into the (unclipped, per shoji.css)
+    // neighboring slot, visibly bled into the new slide instead of
+    // sitting invisibly off-screen the way an unrotated one always does.
+    // Resetting here, while getActiveMedia() still resolves to the
+    // about-to-move slide, clears it before that reparent ever happens.
+    // afterSlide (below) still separately resets whichever *incoming*
+    // slide becomes active — it may carry its own stale rotation from an
+    // earlier visit, unrelated to whatever the outgoing slide had.
+    const offBeforeSlide = ctx.on('beforeSlide', reset);
     const offSlide = ctx.on('afterSlide', reset);
 
     return () => {
       for (const remove of removeButtons) remove();
       offOpen();
+      offBeforeSlide();
       offSlide();
     };
   },

@@ -7,6 +7,16 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Rotating a slide, then navigating to the next one, could bleed the
+  rotated photo into the new slide instead of it being replaced cleanly
+  — `RotateFlip` only reset its transform on `afterOpen`/`afterSlide`,
+  never `beforeSlide`, so a rotated slide reused later from the preload
+  cache carried its stale rotation into wherever `SlideManager` reparented
+  it. Same bug class, same fix, the Zoom plugin already had. See
+  DESIGN.md §4.5 (sixth real bug).
+
 ## [0.1.0-alpha.17] - 2026-08-19
 
 ### Fixed

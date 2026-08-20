@@ -448,6 +448,33 @@ describe('RotateFlip — resets per slide', () => {
     expect(activeMedia().style.transform).toBe('none');
     gallery.destroy();
   });
+
+  it("regression: resets a still-rotated slide before navigate() reparents it into a different pool slot via cache-reuse — otherwise it stays transformed, unclipped, bleeding into the new slide (reported from real usage, only reproduces with preload > 0, where the old slide's node actually survives to be reused)", () => {
+    const gallery = makeGallery({
+      preload: 1,
+      items: [
+        { id: 'a', src: 'a.jpg' },
+        { id: 'b', src: 'b.jpg' },
+        { id: 'c', src: 'c.jpg' },
+      ],
+    });
+    gallery.open(0);
+    const rotatedMedia = activeMedia();
+    click(button('Rotate right'));
+    expect(rotatedMedia.style.transform).not.toBe('none');
+
+    gallery.next();
+
+    // beforeSlide (where the fix resets) fires synchronously inside
+    // next(), before SlideManager.render() ever reparents this same
+    // cached node — no need to await anything to observe it. '', not
+    // the literal 'none' apply(false) itself sets — SlideManager's own
+    // reparent step clears the inline style right after, same final
+    // (functionally identical) value the Zoom plugin's own equivalent
+    // regression test already expects.
+    expect(rotatedMedia.style.transform).toBe('');
+    gallery.destroy();
+  });
 });
 
 describe('RotateFlip — transition (button clicks animate)', () => {
