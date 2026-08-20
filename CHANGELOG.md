@@ -7,6 +7,8 @@ still include breaking changes).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.17] - 2026-08-19
+
 ### Fixed
 
 - Closing while zoomed in (Zoom plugin) snapped back to neutral zoom
