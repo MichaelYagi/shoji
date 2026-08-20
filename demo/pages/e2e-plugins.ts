@@ -83,6 +83,28 @@ if (thumbs && status) {
       },
     }),
   );
+  // DESIGN.md §3.1a — regression fixture for a real bug: a plugin that
+  // reaches into `.shoji-toolbar-right` directly (not through
+  // `ctx.ui.toolbar()`) and toggles its own element's visibility via
+  // `style.display` rather than the `hidden` attribute, mirroring exactly
+  // how it was found (a host plugin's loading spinner, appended alongside
+  // its own button). Absent by default; `?foreignToolbarElement=1` adds it.
+  const foreignElementPlugin: ShojiPlugin[] = new URLSearchParams(location.search).get(
+    'foreignToolbarElement',
+  )
+    ? [
+        {
+          name: 'e2e-foreign-toolbar-element',
+          init(ctx) {
+            const el = document.createElement('div');
+            el.className = 'e2e-foreign-toolbar-element';
+            el.style.display = 'none'; // visually hidden, but el.hidden stays false
+            ctx.ui.outer().querySelector('.shoji-toolbar-right')?.appendChild(el);
+            return () => el.remove();
+          },
+        },
+      ]
+    : [];
   const gallery = new Shoji(thumbs, {
     items,
     plugins: [
@@ -92,6 +114,7 @@ if (thumbs && status) {
       Shoji.Autoplay,
       Shoji.ActiveThumbnail,
       ...extraButtonPlugins,
+      ...foreignElementPlugin,
     ],
     autoplay: { interval },
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),

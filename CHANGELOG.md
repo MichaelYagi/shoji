@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.19] - 2026-08-20
+
+### Fixed
+
+- The toolbar overflow popover could render a wider grid than intended
+  (e.g. 4 columns instead of 3) if a host or plugin appended an element
+  directly into `.shoji-toolbar-right` outside `ctx.ui.toolbar()` and
+  toggled its visibility via `style.display` rather than the `hidden`
+  attribute — `positionToolbarOverflowPanel()`'s pinned-button count now
+  reads from Shoji's own registered-button list instead of re-querying
+  `toolbarRight`'s raw DOM children, making it immune to this regardless
+  of how such an element manages its own visibility. See DESIGN.md §3.1a.
+
 ## [0.1.0-alpha.18] - 2026-08-20
 
 ### Fixed

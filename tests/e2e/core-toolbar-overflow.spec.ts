@@ -194,6 +194,39 @@ test('regression: the popover grid is as many columns wide as the pinned buttons
   expect(columns).toBe(3);
 });
 
+test('regression: an element a plugin appends directly into .shoji-toolbar-right, outside ctx.ui.toolbar(), does not skew the popover column count', async ({
+  page,
+}) => {
+  // Same viewport/overflow setup as openOverflowing(), plus the foreign
+  // element fixture — mirrors a real bug: a plugin's own loading spinner,
+  // appended straight into the toolbar's right slot rather than registered
+  // through the plugin API, and hidden via `style.display` (never the
+  // `hidden` attribute). It used to get miscounted as a pinned button,
+  // turning a 3-column popover grid into 4.
+  await page.setViewportSize({ width: 500, height: 700 });
+  await page.goto('/pages/e2e-plugins.html?extraToolbarButtons=6&foreignToolbarElement=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+  await expect(page.locator('.shoji-toolbar-overflow').last()).toBeVisible();
+
+  // Confirms the fixture actually placed it, and that it really isn't
+  // `hidden` (display:none is a style, not the attribute) — otherwise this
+  // test would pass regardless of whether the fix does anything.
+  const foreignEl = page.locator('.shoji-toolbar-right .e2e-foreign-toolbar-element').last();
+  await expect(foreignEl).toBeAttached();
+  expect(await foreignEl.evaluate((el) => (el as HTMLElement).hidden)).toBe(false);
+
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  const panel = page.locator('.shoji-toolbar-overflow-panel').last();
+  await caret.click();
+  await expect(panel).toBeVisible();
+
+  const columns = await panel.evaluate(
+    (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length,
+  );
+  expect(columns).toBe(3);
+});
+
 test('navigating to another slide closes the popover rather than leaving it stranded', async ({
   page,
 }) => {

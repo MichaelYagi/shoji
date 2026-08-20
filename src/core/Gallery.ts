@@ -930,32 +930,38 @@ export class Gallery {
    *
    * Also sets the grid's own column count to match the toolbar row's own
    * column count right now: however many buttons are *actually* still
-   * pinned on `toolbarRight` (excluding `closeButton`, which never moves
-   * and never collapses, and the video caption-toggle button, which isn't
-   * part of the pinned/collapsed set `measureToolbarOverflow()` manages at
-   * all), *plus the caret itself* — requested directly: the popover should
-   * read as the same row of columns continuing downward, caret included,
-   * not a fixed 3 columns regardless of how many ended up pinned. At the
-   * default `maxPinnedToolbarButtons` (2), that's 2 pinned + the caret = 3
-   * columns. Collapsed buttons beyond that count still wrap onto further
-   * rows within it, same as before.
+   * pinned on `toolbarRight`, *plus the caret itself* — requested directly:
+   * the popover should read as the same row of columns continuing
+   * downward, caret included, not a fixed 3 columns regardless of how many
+   * ended up pinned. At the default `maxPinnedToolbarButtons` (2), that's 2
+   * pinned + the caret = 3 columns. Collapsed buttons beyond that count
+   * still wrap onto further rows within it, same as before.
+   *
+   * **A real bug: "pinned" is counted from `this.pluginToolbarButtons`
+   * (registered via `ctx.ui.toolbar()`), never by querying `toolbarRight`'s
+   * DOM children.** The old filter (`toolbarRight.children`, excluding
+   * `closeButton`/`toolbarOverflowButton` by identity, `!el.hidden`) broke
+   * once a host appended an unrelated element straight into `toolbarRight`
+   * — not a documented extension point, but nothing stops it. Reported from
+   * real usage: a plugin's own loading spinner, toggled via `style.display`
+   * rather than the `hidden` attribute, passed `!el.hidden` and got
+   * miscounted as a pinned button, turning a 3-column popover into 4.
+   * Counting from the registry instead is immune to this regardless of how
+   * such an element manages its own visibility. `closeButton`/
+   * `toolbarOverflowButton` were never in `pluginToolbarButtons`, so
+   * excluding them by identity is no longer needed either.
    */
   private positionToolbarOverflowPanel(): void {
     if (!this.dom) return;
-    const { dialog, toolbarOverflowButton, toolbarOverflowPanel, toolbarRight, closeButton } =
-      this.dom;
+    const { dialog, toolbarOverflowButton, toolbarOverflowPanel, toolbarRight } = this.dom;
     const dialogRight = dialog.getBoundingClientRect().right;
     const caretRight = toolbarOverflowButton.getBoundingClientRect().right;
     const paddingRight = parseFloat(getComputedStyle(toolbarOverflowPanel).paddingRight) || 0;
     const right = dialogRight - caretRight - paddingRight;
     toolbarOverflowPanel.style.right = `${Math.max(0, right)}px`;
 
-    const pinnedCount = Array.from(toolbarRight.children).filter(
-      (el): el is HTMLElement =>
-        el instanceof HTMLElement &&
-        el !== toolbarOverflowButton &&
-        el !== closeButton &&
-        !el.hidden,
+    const pinnedCount = this.pluginToolbarButtons.filter(
+      (b) => b.slot === 'right' && b.el.parentElement === toolbarRight,
     ).length;
     const columnCount = pinnedCount + 1; // + the caret itself
     toolbarOverflowPanel.style.gridTemplateColumns = `repeat(${columnCount}, 44px)`;
