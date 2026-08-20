@@ -1,7 +1,15 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
 import { waitForTransitionEnd } from '../../core/zoomTransition';
 import { ZOOM_ACTUAL_SIZE_ICON, ZOOM_IN_ICON, ZOOM_OUT_ICON } from './icons';
-import { clampPan, clampScale, zoomTowardPoint, type PanOffset, type ZoomBox } from './zoomMath';
+import {
+  clampPan,
+  clampScale,
+  parseLinearTransform,
+  screenDeltaToLocal,
+  zoomTowardPoint,
+  type PanOffset,
+  type ZoomBox,
+} from './zoomMath';
 import './zoom.css';
 
 export interface ZoomOptions {
@@ -70,6 +78,12 @@ export const Zoom: ShojiPlugin = {
     let pan: PanOffset = { tx: 0, ty: 0 };
     let natural: ZoomBox | null = null;
     let container: ZoomBox | null = null;
+    // The img's own true, unrotated local origin, as an offset from its
+    // (rotation-invariant) layout center — see zoomTowardPoint/clampPan's
+    // own doc comments (DESIGN.md §4.6) for why natural's left/top/width/
+    // height alone aren't a safe stand-in for this once RotateFlip has
+    // rotated the parent.
+    let originOffset: PanOffset | null = null;
     let pinchStartScale = 1;
 
     function getImg(): HTMLImageElement | null {
@@ -85,10 +99,23 @@ export const Zoom: ShojiPlugin = {
 
     /** Only valid to measure while scale===1 (untransformed) — the very first zoom action on a slide; every subsequent action within the same slide reuses the cached box, since measuring an already-scaled element would capture the scaled size, not the natural one. */
     function ensureNatural(img: HTMLImageElement): boolean {
-      if (natural && container) return true;
+      if (natural && container && originOffset) return true;
       if (scale !== 1) return false; // shouldn't happen — defensive
       natural = boxOf(img);
       container = boxOf(img.parentElement ?? img);
+      // offsetWidth/Height, not natural's own width/height above — CSS
+      // transform (RotateFlip's rotation on the parent) is paint-only and
+      // never affects layout size, unlike getBoundingClientRect(), which
+      // reports the *rotated* bounding box (DESIGN.md §4.6). Falls back to
+      // natural's own (unrotated-assuming) size when offsetWidth/Height
+      // read 0 — real layout engines only report 0 for a genuinely
+      // unrendered element, but jsdom (tests/unit/) never computes layout
+      // at all and always reports 0, so this also keeps every rotation-
+      // unaware unit test's mocked getBoundingClientRect() meaningful.
+      originOffset = {
+        tx: -(img.offsetWidth || natural.width) / 2,
+        ty: -(img.offsetHeight || natural.height) / 2,
+      };
       return true;
     }
 
@@ -168,9 +195,30 @@ export const Zoom: ShojiPlugin = {
         const img = getImg();
         if (!img || !ensureNatural(img)) return;
         const clampedScale = clampScale(targetScale, 1, Math.max(ceiling, 1));
-        pan = zoomTowardPoint(natural!, pan, scale, clampedScale, anchorX, anchorY);
+        // DESIGN.md §4.6 — zoomTowardPoint's own doc comment has the full
+        // reasoning: the anchor point needs the same screen-vs-local
+        // correction as onPointerMove's own pan drag, since RotateFlip may
+        // have rotated/flipped `.shoji-slide-media` in the meantime.
+        const media = gallery.getActiveMedia();
+        const parentTransform = parseLinearTransform(
+          media ? getComputedStyle(media).transform : 'none',
+        );
+        pan = zoomTowardPoint(
+          natural!,
+          pan,
+          scale,
+          clampedScale,
+          anchorX,
+          anchorY,
+          parentTransform,
+          originOffset!,
+        );
         scale = clampedScale;
-        pan = clampPan(natural!, container!, scale, pan);
+        // Same correction, same reason — clampAxis compares against the
+        // container's screen bounds, so the candidate pan needs to be in
+        // screen space too, or a 90/270deg rotation clamps the wrong edge
+        // and can undo the anchor-preserving pan just computed above.
+        pan = clampPan(natural!, container!, scale, pan, parentTransform, originOffset!);
         if (animate) withTransition(img, apply);
         else apply();
         emitChange();
@@ -182,6 +230,7 @@ export const Zoom: ShojiPlugin = {
       pan = { tx: 0, ty: 0 };
       natural = null;
       container = null;
+      originOffset = null;
       const img = getImg();
       if (!img) return;
       const clearTransform = (): void => {
@@ -202,6 +251,16 @@ export const Zoom: ShojiPlugin = {
         clearTransform();
         img.style.transformOrigin = '';
       }
+    }
+
+    /** DESIGN.md §2.5/§4.6 — same fix, same reasoning, as RotateFlip's own equivalent (`rotateFlip/index.ts`): `beforeSlide`'s unanimated `reset()` above can't itself animate (it has to finish before `SlideManager.render()` reparents the outgoing image), so the live `transform`/`transformOrigin` about to be wiped are captured here first and handed to `SlideTransition` via `registerSlideLeaveDecorator()` below, to animate away on the leave-ghost's own clone instead of just vanishing. */
+    let pendingLeaveTransform: string | null = null;
+    let pendingLeaveOrigin = '';
+    function captureLeaveTransform(): void {
+      const img = getImg();
+      const transform = img?.style.transform;
+      pendingLeaveTransform = transform && transform !== 'none' ? transform : null;
+      pendingLeaveOrigin = img?.style.transformOrigin || '0 0';
     }
 
     /** Each slide gets a freshly-created `<img>` (SlideManager never reuses elements across renders), so the cursor-affordance marker (`zoom.css`) needs reapplying every time the active media changes, not just once. */
@@ -269,13 +328,27 @@ export const Zoom: ShojiPlugin = {
       img.setPointerCapture(event.pointerId);
     }
     function onPointerMove(event: PointerEvent): void {
-      if (panPointerId !== event.pointerId || !natural || !container) return;
+      if (panPointerId !== event.pointerId || !natural || !container || !originOffset) return;
       event.preventDefault();
-      const dx = event.clientX - lastX;
-      const dy = event.clientY - lastY;
+      const rawDx = event.clientX - lastX;
+      const rawDy = event.clientY - lastY;
       lastX = event.clientX;
       lastY = event.clientY;
-      pan = clampPan(natural, container, scale, { tx: pan.tx + dx, ty: pan.ty + dy });
+      // DESIGN.md §4.6 — screenDeltaToLocal's own doc comment has the full
+      // reasoning: the raw pointer delta is screen space, but pan.tx/ty are
+      // local to the <img>, nested inside whatever transform (e.g.
+      // RotateFlip's rotation) `.shoji-slide-media` currently has.
+      const media = gallery.getActiveMedia();
+      const m = parseLinearTransform(media ? getComputedStyle(media).transform : 'none');
+      const { tx: dx, ty: dy } = screenDeltaToLocal(rawDx, rawDy, m);
+      pan = clampPan(
+        natural,
+        container,
+        scale,
+        { tx: pan.tx + dx, ty: pan.ty + dy },
+        m,
+        originOffset,
+      );
       apply();
     }
     function onPointerUp(event: PointerEvent): void {
@@ -384,7 +457,12 @@ export const Zoom: ShojiPlugin = {
     // new slide instead of being invisible off-screen like an unzoomed one
     // always is. Resetting here, while getActiveMedia() still resolves to
     // the about-to-move image, clears it before that reparent ever happens.
-    const offBeforeSlide = ctx.on('beforeSlide', () => reset());
+    // captureLeaveTransform() (see registerSlideLeaveDecorator below) reads
+    // the live transform first, while it's still there to read.
+    const offBeforeSlide = ctx.on('beforeSlide', () => {
+      captureLeaveTransform();
+      reset();
+    });
     const offSlide = ctx.on('afterSlide', () => {
       reset();
       markEnabled();
@@ -411,6 +489,20 @@ export const Zoom: ShojiPlugin = {
     const unregisterZoomStart = gallery.registerZoomStartProvider(() =>
       scale > ZOOM_EPSILON ? (getImg()?.getBoundingClientRect() ?? null) : null,
     );
+    const unregisterLeaveDecorator = gallery.registerSlideLeaveDecorator((clonedMedia) => {
+      if (!pendingLeaveTransform) return;
+      const transform = pendingLeaveTransform;
+      const origin = pendingLeaveOrigin;
+      pendingLeaveTransform = null;
+      const clonedImg = clonedMedia.querySelector<HTMLImageElement>('img');
+      if (!clonedImg) return;
+      clonedImg.style.transformOrigin = origin;
+      clonedImg.style.transform = transform;
+      return () => {
+        clonedImg.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+        clonedImg.style.transform = 'none';
+      };
+    });
     markEnabled(); // covers the (unusual but possible) case of the gallery already being open when this plugin initializes
     updateButtonVisibility();
 
@@ -432,6 +524,7 @@ export const Zoom: ShojiPlugin = {
       outer.removeEventListener('pointercancel', onPointerUp);
       unregisterGate();
       unregisterZoomStart();
+      unregisterLeaveDecorator();
       reset();
       getImg()?.classList.remove('shoji-zoom-enabled');
     };

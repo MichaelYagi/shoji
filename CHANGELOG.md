@@ -5,6 +5,32 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.20] - 2026-08-20
+
+### Fixed
+
+- Rotating or flipping a photo, then navigating to the next slide, snapped
+  back to unrotated _before_ the slide transition played instead of the
+  un-rotate/un-flip happening as part of it — both `RotateFlip` and
+  `Zoom` reset their transform before `SlideTransition` ever cloned the
+  outgoing slide, so there was nothing left to animate away. Fixed with
+  a new core mechanism, `Gallery.registerSlideLeaveDecorator()`, that
+  freezes the pre-reset visual state onto the transition's own leave-ghost
+  clone and eases it back to neutral alongside the rest of the
+  transition. See DESIGN.md §2.5.
+- Dragging to pan while zoomed in, on a slide `RotateFlip` had also
+  rotated, panned along the wrong screen axis (e.g. dragging down moved
+  the image sideways), and which way was wrong changed with each
+  rotation — the raw screen-space pointer delta was applied directly as
+  the local pan offset, with nothing correcting for the parent's own
+  rotation. See DESIGN.md §4.6 (fourteenth real bug).
+- Double-clicking to zoom toward the pointer, on a rotated slide, zoomed
+  toward the wrong point instead of the actual click — sometimes badly.
+  The anchor math treated the rotated element's bounding-box corner as
+  the image's local origin, which is only true unrotated; fixed by
+  anchoring on the bounding box's rotation-invariant center instead. See
+  DESIGN.md §4.6 (fifteenth real bug).
+
 ## [0.1.0-alpha.19] - 2026-08-20
 
 ### Fixed

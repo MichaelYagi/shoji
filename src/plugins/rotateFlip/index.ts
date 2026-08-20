@@ -286,6 +286,29 @@ export const RotateFlip: ShojiPlugin = {
       flipVBtn.setAttribute('aria-pressed', 'false');
     }
 
+    /**
+     * DESIGN.md §2.5/§4.5 — a real bug: clicking next/prev on a
+     * rotated/flipped slide snapped it back to neutral *before* the slide
+     * transition started, instead of un-rotating as part of it.
+     * `beforeSlide`'s own `reset()` (below) still has to stay unanimated and
+     * still has to run before `SlideManager.render()` reparents the
+     * outgoing slide (the sixth real bug above) — that constraint doesn't
+     * go away. What changes: the transform about to be wiped is captured
+     * here first and handed to `SlideTransition` via
+     * `registerSlideLeaveDecorator()` (Zoom registers its own, for the same
+     * reason) — the decorator runs once, right after the ghost clones the
+     * outgoing slide (the real node's already been reset by then, so the
+     * clone alone wouldn't carry it), freezes the captured transform onto
+     * that clone, and animates it back to neutral over the same window the
+     * ghost itself is leaving in. Only the ghost animates away from it now.
+     */
+    let pendingLeaveTransform: string | null = null;
+    function captureLeaveTransform(): void {
+      const media = gallery.getActiveMedia();
+      const transform = media?.style.transform;
+      pendingLeaveTransform = transform && transform !== 'none' ? transform : null;
+    }
+
     // 'right' — registered in this order, so they cluster left-to-right as
     // rotateLeft, rotateRight, flipH, flipV, then whatever later plugin (or
     // the close button) follows (DESIGN.md §3.1).
@@ -310,14 +333,30 @@ export const RotateFlip: ShojiPlugin = {
     // afterSlide (below) still separately resets whichever *incoming*
     // slide becomes active — it may carry its own stale rotation from an
     // earlier visit, unrelated to whatever the outgoing slide had.
-    const offBeforeSlide = ctx.on('beforeSlide', reset);
+    // captureLeaveTransform() (see its own doc comment) runs first, while
+    // the about-to-be-cleared transform is still readable.
+    const offBeforeSlide = ctx.on('beforeSlide', () => {
+      captureLeaveTransform();
+      reset();
+    });
     const offSlide = ctx.on('afterSlide', reset);
+    const unregisterLeaveDecorator = gallery.registerSlideLeaveDecorator((clonedMedia) => {
+      if (!pendingLeaveTransform) return;
+      const transform = pendingLeaveTransform;
+      pendingLeaveTransform = null;
+      clonedMedia.style.transform = transform;
+      return () => {
+        clonedMedia.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+        clonedMedia.style.transform = 'none';
+      };
+    });
 
     return () => {
       for (const remove of removeButtons) remove();
       offOpen();
       offBeforeSlide();
       offSlide();
+      unregisterLeaveDecorator();
     };
   },
 };

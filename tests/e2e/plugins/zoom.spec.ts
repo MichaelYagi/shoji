@@ -45,6 +45,16 @@ async function activeImgHasZoomedClass(page: Page): Promise<boolean> {
   return img.evaluate((el) => el.classList.contains('shoji-zoomed'));
 }
 
+/** RotateFlip's own `apply(true)` clears `.shoji-slide-media`'s inline `transition` once the CSS transition genuinely ends (`waitForTransitionEnd`) — polling on that, not a fixed timeout, is what actually proves the rotation has settled rather than just assuming a duration. */
+async function activeMediaHasSettledTransition(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const media = (
+      window as unknown as { __shojiGallery: { getActiveMedia(): HTMLElement | null } }
+    ).__shojiGallery.getActiveMedia();
+    return media?.style.transition === '';
+  });
+}
+
 test('double-click zooms in, second double-click resets', async ({ page }) => {
   await openLightbox(page);
 
@@ -118,6 +128,78 @@ test('dragging while zoomed pans the image instead of navigating slides', async 
   const afterTransform = await activeImgTransform(page);
   expect(afterTransform).not.toBe(beforeTransform); // pan offset changed
   await expect(page.locator('.shoji-counter')).toHaveText('1 / 4'); // still on the same slide — drag panned, didn't navigate
+});
+
+test('regression: dragging while zoomed pans the image along the actual screen axis, even when RotateFlip has rotated the slide — before this fix, the raw screen-space pointer delta was applied directly as the local pan, so a rotated slide panned sideways when dragged up/down', async ({
+  page,
+}) => {
+  // Wide enough that RotateFlip/Zoom's buttons never collapse into the
+  // toolbar overflow popover (DESIGN.md §3.1a, covered by its own tests
+  // elsewhere) — this test is only about the coordinate-space fix itself.
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaHasSettledTransition(page)).toBe(true);
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  // The zoom-in click itself eases (withTransition, zoom/index.ts) rather
+  // than jumping — without waiting for it to genuinely finish, a bounding
+  // box captured mid-animation mixes the drag's own pan with the zoom
+  // transition's still-ongoing scale growth, confounding the measurement.
+  const img = await activeImgHandle(page);
+  await expect.poll(() => img.evaluate((el) => el.style.transition)).toBe('');
+
+  const before = (await img.boundingBox())!;
+  const cx = before.x + before.width / 2;
+  const cy = before.y + before.height / 2;
+
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy + 60, { steps: 8 }); // drag straight down on screen
+  await page.mouse.up();
+
+  const after = (await img.boundingBox())!;
+  // Dragging down on screen must move the image down on screen, not
+  // sideways — regardless of the slide's own rotation underneath it.
+  expect(Math.abs(after.y - before.y)).toBeGreaterThan(40);
+  expect(Math.abs(after.x - before.x)).toBeLessThan(10);
+});
+
+test('regression: double-clicking to zoom toward the pointer still anchors on the actual clicked point once RotateFlip has rotated the slide — before this fix, the anchor math mixed screen-space and local-space coordinates and zoomed toward the wrong point', async ({
+  page,
+}) => {
+  // Wide enough that RotateFlip's buttons never collapse into the toolbar
+  // overflow popover (DESIGN.md §3.1a, covered by its own tests elsewhere).
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await openLightbox(page);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect.poll(() => activeMediaHasSettledTransition(page)).toBe(true);
+
+  const img = await activeImgHandle(page);
+  const before = (await img.boundingBox())!;
+  // An off-center point — anchoring on the exact center wouldn't
+  // distinguish a correct anchor from a wrong one that just happens to
+  // preserve the center (scaling from the middle looks anchor-agnostic).
+  const fracX = 0.3;
+  const fracY = 0.3;
+  const anchorX = before.x + before.width * fracX;
+  const anchorY = before.y + before.height * fracY;
+
+  await page.mouse.dblclick(anchorX, anchorY);
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  await expect.poll(() => img.evaluate((el) => el.style.transition)).toBe('');
+
+  const after = (await img.boundingBox())!;
+  // The pixel that was at (fracX, fracY) of the image before zooming must
+  // still be under the same screen coordinate after — that's the actual
+  // definition of "zoomed toward the pointer", not just "grew".
+  const predictedAnchorX = after.x + after.width * fracX;
+  const predictedAnchorY = after.y + after.height * fracY;
+  expect(predictedAnchorX).toBeCloseTo(anchorX, 0);
+  expect(predictedAnchorY).toBeCloseTo(anchorY, 0);
 });
 
 test('navigating to the next slide resets zoom on the new slide', async ({ page }) => {

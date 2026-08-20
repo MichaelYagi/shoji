@@ -224,6 +224,10 @@ export class Gallery {
   private zoomGate: (() => boolean) | null = null;
   /** DESIGN.md §2.6a/§4.6 — the zoomed `<img>`'s own real on-screen rect, read by `beginClose()` before `beforeClose` fires (see `registerZoomStartProvider()`), so a button-close continues the zoom-out from wherever the viewer was actually zoomed/panned to instead of snapping back to neutral first. */
   private zoomStartProvider: (() => Box | null) | null = null;
+  /** DESIGN.md §2.5/§4.5 — plugins with a per-slide visual override (RotateFlip's rotate/flip, Zoom's scale/pan) that reset unanimated on `beforeSlide` (must clear before `SlideManager.render()` reparents the outgoing node). Multi-slot: more than one can be active on the same slide, each targeting a different part of the clone, so they don't conflict. See `registerSlideLeaveDecorator()`. */
+  private readonly slideLeaveDecorators = new Set<
+    (clonedMedia: HTMLElement) => (() => void) | void
+  >();
   private pluginCleanups: Array<() => void> = [];
 
   private readonly onContainerClick = (event: MouseEvent): void => {
@@ -451,6 +455,23 @@ export class Gallery {
     };
   }
 
+  /**
+   * DESIGN.md §2.5/§4.5 — called once per navigation with the leave-
+   * ghost's clone, right after `SlideTransition` creates it. Freeze
+   * whatever per-slide visual state is about to be reset onto the clone
+   * (or a descendant, e.g. Zoom's own `<img>`) and return a `() => void`
+   * to trigger the transition back to neutral once committed — or return
+   * nothing if there's nothing to animate away this time.
+   */
+  registerSlideLeaveDecorator(
+    decorator: (clonedMedia: HTMLElement) => (() => void) | void,
+  ): () => void {
+    this.slideLeaveDecorators.add(decorator);
+    return () => {
+      this.slideLeaveDecorators.delete(decorator);
+    };
+  }
+
   on<K extends keyof GalleryEvents>(event: K, fn: (detail: GalleryEvents[K]) => void): Unsubscribe {
     return this.bus.on(event, fn);
   }
@@ -466,7 +487,16 @@ export class Gallery {
       playVideoLabel: this.locale.playVideo,
       videoProviders: this.videoProviders,
     });
-    this.transition = new SlideTransition(this.slides);
+    this.transition = new SlideTransition(this.slides, (clonedMedia) => {
+      const settlers: Array<() => void> = [];
+      for (const decorate of this.slideLeaveDecorators) {
+        const settle = decorate(clonedMedia);
+        if (settle) settlers.push(settle);
+      }
+      return () => {
+        for (const settle of settlers) settle();
+      };
+    });
     const dom = buildLightboxDom(this.slides.element, this.locale);
     this.dom = dom;
     if (this.options.backdropOpacity != null) {

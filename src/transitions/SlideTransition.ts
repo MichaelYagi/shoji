@@ -84,7 +84,10 @@ function clearInlineTransform(el: HTMLElement): void {
  * `Gallery.navigate()`'s `animate` flag.
  */
 export class SlideTransition {
-  constructor(private readonly slides: SlideManager) {}
+  constructor(
+    private readonly slides: SlideManager,
+    private readonly decorateLeave: (clonedMedia: HTMLElement) => () => void = () => () => {},
+  ) {}
 
   /** A recognized built-in preset (`TRANSITION_PRESETS`). */
   animate(preset: TransitionPreset, direction: 1 | -1, swapContent: () => void): void {
@@ -131,9 +134,16 @@ export class SlideTransition {
 
     const ghost = document.createElement('div');
     ghost.className = 'shoji-slide-ghost';
-    ghost.appendChild(outgoing.cloneNode(true) as HTMLElement);
+    const clonedMedia = ghost.appendChild(outgoing.cloneNode(true) as HTMLElement);
     this.slides.element.appendChild(ghost);
-    void ghost.offsetHeight; // commit the ghost's natural (untransformed) appearance before anything changes it
+    // DESIGN.md §2.5/§4.5 — plugins with a per-slide visual override (e.g.
+    // RotateFlip's rotate/flip, Zoom's scale/pan) freeze it onto the clone
+    // here, before the reflow below commits it as the leave animation's
+    // start — the real node was already reset by now, so the clone alone
+    // wouldn't otherwise carry it. `settleLeave` (called after `kickOff`
+    // below) is what starts each one transitioning back to neutral.
+    const settleLeave = this.decorateLeave(clonedMedia);
+    void ghost.offsetHeight; // commit the ghost's (and clone's) starting appearance before anything changes it
 
     swapContent();
 
@@ -144,6 +154,7 @@ export class SlideTransition {
     }
 
     kickOff(ghost, incoming);
+    settleLeave();
     waitForEnd(ghost, () => ghost.remove());
     waitForEnd(incoming, () => cleanupIncoming(incoming));
   }
