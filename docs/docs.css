@@ -349,6 +349,19 @@ footer {
   border-radius: 6px;
   font-family: ui-monospace, monospace;
   margin: 1rem 0;
+  /* A real bug, found chasing an unrelated mobile-viewport-widening report
+     against view-controls.html: this renders JSON.stringify() output
+     directly (e.g. `rotateFlipChange: {"index":0,"flipH":true,...}`) as
+     plain text. JSON.stringify's default output has no internal
+     whitespace, so the whole payload is one unbreakable "word" under
+     normal CSS wrapping — wide enough, on a narrow mobile viewport, to
+     overflow this element and widen the page's own scrollable content.
+     Confirmed directly: document.documentElement.scrollWidth grew to
+     exactly match window.innerWidth's reported widening — this was never
+     a Shoji library bug, or even a real browser quirk, just unwrapped
+     debug output on the demo page. break-word lets it wrap like the rest
+     of the page instead. */
+  overflow-wrap: break-word;
 }
 
 .event-log {
@@ -360,6 +373,8 @@ footer {
   max-height: 12rem;
   overflow-y: auto;
   margin: 1rem 0;
+  /* Same JSON-payload-overflow issue as .status-line above. */
+  overflow-wrap: break-word;
 }
 
 .event-log div + div {

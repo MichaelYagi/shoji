@@ -5,7 +5,7 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
-## [Unreleased]
+## [0.1.0-alpha.18] - 2026-08-20
 
 ### Fixed
 
@@ -16,6 +16,14 @@ still include breaking changes).
   cache carried its stale rotation into wherever `SlideManager` reparented
   it. Same bug class, same fix, the Zoom plugin already had. See
   DESIGN.md §4.5 (sixth real bug).
+- Rotating/flipping a photo on `docs/examples/view-controls.html` (and
+  several other demo pages) on a narrow mobile viewport could widen the
+  page itself, pushing the toolbar/nav arrows off-screen — not a Shoji
+  bug: the demo pages' own debug status line printed event payloads via
+  `JSON.stringify()` with no `overflow-wrap`, and that unbreakable text
+  overflowed the page on narrow screens. Fixed with `overflow-wrap:
+break-word` in `docs/docs.css`; no library code changed. See DESIGN.md
+  §4.5 (seventh real bug) for the full, multi-attempt misdiagnosis.
 
 ## [0.1.0-alpha.17] - 2026-08-19
 
