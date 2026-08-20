@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { TRANSITION_PRESETS } from '../transitions/presets';
 import { SlideTransition } from '../transitions/SlideTransition';
-import { zoomIn, zoomOut, type FrozenDragTransform } from './zoomTransition';
+import { zoomIn, zoomOut, type Box, type FrozenDragTransform } from './zoomTransition';
 
 function itemKey(item: GalleryItem | GalleryItemInput): string {
   return item.id ?? item.src;
@@ -222,6 +222,8 @@ export class Gallery {
   private readonly activePluginNames = new Set<string>();
   private readonly videoProviders = new Map<string, VideoProviderRenderer>();
   private zoomGate: (() => boolean) | null = null;
+  /** DESIGN.md §2.6a/§4.6 — the zoomed `<img>`'s own real on-screen rect, read by `beginClose()` before `beforeClose` fires (see `registerZoomStartProvider()`), so a button-close continues the zoom-out from wherever the viewer was actually zoomed/panned to instead of snapping back to neutral first. */
+  private zoomStartProvider: (() => Box | null) | null = null;
   private pluginCleanups: Array<() => void> = [];
 
   private readonly onContainerClick = (event: MouseEvent): void => {
@@ -438,6 +440,14 @@ export class Gallery {
     this.zoomGate = isZoomed;
     return () => {
       if (this.zoomGate === isZoomed) this.zoomGate = null;
+    };
+  }
+
+  /** DESIGN.md §2.6a/§4.6 — returns the zoomed image's current on-screen rect (`getBoundingClientRect()`), or `null` when not zoomed. Single slot, same pattern as `registerZoomGate` above. */
+  registerZoomStartProvider(provider: () => Box | null): () => void {
+    this.zoomStartProvider = provider;
+    return () => {
+      if (this.zoomStartProvider === provider) this.zoomStartProvider = null;
     };
   }
 
@@ -1710,6 +1720,12 @@ export class Gallery {
     // keydown listener needs removing before that.
     if (this.captionModalOpen) this.closeCaptionModal();
     if (this.toolbarOverflowOpen) this.closeToolbarOverflow();
+    // Read before beforeClose fires — the Zoom plugin's own beforeClose
+    // handler resets its scale/pan back to neutral there (so zoomOut()'s
+    // measurement below stays correct, same reasoning dragStart's own doc
+    // comment explains), which would otherwise erase the very state this
+    // is capturing.
+    const zoomStart = this.zoomStartProvider?.() ?? undefined;
     this.bus.emit('beforeClose', {});
 
     // .shoji-outer must stay display:block for the zoom-out to be visible,
@@ -1741,8 +1757,9 @@ export class Gallery {
       // why this can't just be left to the instant display:none cut at the
       // end of finishClose().
       if (this.dom) this.dom.backdrop.style.opacity = '0';
-      zoomOut({ origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag }, () =>
-        this.finishClose(),
+      zoomOut(
+        { origin, target: media, aspectRatio, naturalSize, dragStart: frozenDrag, zoomStart },
+        () => this.finishClose(),
       );
     } else {
       this.finishClose();

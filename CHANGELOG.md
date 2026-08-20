@@ -7,6 +7,27 @@ still include breaking changes).
 
 ## [Unreleased]
 
+### Fixed
+
+- Closing while zoomed in (Zoom plugin) snapped back to neutral zoom
+  first, then shrank to the thumbnail, instead of continuing the
+  shrink-to-thumbnail animation directly from the zoomed-in view. Fixed
+  via a new `Gallery.registerZoomStartProvider()` (same pattern as the
+  existing `registerZoomGate`), capturing the zoomed image's own live
+  rect before the Zoom plugin's own close-time reset runs, and jumping to
+  it the same way a completed vertical drag-close already continues from
+  wherever the drag left off. Also fixes the same jump-cut when RotateFlip
+  is active at the same time — closing while both rotated/flipped _and_
+  zoomed now keeps the smooth combined un-rotate-while-shrinking motion,
+  not just a plain un-zoom. See DESIGN.md §2.3b (fourteenth entry).
+- Clicking the plain black backdrop (between the image and a nav arrow,
+  say) while zoomed in no longer closed the lightbox, unlike the same
+  click unzoomed — the Zoom plugin's own pan-pointerdown listener engaged
+  and captured the pointer onto the image for _any_ pointerdown in the
+  lightbox while zoomed, not just one that actually started on the image,
+  which silently made every backdrop click misread as "on the image," not
+  backdrop. See DESIGN.md §4.6 (thirteenth bug).
+
 ## [0.1.0-alpha.16] - 2026-08-18
 
 ### Added

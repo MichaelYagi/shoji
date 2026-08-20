@@ -97,10 +97,23 @@ function slideRoot(): HTMLElement {
   return document.querySelector('.shoji-slide') as HTMLElement;
 }
 
-/** A full horizontal drag: lock past lockThreshold, move further, release, then complete the settle animation — matches gallery-gestures.test.ts's pattern (a single jump straight to the final position would zero the effective post-lock delta; skipping fireTransitionEnd leaves the index change queued behind a transitionend that never fires). */
-function dragHorizontal(endX: number): void {
+/**
+ * A full horizontal drag: lock past lockThreshold, move further, release, then
+ * complete the settle animation — matches gallery-gestures.test.ts's pattern
+ * (a single jump straight to the final position would zero the effective
+ * post-lock delta; skipping fireTransitionEnd leaves the index change queued
+ * behind a transitionend that never fires). `startTarget` (default the
+ * dialog) is where `pointerdown` fires — a zoomed pan test needs this to be
+ * the image itself, since the Zoom plugin's own pan listener now only
+ * engages for a pointerdown that actually starts there (see the
+ * "backdrop click while zoomed" describe block below); the subsequent
+ * move/up firing on the dialog regardless is fine either way — jsdom's
+ * `dispatchEvent` doesn't retarget for real pointer capture, and `outer`'s
+ * own listener receives both through ordinary bubbling.
+ */
+function dragHorizontal(endX: number, startTarget: EventTarget = dialog()): void {
+  firePointer(startTarget, 'pointerdown', { clientX: 0, clientY: 0 });
   const d = dialog();
-  firePointer(d, 'pointerdown', { clientX: 0, clientY: 0 });
   firePointer(d, 'pointermove', { clientX: Math.sign(endX) * 11 || 11, clientY: 0 });
   firePointer(d, 'pointermove', { clientX: endX, clientY: 0 });
   firePointer(d, 'pointerup', { clientX: endX, clientY: 0 });
@@ -306,7 +319,11 @@ describe('Zoom — pan suspends core drag-to-navigate (DESIGN.md §4-zoom)', () 
     doubleTapAt(150, 150); // zoom in first
 
     const captureSpy = vi.spyOn(Element.prototype, 'setPointerCapture');
-    dragHorizontal(-80); // locks direction in core's engine even though its navigate/close effect is suppressed; also bubbles through this plugin's own pan listener on `outer`
+    // Starts on the image itself — the Zoom plugin's own pan listener only
+    // engages for a pointerdown that actually starts there (see the
+    // "backdrop click while zoomed" describe block below); a real pan drag
+    // always does, since there's nothing else zoomed-in to grab onto.
+    dragHorizontal(-80, activeImg());
 
     expect(captureSpy).toHaveBeenCalled();
     for (const instance of captureSpy.mock.instances) {
@@ -334,9 +351,8 @@ describe('Zoom — pan suspends core drag-to-navigate (DESIGN.md §4-zoom)', () 
     doubleTapAt(150, 150);
     const beforePan = activeImg().style.transform;
 
-    const d = dialog();
-    firePointer(d, 'pointerdown', { clientX: 150, clientY: 150 });
-    firePointer(d, 'pointermove', { clientX: 130, clientY: 150 });
+    firePointer(activeImg(), 'pointerdown', { clientX: 150, clientY: 150 });
+    firePointer(dialog(), 'pointermove', { clientX: 130, clientY: 150 });
 
     expect(activeImg().style.transform).not.toBe(beforePan);
     gallery.destroy();
@@ -352,6 +368,56 @@ describe('Zoom — pan suspends core drag-to-navigate (DESIGN.md §4-zoom)', () 
     dragHorizontal(-80);
 
     expect(gallery.currentIndex).toBe(1);
+    gallery.destroy();
+  });
+});
+
+describe('Zoom — backdrop click while zoomed still closes the lightbox (DESIGN.md §4-zoom, thirteenth bug)', () => {
+  it('does not engage pan (no pointer capture) for a pointerdown that starts on the backdrop, not the image', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    doubleTapAt(150, 150); // zoom in first
+
+    const captureSpy = vi.spyOn(Element.prototype, 'setPointerCapture');
+    // The dialog itself, not the image — dispatched directly on it, so
+    // composedPath() doesn't include the (descendant) image, same as a
+    // real click on the empty backdrop area between the image and a nav
+    // arrow.
+    firePointer(dialog(), 'pointerdown', { clientX: 5, clientY: 5 });
+
+    expect(captureSpy).not.toHaveBeenCalled();
+    gallery.destroy();
+  });
+
+  it('a subsequent pointermove does not pan the image either, once a backdrop pointerdown failed to engage pan', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    doubleTapAt(150, 150);
+    const beforePan = activeImg().style.transform;
+
+    firePointer(dialog(), 'pointerdown', { clientX: 5, clientY: 5 });
+    firePointer(dialog(), 'pointermove', { clientX: 20, clientY: 20 });
+
+    expect(activeImg().style.transform).toBe(beforePan);
+    gallery.destroy();
+  });
+
+  it('still engages pan normally for a pointerdown that does start on the image, right next to a backdrop click that does not — confirms the fix is scoped to pointerdown target, not zoom state in general', async () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+    await flushSlideLoad();
+    doubleTapAt(150, 150);
+
+    firePointer(dialog(), 'pointerdown', { clientX: 5, clientY: 5 }); // backdrop — no-op
+    firePointer(dialog(), 'pointerup', { clientX: 5, clientY: 5 });
+
+    const captureSpy = vi.spyOn(Element.prototype, 'setPointerCapture');
+    firePointer(activeImg(), 'pointerdown', { clientX: 150, clientY: 150 }); // the image — engages
+
+    expect(captureSpy).toHaveBeenCalledWith(expect.anything());
+    expect(captureSpy.mock.instances[0]).toBe(activeImg());
     gallery.destroy();
   });
 });
@@ -557,9 +623,8 @@ describe("Zoom — transition (discrete jumps animate, continuous gestures don't
     // clear it so the pan assertion below isn't riding on that leftover.
     activeImg().style.transition = '';
 
-    const d = dialog();
-    firePointer(d, 'pointerdown', { clientX: 150, clientY: 150 });
-    firePointer(d, 'pointermove', { clientX: 130, clientY: 150 });
+    firePointer(activeImg(), 'pointerdown', { clientX: 150, clientY: 150 });
+    firePointer(dialog(), 'pointermove', { clientX: 130, clientY: 150 });
 
     expect(activeImg().style.transition).toBe('');
     gallery.destroy();

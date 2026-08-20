@@ -241,6 +241,16 @@ export const Zoom: ShojiPlugin = {
 
     function onPointerDown(event: PointerEvent): void {
       if (scale <= ZOOM_EPSILON || isRealControl(event)) return;
+      const img = getImg();
+      // A real bug, reported from real usage: this listens on `outer` (the
+      // whole lightbox, not just the image) so a fast pan can be tracked
+      // even once the pointer leaves the image's own bounds — but with no
+      // check on where the pointerdown itself landed, a click on the plain
+      // backdrop (between the image and a nav arrow, say) engaged pan and
+      // captured the pointer onto `img` regardless, which — see below —
+      // retargets the click and makes it misread as "on the image," not
+      // backdrop, silently defeating click-to-close while zoomed.
+      if (!img || !event.composedPath().includes(img)) return;
       panPointerId = event.pointerId;
       lastX = event.clientX;
       lastY = event.clientY;
@@ -256,7 +266,7 @@ export const Zoom: ShojiPlugin = {
       // GestureEngine's own capture needs a separate suppressRetargetedClick
       // step for exactly this reason; this doesn't, since the retarget
       // lands somewhere already excluded.
-      getImg()?.setPointerCapture(event.pointerId);
+      img.setPointerCapture(event.pointerId);
     }
     function onPointerMove(event: PointerEvent): void {
       if (panPointerId !== event.pointerId || !natural || !container) return;
@@ -390,6 +400,17 @@ export const Zoom: ShojiPlugin = {
     // seemingly random spot instead of visibly shrinking into the thumbnail.
     const offBeforeClose = ctx.on('beforeClose', () => reset());
     const unregisterGate = gallery.registerZoomGate(() => scale > ZOOM_EPSILON);
+    // Read by Gallery.beginClose() *before* the beforeClose reset above
+    // runs, so a button-close continues the zoom-out from wherever the
+    // viewer was actually zoomed/panned to, instead of the reset above
+    // making it (correctly, for the measurement) but also making the
+    // close itself snap back to neutral first. The image's own real
+    // rendered rect, not this plugin's raw scale/pan numbers — see
+    // zoomTransition.ts's ZoomTransitionTarget.zoomStart for why a direct
+    // scale/pan replay doesn't work once it lands on a different element.
+    const unregisterZoomStart = gallery.registerZoomStartProvider(() =>
+      scale > ZOOM_EPSILON ? (getImg()?.getBoundingClientRect() ?? null) : null,
+    );
     markEnabled(); // covers the (unusual but possible) case of the gallery already being open when this plugin initializes
     updateButtonVisibility();
 
@@ -410,6 +431,7 @@ export const Zoom: ShojiPlugin = {
       outer.removeEventListener('pointerup', onPointerUp);
       outer.removeEventListener('pointercancel', onPointerUp);
       unregisterGate();
+      unregisterZoomStart();
       reset();
       getImg()?.classList.remove('shoji-zoom-enabled');
     };

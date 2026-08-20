@@ -463,6 +463,104 @@ describe('Gallery — deferred close animation', () => {
   });
 });
 
+describe('Gallery — registerZoomStartProvider (DESIGN.md §2.6a/§4.6)', () => {
+  function openGallery(count = 3) {
+    const el = document.createElement('div');
+    el.innerHTML = Array.from(
+      { length: count },
+      (_, i) =>
+        `<a href="${i}.jpg" data-shoji-id="item-${i}" data-shoji-width="800" data-shoji-height="600"><img src="thumb-${i}.jpg"></a>`,
+    ).join('');
+    document.body.appendChild(el);
+
+    const gallery = new Gallery(el, { preload: 0 });
+    gallery.open(0);
+    return { gallery, media: activeMedia() };
+  }
+
+  const rect = { top: -100, left: -50, width: 1600, height: 1200 } as DOMRect;
+
+  it("passes the provider's rect through to zoomOut() as zoomStart", () => {
+    const { gallery, media } = openGallery();
+    gallery.registerZoomStartProvider(() => rect);
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledWith(
+      expect.objectContaining({ zoomStart: rect }),
+      expect.any(Function),
+    );
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('is read before beforeClose listeners run — a plugin resetting its own state there does not race the capture', () => {
+    const { gallery, media } = openGallery();
+    let resetAlreadyRanWhenProviderCalled: boolean | null = null;
+    let reset = false;
+    gallery.registerZoomStartProvider(() => {
+      resetAlreadyRanWhenProviderCalled = reset;
+      return rect;
+    });
+    gallery.on('beforeClose', () => {
+      reset = true;
+    });
+
+    gallery.close();
+
+    expect(resetAlreadyRanWhenProviderCalled).toBe(false);
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('zoomStart is undefined once unregistered', () => {
+    const { gallery, media } = openGallery();
+    const unregister = gallery.registerZoomStartProvider(() => rect);
+    unregister();
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledWith(
+      expect.objectContaining({ zoomStart: undefined }),
+      expect.any(Function),
+    );
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('zoomStart is undefined when no provider is registered at all', () => {
+    const { gallery, media } = openGallery();
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledWith(
+      expect.objectContaining({ zoomStart: undefined }),
+      expect.any(Function),
+    );
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+
+  it('a provider returning null (not currently zoomed) passes zoomStart as undefined', () => {
+    const { gallery, media } = openGallery();
+    gallery.registerZoomStartProvider(() => null);
+
+    gallery.close();
+
+    expect(zoomTransition.zoomOut).toHaveBeenCalledWith(
+      expect.objectContaining({ zoomStart: undefined }),
+      expect.any(Function),
+    );
+
+    fireTransitionEnd(media);
+    gallery.destroy();
+  });
+});
+
 describe('Gallery — controls fade and zoom-out run concurrently on close (DESIGN.md §2.6a)', () => {
   function openGallery(count = 3) {
     const el = document.createElement('div');

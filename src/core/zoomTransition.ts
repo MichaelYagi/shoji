@@ -25,6 +25,39 @@ export interface ZoomTransitionTarget {
    * measurement) then wholesale replaces — not composes with — it.
    */
   dragStart?: FrozenDragTransform;
+  /**
+   * The zoomed `<img>`'s own real on-screen rect (`getBoundingClientRect()`)
+   * at the moment a button-close (or any non-drag close) starts, if it's
+   * currently zoomed in — captured by `Gallery.beginClose()` from
+   * `registerZoomStartProvider()` *before* the Zoom plugin's own
+   * `beforeClose` handler resets it back to neutral (so `zoomOut()`'s own
+   * measurement below stays correct — same ordering requirement `dragStart`
+   * has, and the same reason).
+   *
+   * A rect, not the Zoom plugin's raw scale/pan numbers — an earlier version
+   * passed those through directly and re-applied them to `target`
+   * (`.shoji-slide-media`) the same way `dragStart` reapplies its own
+   * translateY/scale. That doesn't work here: Zoom's own pan math is
+   * relative to the `<img>` itself with `transform-origin: 0 0`
+   * (`zoom/index.ts`), a *different* element with a *different* origin than
+   * `target`'s `transform-origin: center` below — reapplying the same
+   * numbers onto the wrong element/origin pair visibly shifted the image
+   * toward its top-left corner the instant close started, worse the more
+   * zoomed in it was. A rect sidesteps this entirely: `zoomOut()` computes
+   * the jump the same center-to-center way it computes everything else
+   * (`transformBetween`), from `target`'s own freshly-measured natural box
+   * to this rect — origin-and-coordinate-system-agnostic, so it doesn't
+   * matter what internal convention produced the rect.
+   *
+   * `zoomOut()` jumps `target` here instantly, then transitions away from
+   * it, so closing while zoomed continues in one motion from the zoomed-in
+   * view instead of snapping back to neutral first and only then shrinking
+   * to the thumbnail. Mutually exclusive with `dragStart` in practice — you
+   * can't complete a vertical drag-close while the zoom plugin is also
+   * mid-pan, since `GestureController` suspends its own drag handling
+   * entirely while zoomed (`isZoomed()`, DESIGN.md §4.6).
+   */
+  zoomStart?: Box;
 }
 
 function prefersReducedMotion(): boolean {
@@ -132,6 +165,28 @@ function effectiveTargetBox(
  * (same tradeoff `object-fit: contain` makes); center always lands exactly
  * on origin's center, only the unconstrained axis's edges fall short.
  */
+/**
+ * The actual translate3d/scale3d math `computeTransform` below needs —
+ * pulled out on its own so `zoomOut`'s `zoomStart` jump (a *second* use of
+ * the exact same center-to-center box-fitting math, landing on a captured
+ * live rect instead of `origin`'s) can reuse it directly, rather than
+ * re-deriving Zoom's own transform-origin/coordinate conventions on a
+ * different element — see `ZoomTransitionTarget.zoomStart`'s own doc
+ * comment for why that direct-replication approach doesn't work.
+ */
+function transformBetween(from: Box, to: Box): string {
+  const scale = Math.min(to.width / from.width, to.height / from.height);
+  const translateX = to.left + to.width / 2 - (from.left + from.width / 2);
+  const translateY = to.top + to.height / 2 - (from.top + from.height / 2);
+  // translate3d/scale3d, not translate()/scale() — forces the GPU
+  // compositing path instead of a main-thread-painted 2D transform, the
+  // same fix already validated for the Zoom plugin's own scale animation
+  // (DESIGN.md §4.6): this is the identical technique (a large photo
+  // scaled via `transform`) on the same element, just driven by open/close
+  // instead of pinch/toolbar zoom.
+  return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scale}, ${scale}, 1)`;
+}
+
 function computeTransform(
   origin: HTMLElement,
   target: HTMLElement,
@@ -148,21 +203,7 @@ function computeTransform(
   ) {
     return null;
   }
-  const scale = Math.min(
-    originRect.width / targetRect.width,
-    originRect.height / targetRect.height,
-  );
-  const translateX =
-    originRect.left + originRect.width / 2 - (targetRect.left + targetRect.width / 2);
-  const translateY =
-    originRect.top + originRect.height / 2 - (targetRect.top + targetRect.height / 2);
-  // translate3d/scale3d, not translate()/scale() — forces the GPU
-  // compositing path instead of a main-thread-painted 2D transform, the
-  // same fix already validated for the Zoom plugin's own scale animation
-  // (DESIGN.md §4.6): this is the identical technique (a large photo
-  // scaled via `transform`) on the same element, just driven by open/close
-  // instead of pinch/toolbar zoom.
-  return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scale}, ${scale}, 1)`;
+  return transformBetween(targetRect, originRect);
 }
 
 /**
@@ -282,14 +323,14 @@ export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransit
  * callers use this to know when it's safe to actually hide/finalize.
  */
 export function zoomOut(
-  { origin, target, aspectRatio, naturalSize, dragStart }: ZoomTransitionTarget,
+  { origin, target, aspectRatio, naturalSize, dragStart, zoomStart }: ZoomTransitionTarget,
   onComplete: () => void,
 ): void {
   if (prefersReducedMotion()) {
     onComplete();
     return;
   }
-  // Measured before dragStart is ever applied to `target` — see
+  // Measured before dragStart/zoomStart is ever applied to `target` — see
   // ZoomTransitionTarget.dragStart's doc comment for why the order matters.
   const transform = computeTransform(origin, target, aspectRatio, naturalSize);
   if (!transform) {
@@ -317,6 +358,39 @@ export function zoomOut(
     target.style.transform = `translate3d(0px, ${dragStart.translateY}px, 0px) scale3d(${dragStart.scale}, ${dragStart.scale}, 1)`;
     target.style.opacity = String(dragStart.opacity);
     void target.offsetHeight; // commit the jump before transitioning away from it
+  } else if (zoomStart) {
+    // Same FLIP jump as dragStart above, computed the same center-to-center
+    // way as `transform` above (not dragStart's raw translate/scale reuse
+    // — see ZoomTransitionTarget.zoomStart's doc comment for why that
+    // doesn't work here). `target`'s own effective box, re-measured fresh:
+    // cheap, and guaranteed unchanged since the read inside
+    // computeTransform() above — nothing's touched `target` in between.
+    // Still correct even if `target` is currently rotated/flipped (the
+    // RotateFlip plugin, applied directly to this same element, unlike
+    // Zoom's own scale/pan — see below): both this measurement and
+    // `zoomStart` itself were captured at the same rotation, so the
+    // scale/translate between their two (equally rotated) bounding boxes
+    // still isolates the zoom-only delta correctly.
+    const targetRect = effectiveTargetBox(target, aspectRatio, naturalSize);
+    if (targetRect.width > 0 && targetRect.height > 0) {
+      // Composed onto whatever's already there, never replacing it outright
+      // — a real bug, reported from real usage: closing while both rotated/
+      // flipped *and* zoomed wholesale-overwrote RotateFlip's own
+      // scaleX/scaleY/rotate() with this jump's plain translate/scale,
+      // un-rotating *instantly* right here, before the real transition
+      // below even starts — a snap to neutral rotation, then a separate
+      // zoom-out, instead of the smooth combined un-rotate-while-shrinking
+      // motion closing while rotated (without zoomStart at all) already
+      // gets for free: transitioning target's transform from *whatever it
+      // currently is* to the final plain shrink value is what makes that
+      // work, and it needs target's rotation to still be sitting there
+      // when the transition starts, not already erased by this jump.
+      const existing = target.style.transform;
+      const jump = transformBetween(targetRect, zoomStart);
+      target.style.transition = 'none';
+      target.style.transform = existing && existing !== 'none' ? `${existing} ${jump}` : jump;
+      void target.offsetHeight;
+    }
   }
   target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;

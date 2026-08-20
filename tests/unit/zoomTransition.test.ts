@@ -415,6 +415,132 @@ describe('zoomTransition', () => {
       expect(target.style.transform).toBe('scaleX(1) scaleY(1) rotate(90deg)');
     });
 
+    it("regression: with zoomStart, jumps instantly onto the zoomed image's own rect before transitioning toward origin — not from target's own natural (reset) position, and not from the zoom plugin's raw scale/pan replayed onto the wrong element/origin (the earlier, broken version of this)", () => {
+      const originRect = { top: 534, left: 1007, width: 192, height: 255 };
+      const targetRect = { top: 0, left: 0, width: 1400, height: 1170 };
+      // Exactly 2x targetRect, same aspect ratio, centered at (500, 400) —
+      // deliberately off in both axes from targetRect's own center
+      // (700, 585), so a wrong (un-jumped, or wrong-origin) computation is
+      // clearly distinguishable from the correct one below.
+      const zoomStartRect = { top: -770, left: -900, width: 2800, height: 2340 };
+      mockRect(origin, originRect);
+      mockRect(target, targetRect);
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+
+      let firstTransform = '';
+      const styleProto = Object.getPrototypeOf(target.style) as CSSStyleDeclaration;
+      const transformDesc = Object.getOwnPropertyDescriptor(styleProto, 'transform')!;
+      Object.defineProperty(target.style, 'transform', {
+        configurable: true,
+        get() {
+          return transformDesc.get!.call(target.style);
+        },
+        set(v: string) {
+          if (!firstTransform && v && v !== 'none') firstTransform = v;
+          transformDesc.set!.call(target.style, v);
+        },
+      });
+
+      zoomOut({ origin, target, zoomStart: zoomStartRect as DOMRect }, () => {});
+
+      const match = firstTransform.match(
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, tx, ty, s] = match!.map(Number);
+
+      // Same center-to-center replication as the zoomIn regression test
+      // above — the jump should land target's own natural box exactly on
+      // zoomStartRect, not origin's box and not target's own untransformed
+      // position.
+      const targetCenterX = targetRect.left + targetRect.width / 2;
+      const targetCenterY = targetRect.top + targetRect.height / 2;
+      expect(targetCenterX + tx!).toBeCloseTo(zoomStartRect.left + zoomStartRect.width / 2, 0);
+      expect(targetCenterY + ty!).toBeCloseTo(zoomStartRect.top + zoomStartRect.height / 2, 0);
+      expect(targetRect.width * s!).toBeCloseTo(zoomStartRect.width, 0);
+
+      // And it doesn't just stay jumped — the real, final transform (still
+      // toward origin, unaffected by zoomStart) is what's left in place.
+      expect(target.style.transform).not.toBe(firstTransform);
+    });
+
+    it('regression: with zoomStart, a rotate/flip transform already on target (RotateFlip, applied to this same .shoji-slide-media element) is preserved in the jump, not wiped instantly — closing both rotated and zoomed keeps the smooth combined un-rotate-while-shrinking motion instead of snapping to neutral rotation first', () => {
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+      const rotateFlipTransform = 'scaleX(-1) scaleY(1) rotate(90deg)';
+      target.style.transform = rotateFlipTransform; // RotateFlip's own inline style, as it would be at the moment close() starts
+
+      let firstTransform = '';
+      const styleProto = Object.getPrototypeOf(target.style) as CSSStyleDeclaration;
+      const transformDesc = Object.getOwnPropertyDescriptor(styleProto, 'transform')!;
+      Object.defineProperty(target.style, 'transform', {
+        configurable: true,
+        get() {
+          return transformDesc.get!.call(target.style);
+        },
+        set(v: string) {
+          if (!firstTransform && v && v !== 'none') firstTransform = v;
+          transformDesc.set!.call(target.style, v);
+        },
+      });
+
+      zoomOut(
+        {
+          origin,
+          target,
+          zoomStart: { top: -300, left: -200, width: 1600, height: 1200 } as DOMRect,
+        },
+        () => {},
+      );
+
+      // The jump still carries RotateFlip's own functions forward — not
+      // replaced by a plain translate/scale-only value.
+      expect(firstTransform).toContain(rotateFlipTransform);
+      // ...with the zoom's own translate3d/scale3d composed alongside it,
+      // not just RotateFlip's value left untouched (i.e. the jump actually
+      // did something for zoom continuity too).
+      expect(firstTransform).toMatch(/translate3d\([-\d.]+px, [-\d.]+px, 0\) scale3d/);
+    });
+
+    it('dragStart takes priority over zoomStart if both are somehow present (not expected in practice — GestureController suspends drag entirely while zoomed)', () => {
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+
+      let firstTransform = '';
+      const styleProto = Object.getPrototypeOf(target.style) as CSSStyleDeclaration;
+      const transformDesc = Object.getOwnPropertyDescriptor(styleProto, 'transform')!;
+      Object.defineProperty(target.style, 'transform', {
+        configurable: true,
+        get() {
+          return transformDesc.get!.call(target.style);
+        },
+        set(v: string) {
+          if (!firstTransform && v && v !== 'none') firstTransform = v;
+          transformDesc.set!.call(target.style, v);
+        },
+      });
+
+      zoomOut(
+        {
+          origin,
+          target,
+          dragStart: { translateY: 42, scale: 0.9, opacity: 0.5 },
+          zoomStart: { top: -100, left: -100, width: 2000, height: 2000 } as DOMRect,
+        },
+        () => {},
+      );
+
+      expect(firstTransform).toBe('translate3d(0px, 42px, 0px) scale3d(0.9, 0.9, 1)');
+    });
+
     it('calls onComplete synchronously when there is no valid rect to animate to', () => {
       mockRect(origin, { width: 0, height: 0 });
       mockRect(target, { width: 800, height: 600 });
