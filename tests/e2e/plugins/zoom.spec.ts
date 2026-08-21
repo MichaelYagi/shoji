@@ -137,6 +137,18 @@ test('regression: dragging while zoomed pans the image along the actual screen a
   // toolbar overflow popover (DESIGN.md §3.1a, covered by its own tests
   // elsewhere) — this test is only about the coordinate-space fix itself.
   await page.setViewportSize({ width: 1000, height: 800 });
+  // This test's own loose tolerances (>40px/<10px) tolerate some slop from
+  // a real CSS rotate transition racing against measurement under normal
+  // parallel-test CPU contention (confirmed reliable on chromium/firefox/
+  // mobile-chrome) — but not against WebKit's own, apparently less precise,
+  // transition-completion signaling under CI's heavier contention there,
+  // where the <10px margin was observed to slip past (e.g. 13px). Same
+  // race, same fix, as the double-click anchor test below and RotateFlip's
+  // own geometry tests (DESIGN.md §4.5) — reduced motion collapses
+  // --shoji-duration to 0ms, making the rotate instant so both the drag's
+  // own `before` measurement and the drag itself always see the same,
+  // fully-settled rotated state.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await openLightbox(page);
 
   await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
