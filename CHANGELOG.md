@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.21] - 2026-08-20
+
+### Added
+
+- Autoplay now pauses the slideshow while the viewer is actively zoomed in
+  (`pauseOnZoom`, default `true`) or interacting with rotate/flip
+  (`pauseOnRotateFlip`, default `false`, opt-in) — previously the
+  slideshow could auto-advance out from under someone mid-examination.
+  Stays paused until Play is pressed again; no auto-resume, even once
+  back at neutral zoom/rotation. Immediately re-pauses if Play is pressed
+  while already zoomed/rotated — and the Play button now visibly disables
+  whenever that's the case, instead of a click silently doing nothing.
+  Both are a no-op if the corresponding plugin (Zoom/RotateFlip) isn't
+  loaded. See DESIGN.md §4.1 (point 17) for the real bugs found refining
+  this and why it lands on "stays paused, no auto-resume."
+
+### Fixed
+
+- `Zoom.reset()` never emitted `zoomChange` when returning to neutral
+  scale, contradicting its own documented "emits on every scale change"
+  contract — a host listening for it could never learn a slide stopped
+  being zoomed unless something zoomed in again first. Now emits when
+  there was an actual change to report. See DESIGN.md §4.6 (sixteenth
+  bug).
+
 ## [0.1.0-alpha.20] - 2026-08-20
 
 ### Fixed

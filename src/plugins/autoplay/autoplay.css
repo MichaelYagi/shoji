@@ -41,3 +41,18 @@
   width: 0%;
   background: var(--shoji-progress);
 }
+
+/* DESIGN.md §4.1 — while pauseOnZoom/pauseOnRotateFlip is holding playback
+   paused (the viewer is still zoomed/rotated), pressing Play would just
+   silently re-pause it in the same tick, with no visible feedback at all
+   that anything happened — reported as looking broken, not just quiet.
+   Same visual treatment as core's own slide-loading disable
+   (`.shoji-slide-loading .shoji-toolbar-button`, shoji.css), scoped to
+   just this one button via `aria-disabled` (JS-driven, autoplay/index.ts)
+   rather than the whole toolbar. `pointer-events: none` is the mouse
+   half; the matching `tabIndex = -1` is the keyboard half. */
+.shoji-autoplay-toggle[aria-disabled='true'] {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}

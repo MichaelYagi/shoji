@@ -226,11 +226,25 @@ export const Zoom: ShojiPlugin = {
     }
 
     function reset(animate = false): void {
+      // A real gap, found auditing this against its own documented contract
+      // ("emits zoomChange on every scale change, gesture or button-driven",
+      // DESIGN.md §4.6): resetting from an engaged scale back to 1 is a
+      // scale change like any other, but every call site here (beforeSlide,
+      // afterSlide, beforeClose, afterOpen, and zoomOutStep/toggleZoom
+      // reaching neutral) silently skipped emitting it — a host listening
+      // for zoomChange to reflect "is this slide currently zoomed" would
+      // never learn it stopped being true unless something else zoomed in
+      // again first. Only when there's an actual change: the overwhelming
+      // majority of these calls fire while already at scale 1 (nothing
+      // engaged to begin with), and emitting on every no-op reset would be
+      // noisy against the "on every *change*" contract, not a fix for it.
+      const wasEngaged = scale !== 1;
       scale = 1;
       pan = { tx: 0, ty: 0 };
       natural = null;
       container = null;
       originOffset = null;
+      if (wasEngaged) emitChange(); // after scale is already 1, so listeners see the real new value
       const img = getImg();
       if (!img) return;
       const clearTransform = (): void => {

@@ -183,3 +183,160 @@ test('the progress bar stays visible through ordinary idle auto-hide, unlike the
   await expect(toolbar).toHaveCSS('opacity', '0'); // the toolbar it hides alongside really did fade
   await expect(progress).toHaveCSS('opacity', '1'); // the progress bar itself did not
 });
+
+/**
+ * DESIGN.md §4.1 — a real UX gap, not a reported bug: nothing stopped the
+ * slideshow from auto-advancing out from under a viewer actively zoomed
+ * into a detail, unlike the drag-to-close pause above. Fixed by listening
+ * for Zoom's own zoomChange event (and RotateFlip's rotateFlipChange, its
+ * own equivalent test below) — no dependency on either plugin beyond the
+ * event shape, so this test loads all three together, the same as the
+ * fixture's other cross-plugin tests.
+ *
+ * Deliberately **stays paused** once zoomed back out to neutral — no
+ * auto-resume. An earlier design tried auto-resuming (matching the
+ * drag-to-close pause's own resume-on-retreat behavior) and hit two real
+ * problems: a manual restart while still zoomed left it unable to
+ * re-pause on a further zoom, and even once fixed, landing back on
+ * neutral still isn't the same as "the viewer is done" — see
+ * RotateFlip's own equivalent test below for why that distinction
+ * matters concretely.
+ */
+test('zooming in pauses the slideshow, and it stays paused once zoomed back out — the viewer never gets yanked to the next slide mid-examination, and isn’t auto-resumed just because the numbers happen to land back on 1x', async ({
+  page,
+}) => {
+  // Wide enough that no toolbar button collapses into the overflow popover
+  // (DESIGN.md §3.1a, covered by its own tests elsewhere) — this test is
+  // only about the pause behavior itself.
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // paused
+
+  const counterWhileZoomed = await page.locator('.shoji-counter').textContent();
+  await page.waitForTimeout(700); // several intervals' worth — must not have advanced
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileZoomed!);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom out"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // still paused, not auto-resumed
+  await page.waitForTimeout(700);
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileZoomed!); // still hasn't advanced
+});
+
+/**
+ * pauseOnRotateFlip defaults off (DESIGN.md §4.1) — opted in here via
+ * ?pauseOnRotateFlip=1 (demo/pages/e2e-plugins.ts).
+ *
+ * Also deliberately **stays paused**, same reasoning as zoom above — but
+ * unlike zoom, every one of the four rotate clicks pauses here, including
+ * the one landing back on the original orientation: a real bug, reported
+ * from real usage against the earlier auto-resume design, where that
+ * specific click silently let the slideshow keep running instead — a
+ * rotate landing back at 0deg is still an active interaction with the
+ * view controls, not "nothing happened."
+ */
+test('rotating pauses the slideshow, and every rotate click keeps it paused — including the one landing back on the original orientation', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
+
+  const rotateRight = page.locator('.shoji-toolbar-button[aria-label="Rotate right"]');
+  await rotateRight.click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // paused
+
+  const counterWhileRotated = await page.locator('.shoji-counter').textContent();
+  await page.waitForTimeout(700);
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileRotated!);
+
+  // Back to 0deg (360, normalized) — three more clicks, each re-confirming
+  // the pause; the slideshow itself was never manually restarted in
+  // between here, so re-pausing is a no-op each time (still just paused).
+  await rotateRight.click();
+  await rotateRight.click();
+  await rotateRight.click(); // lands back on the original orientation
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // still paused
+  await page.waitForTimeout(700);
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileRotated!);
+});
+
+/**
+ * DESIGN.md §4.1 — a real bug, reported from real usage right after the
+ * pause-on-rotate feature above shipped: rotate (pauses), zoom/rotate in
+ * such a way that it lands back on the original position, then press
+ * Play — the slideshow ran unpaused instead of immediately re-pausing.
+ * Root cause: nothing fires zoomChange/rotateFlipChange just from
+ * clicking Play, and toggling straight back to neutral (a single-step
+ * "back to original" action) only ever emits the *already-neutral*
+ * event, never one crossing the engaged threshold — so nothing would
+ * ever have caught it. Fixed by re-checking the *current* zoom/rotate
+ * state right after a manual Play, not just reacting to future events.
+ *
+ * Exercised via the Space shortcut, not the Play button itself: the
+ * button is now disabled whenever this check would matter (see the
+ * regression test below), which correctly makes a real mouse click
+ * impossible — but Space bypasses the button's own disabled state
+ * entirely, so this re-check is still real, load-bearing logic, not
+ * dead code the disabled button alone would make unreachable.
+ */
+test('regression: pressing Space while already rotated immediately re-pauses, instead of running unpaused', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  const pauseButton = page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]');
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click(); // rotate first, while not playing
+  await page.keyboard.press(' '); // Space, bypassing the (disabled) Play button entirely
+  await expect(playButton).toHaveCount(1); // must immediately re-pause, not run unpaused
+
+  const counterAfterPlay = await page.locator('.shoji-counter').textContent();
+  await page.waitForTimeout(700); // several intervals' worth — must not have advanced
+  await expect(page.locator('.shoji-counter')).toHaveText(counterAfterPlay!);
+  await expect(pauseButton).toHaveCount(0);
+});
+
+/**
+ * DESIGN.md §4.1 — a real UX gap, asked about directly: pressing Play
+ * while resume is blocked re-pauses in the same synchronous tick, with
+ * no paint in between — the button never visibly flips to "Pause" at
+ * all, so a click just silently does nothing. Now disabled instead,
+ * matching core's own slide-loading disable (`aria-disabled` + dimmed +
+ * `pointer-events: none`, `Gallery.ts`'s `setSlideLoading()`).
+ */
+test('regression: the Play button visibly disables while resume is blocked (zoomed/rotated), instead of a click silently doing nothing', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await expect(playButton).not.toHaveAttribute('aria-disabled', 'true');
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom in"]').click();
+  await expect(playButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(playButton).toHaveCSS('pointer-events', 'none');
+
+  await page.locator('.shoji-toolbar-button[aria-label="Zoom out"]').click();
+  await expect(playButton).not.toHaveAttribute('aria-disabled', 'true');
+
+  await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
+  await expect(playButton).toHaveAttribute('aria-disabled', 'true');
+});

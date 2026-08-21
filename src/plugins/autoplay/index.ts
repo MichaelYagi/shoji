@@ -49,6 +49,10 @@ export interface AutoplayOptions {
   showProgress?: boolean;
   /** Starts the slideshow automatically as soon as the gallery opens — every `open()`, not just the first — instead of waiting for the toolbar button/`Space`. Default `false`. */
   autoStart?: boolean;
+  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `true`. */
+  pauseOnZoom?: boolean;
+  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `false` — requested directly: unlike zoom (an ongoing "examining a detail" state), a rotate/flip click is a quick, deliberate action a viewer may not want to also interrupt the slideshow for. */
+  pauseOnRotateFlip?: boolean;
 }
 
 /**
@@ -69,6 +73,8 @@ export const Autoplay: ShojiPlugin = {
     const interval = Number(ctx.options.interval ?? 5000);
     const showProgress = ctx.options.showProgress !== false;
     const autoStart = ctx.options.autoStart === true;
+    const pauseOnZoom = ctx.options.pauseOnZoom !== false;
+    const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip === true;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -78,6 +84,13 @@ export const Autoplay: ShojiPlugin = {
     let currentVideo: PlayableMedia | null = null;
     let awaitingProviderVideo = false;
     let wasPlayingBeforeDrag = false;
+    // Tracks only the *current* zoom/rotate-flip state, purely for
+    // toggle()'s "was it already engaged the moment Play was pressed"
+    // check below — not reused for the pause-on-event logic itself, which
+    // reacts to each zoomChange/rotateFlipChange event directly instead of
+    // consulting these.
+    let zoomedIn = false;
+    let rotatedOrFlipped = false;
 
     // A real bug, regression: this used to capture gallery.getActiveMedia()
     // once here and listen on that node directly, back when a pool slot's
@@ -144,11 +157,34 @@ export const Autoplay: ShojiPlugin = {
       progressBar.style.width = '100%';
     }
 
+    /**
+     * DESIGN.md §4.1 — while `pauseOnZoom`/`pauseOnRotateFlip` is holding
+     * playback paused, pressing Play would otherwise just silently
+     * re-pause it in the same synchronous tick (`toggle()`'s own check,
+     * below) — no `transitionend`, no paint in between the two state
+     * flips, so the button never visibly shows "Pause" at all before
+     * reverting. Reported as looking broken, not just quiet. Disabling
+     * the button while blocked (same `aria-disabled`/`tabIndex`/CSS
+     * pattern as core's own slide-loading disable, Gallery.ts's
+     * `setSlideLoading()`) makes "you can't resume yet" an honest, visible
+     * state instead of a click that does nothing. Only while *not*
+     * playing — while playing, the button always shows/means Pause, and
+     * must stay clickable to stop regardless of zoom/rotate state.
+     */
+    function updateToggleAvailability(): void {
+      const blocked =
+        !playing && ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped));
+      button.ariaDisabled = blocked ? 'true' : null;
+      if (blocked) button.tabIndex = -1;
+      else button.removeAttribute('tabindex');
+    }
+
     function setButtonState(isPlaying: boolean): void {
       playing = isPlaying;
       button.innerHTML = isPlaying ? PAUSE_ICON : PLAY_ICON;
       button.setAttribute('aria-label', isPlaying ? pauseLabel : playLabel);
       button.title = isPlaying ? pauseLabel : playLabel;
+      updateToggleAvailability();
     }
 
     function onVideoEnded(): void {
@@ -320,8 +356,24 @@ export const Autoplay: ShojiPlugin = {
     }
 
     function toggle(): void {
-      if (playing) stop();
-      else start();
+      if (playing) {
+        stop();
+        return;
+      }
+      start();
+      // A real bug, reported from real usage: zooming in *first*, then
+      // pressing Play, never paused at all — clicking Play doesn't itself
+      // fire zoomChange/rotateFlipChange, and a single-step "toggle back to
+      // neutral" action afterward (Actual size, double-tap-to-reset) only
+      // ever emits the *already-neutral* event, never one crossing the
+      // engaged threshold — so nothing downstream would ever have caught it
+      // either. Re-checked here instead, right after a genuine manual
+      // start — the one path a viewer can actually reach a non-neutral view
+      // state from *before* pressing Play. `zoomedIn`/`rotatedOrFlipped`
+      // (below) track only the *current* state, purely for this check —
+      // deliberately not reused for the pause-on-event logic itself, which
+      // reacts to each event directly.
+      if ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped)) stop();
     }
 
     /**
@@ -340,6 +392,53 @@ export const Autoplay: ShojiPlugin = {
         wasPlayingBeforeDrag = false;
         start();
       }
+    });
+
+    /**
+     * DESIGN.md §4.1 — a real UX gap, not a reported bug: nothing stopped
+     * the slideshow from auto-advancing out from under a viewer actively
+     * zoomed into a detail on the current slide. Only reacts to
+     * `zoomChange`'s event *shape* (`core/types.ts`) — never imports Zoom
+     * directly, so this is a no-op with it not loaded, or with
+     * `pauseOnZoom: false` (events over inheritance, CLAUDE.md).
+     *
+     * Deliberately **stays paused** rather than auto-resuming once
+     * un-zoomed back to neutral — the first design tried the opposite
+     * (edge-tracked "engaged" state, auto-resume on disengage, matching
+     * `dragCloseThreshold` below) and hit two real problems testing it:
+     * (1) a manual restart while still zoomed left the edge-tracker stuck
+     * "already engaged," silently skipping the *next* re-pause; (2) once
+     * fixed, un-zooming back to exactly scale 1 still auto-resumed even
+     * when the viewer's very next action (confirmed directly for
+     * RotateFlip's equivalent, below) was to keep interacting with the
+     * view controls, not watch the slideshow. `scale > 1` still gates
+     * *which* zoomChange events count (an ordinary scale-1 event can also
+     * fire from an unrelated slide-change reset, not a real interaction —
+     * `zoom/index.ts`'s `reset()` — so it can't unconditionally pause on
+     * every event the way rotateFlipChange below safely can).
+     */
+    const ZOOM_ENGAGED_THRESHOLD = 1.001; // matches Zoom's own ZOOM_EPSILON — "just barely above 1" is float residue, not a real zoom
+    const offZoomChange = ctx.on('zoomChange', ({ scale }) => {
+      zoomedIn = scale > ZOOM_ENGAGED_THRESHOLD;
+      if (pauseOnZoom && zoomedIn && playing) stop();
+      else updateToggleAvailability(); // stop() above already refreshes this; covers zooming in while already paused, which stop() wouldn't touch
+    });
+    /**
+     * Same UX gap, RotateFlip's own equivalent — off by default (see
+     * `pauseOnRotateFlip`'s own doc comment). Pauses on *any*
+     * `rotateFlipChange` event unconditionally, including one that lands
+     * back on the original orientation — confirmed directly, reported from
+     * real usage: rotate four times back to 0deg still reads as an active
+     * interruption of the slideshow, not "nothing happened," so it must
+     * stay paused too, the same as landing anywhere else. Every
+     * `rotateFlipChange` (unlike zoomChange above) only ever fires from a
+     * real button/shortcut click — `rotateFlip/index.ts`'s own per-slide
+     * `reset()` never emits it — so no extra state check is needed here.
+     */
+    const offRotateFlipChange = ctx.on('rotateFlipChange', ({ flipH, flipV, rotation }) => {
+      rotatedOrFlipped = flipH || flipV || rotation !== 0;
+      if (pauseOnRotateFlip && playing) stop();
+      else updateToggleAvailability(); // stop() above already refreshes this; covers rotating while already paused, which stop() wouldn't touch
     });
 
     button.addEventListener('click', toggle);
@@ -365,6 +464,14 @@ export const Autoplay: ShojiPlugin = {
     // NOT call enterSlide() itself: next() already triggers this listener
     // synchronously, so calling it twice would double up the timer/video wiring.
     const offSlide = ctx.on('afterSlide', () => {
+      // Zoom/RotateFlip both reset unanimated on navigation (DESIGN.md
+      // §2.5) without re-emitting zoomChange/rotateFlipChange — resynced
+      // here so a stale "was engaged" reading from the *outgoing* slide
+      // can't wrongly re-pause toggle()'s next Play press on a slide
+      // that's actually neutral now.
+      zoomedIn = false;
+      rotatedOrFlipped = false;
+      updateToggleAvailability();
       if (playing) enterSlide();
     });
     // A provider video (§4-video) that was still mid-setup when enterSlide()
@@ -378,6 +485,9 @@ export const Autoplay: ShojiPlugin = {
     });
     const offClose = ctx.on('close', () => stop());
     const offOpen = ctx.on('afterOpen', () => {
+      zoomedIn = false;
+      rotatedOrFlipped = false;
+      updateToggleAvailability();
       if (autoStart) start();
     });
 
@@ -393,6 +503,8 @@ export const Autoplay: ShojiPlugin = {
       offOpen();
       offClose();
       offDragThreshold();
+      offZoomChange();
+      offRotateFlipChange();
     };
   },
 };
