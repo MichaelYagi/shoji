@@ -173,6 +173,18 @@ test('regression: double-clicking to zoom toward the pointer still anchors on th
   // Wide enough that RotateFlip's buttons never collapse into the toolbar
   // overflow popover (DESIGN.md §3.1a, covered by its own tests elsewhere).
   await page.setViewportSize({ width: 1000, height: 800 });
+  // This test's own assertion is pixel-precise (toBeCloseTo(anchorX, 0)),
+  // unlike the drag regression test above, whose looser >40px/<10px
+  // tolerances tolerate some slop — precise enough to be flaky against a
+  // real CSS rotate transition under CI's parallel-test CPU contention,
+  // where `before`'s bounding box and the plugin's own internal
+  // measurement (moments later, inside the click handler) can each land
+  // at a slightly different point along an in-flight transition. Same
+  // race, same fix, as RotateFlip's own geometry tests (DESIGN.md §4.5's
+  // "rotated bounding box peaks partway through the sweep" note) —
+  // reduced motion collapses --shoji-duration to 0ms, making the rotate
+  // instant so both measurements read the same, fully-settled state.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await openLightbox(page);
 
   await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
