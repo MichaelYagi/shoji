@@ -285,6 +285,11 @@ its own id) rather than a real function input.
               ><input type="checkbox" id="opt-autoplay-showProgress" checked /> showProgress</label
             >
             <label><input type="checkbox" id="opt-autoplay-autoStart" /> autoStart</label>
+            <label><input type="checkbox" id="opt-autoplay-pauseOnZoom" /> pauseOnZoom</label>
+            <label
+              ><input type="checkbox" id="opt-autoplay-pauseOnRotateFlip" />
+              pauseOnRotateFlip</label
+            >
           </div>
         </fieldset>
 
@@ -790,6 +795,8 @@ its own id) rather than a real function input.
             interval: Number($('opt-autoplay-interval').value),
             showProgress: checked('opt-autoplay-showProgress'),
             autoStart: checked('opt-autoplay-autoStart'),
+            pauseOnZoom: checked('opt-autoplay-pauseOnZoom'),
+            pauseOnRotateFlip: checked('opt-autoplay-pauseOnRotateFlip'),
           },
           activeThumbnail: {
             activeClass: $('opt-activeThumbnail-activeClass').value || 'shoji-thumb-active',
