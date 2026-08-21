@@ -8,7 +8,15 @@
 //      new plugins pick up build support automatically.
 import { build } from 'vite';
 import dts from 'vite-plugin-dts';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -112,7 +120,7 @@ function stampDocsVersion() {
   const docsJsPath = join(root, 'docs/docs.js');
   const updated = readFileSync(docsJsPath, 'utf-8').replace(
     /^const DOCS_VERSION = '.*?';/m,
-    `const DOCS_VERSION = 'v${version}';`
+    `const DOCS_VERSION = 'v${version}';`,
   );
   writeFileSync(docsJsPath, updated, 'utf-8');
 }
