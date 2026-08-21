@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.22] - 2026-08-20
+
+### Changed
+
+- **Breaking (opt-in default flip):** Autoplay's `pauseOnZoom` now
+  defaults to `false`, matching `pauseOnRotateFlip`. Both are opt-in — a
+  host embedding Autoplay shouldn't have its slideshow's pause behavior
+  silently change just because Zoom happens to also be loaded. Pass
+  `autoplay: { pauseOnZoom: true }` to restore the alpha.21 behavior.
+
 ## [0.1.0-alpha.21] - 2026-08-20
 
 ### Added

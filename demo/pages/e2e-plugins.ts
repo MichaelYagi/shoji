@@ -57,8 +57,10 @@ if (thumbs && status) {
   // guessing a value that avoids every possible collision for every test.
   const intervalParam = Number(new URLSearchParams(location.search).get('interval'));
   const interval = intervalParam > 0 ? intervalParam : 300;
-  // Off by default (matching Autoplay's own pauseOnRotateFlip default) —
-  // same override pattern as ?interval= above, for tests exercising it.
+  // Off by default (matching Autoplay's own pauseOnZoom/pauseOnRotateFlip
+  // defaults) — same override pattern as ?interval= above, for tests
+  // exercising either.
+  const pauseOnZoom = new URLSearchParams(location.search).get('pauseOnZoom') === '1';
   const pauseOnRotateFlip = new URLSearchParams(location.search).get('pauseOnRotateFlip') === '1';
   // Undefined (the default, Gallery's own 5000ms) unless a test needs a
   // short one to exercise the idle auto-hide timer without a multi-second
@@ -119,7 +121,7 @@ if (thumbs && status) {
       ...extraButtonPlugins,
       ...foreignElementPlugin,
     ],
-    autoplay: { interval, pauseOnRotateFlip },
+    autoplay: { interval, pauseOnZoom, pauseOnRotateFlip },
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),
   });
 

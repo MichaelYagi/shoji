@@ -49,9 +49,9 @@ export interface AutoplayOptions {
   showProgress?: boolean;
   /** Starts the slideshow automatically as soon as the gallery opens — every `open()`, not just the first — instead of waiting for the toolbar button/`Space`. Default `false`. */
   autoStart?: boolean;
-  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `true`. */
+  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `false` — opt-in, same reasoning as `pauseOnRotateFlip` below. */
   pauseOnZoom?: boolean;
-  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `false` — requested directly: unlike zoom (an ongoing "examining a detail" state), a rotate/flip click is a quick, deliberate action a viewer may not want to also interrupt the slideshow for. */
+  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `false` — opt-in, requested directly: a host embedding a gallery shouldn't have its slideshow's pause behavior silently change just because a viewer happens to touch a zoom/rotate control, unless it asked for that. */
   pauseOnRotateFlip?: boolean;
 }
 
@@ -73,7 +73,7 @@ export const Autoplay: ShojiPlugin = {
     const interval = Number(ctx.options.interval ?? 5000);
     const showProgress = ctx.options.showProgress !== false;
     const autoStart = ctx.options.autoStart === true;
-    const pauseOnZoom = ctx.options.pauseOnZoom !== false;
+    const pauseOnZoom = ctx.options.pauseOnZoom === true;
     const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip === true;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';

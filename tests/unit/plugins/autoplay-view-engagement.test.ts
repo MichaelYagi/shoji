@@ -119,10 +119,23 @@ function isToggleDisabled(): boolean {
   return toggleButton().getAttribute('aria-disabled') === 'true';
 }
 
-describe('Autoplay — pauseOnZoom (default on)', () => {
-  it('zooming in pauses a playing slideshow', async () => {
+describe('Autoplay — pauseOnZoom (default off)', () => {
+  it('is a complete no-op by default, even while zoomed', async () => {
     vi.useFakeTimers();
     const gallery = makeGallery();
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    expect(isPlaying()).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('pauseOnZoom: true pauses a playing slideshow on zoom-in', async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -136,7 +149,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('stays paused once zoomed back out to neutral — no auto-resume', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -151,7 +164,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('re-pauses on a second zoom-in even after a manual restart while still zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -174,7 +187,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('regression: pressing Play while already zoomed in immediately pauses again, instead of running unpaused — a real bug found testing this directly: nothing fires zoomChange just from clicking Play, and toggling straight back to neutral afterward (double-tap-to-reset) only emits the already-neutral event, never one crossing the engaged threshold, so nothing ever caught it', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
 
@@ -192,7 +205,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('does not pause a slideshow that was never playing to begin with', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0); // never started — playing stays false throughout
     await flush();
 
@@ -202,22 +215,9 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
     gallery.destroy();
   });
 
-  it('pauseOnZoom: false is a complete no-op even while zoomed', async () => {
-    vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
-    gallery.open(0);
-    await flush();
-    click(toggleButton());
-
-    click(button('Zoom in'));
-    expect(isPlaying()).toBe(true);
-
-    gallery.destroy();
-  });
-
   it('a slide-change-driven zoom reset (an outgoing zoomed slide silently resetting, not a real interaction) does not itself pause a playing slideshow on a fresh slide', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ loop: true });
+    const gallery = makeGallery({ loop: true, autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
 
@@ -363,7 +363,7 @@ describe('Autoplay — view-engagement pausing, general', () => {
 describe('Autoplay — Play button disabled while resume is blocked', () => {
   it('disables the Play button while zoomed in (pauseOnZoom), re-enables once un-zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
     expect(isToggleDisabled()).toBe(false);
@@ -407,9 +407,9 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
     gallery.destroy();
   });
 
-  it('pauseOnZoom: false never disables the button, even while zoomed', async () => {
+  it('never disables the button while zoomed by default (pauseOnZoom off)', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
+    const gallery = makeGallery();
     gallery.open(0);
     await flush();
 
@@ -421,7 +421,7 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
 
   it('re-enables on a fresh slide even if the outgoing slide was left zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ loop: true });
+    const gallery = makeGallery({ loop: true, autoplay: { pauseOnZoom: true } });
     gallery.open(0);
     await flush();
 

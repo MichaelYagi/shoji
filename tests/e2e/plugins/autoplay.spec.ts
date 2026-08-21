@@ -207,9 +207,10 @@ test('zooming in pauses the slideshow, and it stays paused once zoomed back out 
 }) => {
   // Wide enough that no toolbar button collapses into the overflow popover
   // (DESIGN.md §3.1a, covered by its own tests elsewhere) — this test is
-  // only about the pause behavior itself.
+  // only about the pause behavior itself. pauseOnZoom defaults off,
+  // opted in here via ?pauseOnZoom=1 (demo/pages/e2e-plugins.ts).
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300');
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnZoom=1');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -323,7 +324,7 @@ test('regression: the Play button visibly disables while resume is blocked (zoom
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnZoom=1&pauseOnRotateFlip=1');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
