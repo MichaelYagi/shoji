@@ -8,7 +8,7 @@
 //      new plugins pick up build support automatically.
 import { build } from 'vite';
 import dts from 'vite-plugin-dts';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -107,6 +107,16 @@ async function buildEsm() {
  * exact same relative path is correct in both places, since docs/ (dist/
  * subfolder included) is published as a self-contained unit either way.
  */
+function stampDocsVersion() {
+  const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+  const docsJsPath = join(root, 'docs/docs.js');
+  const updated = readFileSync(docsJsPath, 'utf-8').replace(
+    /^const DOCS_VERSION = '.*?';/m,
+    `const DOCS_VERSION = 'v${version}';`
+  );
+  writeFileSync(docsJsPath, updated, 'utf-8');
+}
+
 function copyDocsRuntimeAssets() {
   const docsDist = join(root, 'docs/dist');
   mkdirSync(docsDist, { recursive: true });
@@ -119,6 +129,7 @@ await buildSingleFile(false);
 await buildSingleFile(true);
 await buildEsm();
 copyDocsRuntimeAssets();
+stampDocsVersion();
 
 console.log(
   [
@@ -127,5 +138,6 @@ console.log(
     '  dist/shoji.css, dist/shoji.min.css',
     '  dist/esm/** (+ .d.ts)',
     '  docs/dist/shoji.min.js, docs/dist/shoji.min.css (for docs/examples/)',
+    '  docs/docs.js (DOCS_VERSION stamped)',
   ].join('\n'),
 );

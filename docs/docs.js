@@ -1,8 +1,5 @@
-// Single source for the version stamped into every page's footer — kept in
-// sync with package.json's own "version" by hand, alongside CHANGELOG.md
-// and .size-limit.json, as part of this project's existing release-prep
-// convention (there's no build step over docs/ to template it in instead).
-const DOCS_VERSION = 'v0.1.0-alpha.17';
+// Stamped automatically by scripts/build.mjs — do not edit by hand.
+const DOCS_VERSION = 'v0.1.0-alpha.20';
 
 (function stampVersion() {
   let footer = document.querySelector('body > footer');
