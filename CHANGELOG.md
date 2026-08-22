@@ -7,6 +7,18 @@ still include breaking changes).
 
 ## [0.1.0-alpha.27] - 2026-08-22
 
+### Changed
+
+- **Clicking blank space around a YouTube/Vimeo embed now closes the gallery**,
+  matching image and HTML5 video behaviour. The exclusion in `isBackdropClick`
+  previously covered the entire `.shoji-slide-provider-video` container (a fix
+  for a mobile tap-to-reveal-controls regression, §2.3); narrowed to cover only
+  `.shoji-video-mount` (Vimeo's SDK wrapper) and `iframe` (YouTube's bare
+  embed), so the sides and toolbar-inset area around the embed count as backdrop
+  clicks. Clicks that land inside a cross-origin iframe never bubble to the
+  parent page regardless, so no additional handling is needed there. See
+  DESIGN.md §2.3.
+
 ### Added
 
 - **Provider video (YouTube/Vimeo) slides now show a poster while the embed
