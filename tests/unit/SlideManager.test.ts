@@ -611,11 +611,25 @@ describe('SlideManager', () => {
       return { video, overlay };
     }
 
+    it('videoPlayOverlay: opt-in, default false — no overlay element at all (not just hidden) when omitted', () => {
+      const manager = new SlideManager({
+        preload: 0,
+        playVideoLabel: 'Play video',
+        videoProviders: new Map(),
+      });
+      manager.render(items, 3, vi.fn());
+
+      const { video, overlay } = videoAndOverlay(manager);
+      expect(video).not.toBeNull(); // the real <video> still renders
+      expect(overlay).toBeNull(); // no overlay button created at all
+    });
+
     it('is visible (not hidden) on a freshly rendered, paused video', () => {
       const manager = new SlideManager({
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 3, vi.fn());
 
@@ -632,6 +646,7 @@ describe('SlideManager', () => {
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 3, vi.fn());
       const { video, overlay } = videoAndOverlay(manager);
@@ -660,6 +675,7 @@ describe('SlideManager', () => {
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 3, vi.fn());
       const { video, overlay } = videoAndOverlay(manager);
@@ -681,6 +697,7 @@ describe('SlideManager', () => {
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 3, vi.fn());
       const { video, overlay } = videoAndOverlay(manager);
@@ -698,6 +715,7 @@ describe('SlideManager', () => {
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 3, vi.fn());
       const { video, overlay } = videoAndOverlay(manager);
@@ -718,6 +736,7 @@ describe('SlideManager', () => {
         preload: 0,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       manager.render(items, 4, vi.fn()); // 'video-no-source'
 
@@ -729,6 +748,7 @@ describe('SlideManager', () => {
         preload: 1,
         playVideoLabel: 'Play video',
         videoProviders: new Map(),
+        videoPlayOverlay: true,
       });
       // centerIndex 2 ('c'): offsets -1/0/+1 → 'b' / 'c' / the video (index 3) —
       // preloaded as the +1 neighbor, not yet active, but already built and

@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.24] - 2026-08-22
+
+### Changed
+
+- **Breaking:** the HTML5 video play overlay (`.shoji-video-play-overlay`)
+  is now opt-in via `videoPlayOverlay: true` (`GalleryOptions`), default
+  `false` — previously always rendered. Requested directly: a host
+  supplying its own custom play affordance doesn't want a second,
+  Shoji-drawn button competing with it. `false`/omitted skips creating
+  the button entirely (no DOM node, no listeners), not just hiding it.
+  No effect on YouTube/Vimeo/custom provider video, which never had this
+  overlay. See DESIGN.md §2.3a.
+
 ## [0.1.0-alpha.23] - 2026-08-21
 
 ### Fixed

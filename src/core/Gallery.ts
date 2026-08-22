@@ -486,6 +486,7 @@ export class Gallery {
       preload: this.preload,
       playVideoLabel: this.locale.playVideo,
       videoProviders: this.videoProviders,
+      videoPlayOverlay: this.options.videoPlayOverlay === true,
     });
     this.transition = new SlideTransition(this.slides, (clonedMedia) => {
       const settlers: Array<() => void> = [];

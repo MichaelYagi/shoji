@@ -30,6 +30,8 @@ export interface SlideManagerOptions {
   /** Play-overlay button's label. */
   playVideoLabel: string;
   videoProviders: Map<string, VideoProviderRenderer>;
+  /** GalleryOptions.videoPlayOverlay — default false, opt-in. */
+  videoPlayOverlay?: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export class SlideManager {
   private readonly preload: number;
   private readonly playVideoLabel: string;
   private readonly videoProviders: Map<string, VideoProviderRenderer>;
+  private readonly videoPlayOverlay: boolean;
   private dragOffsetPx = 0;
 
   /** Ready nodes keyed by item index — trimmed to `centerIndex ± preload` each `render()`, same window the slots cover, so an evicted entry's video/iframe resources get released even if no slot ever reclaims it. */
@@ -68,6 +71,7 @@ export class SlideManager {
     this.element.className = 'shoji-slides';
     this.preload = options.preload;
     this.playVideoLabel = options.playVideoLabel;
+    this.videoPlayOverlay = options.videoPlayOverlay ?? false;
     this.videoProviders = options.videoProviders;
 
     const count = options.preload * 2 + 1;
@@ -396,7 +400,16 @@ export class SlideManager {
     // `poster` attribute already shows something meaningful without
     // waiting on `loadedmetadata`, so there's no decode-style gap to close
     // here; deferring would only make video slides slower to show anything.
-    this.swapIn(slot, video, item, index, this.createVideoPlayOverlay(video));
+    // videoPlayOverlay opt-in (GalleryOptions, default false) — skipped
+    // entirely rather than created-then-hidden when off, so a host that
+    // doesn't want it pays nothing for it (no DOM node, no listeners).
+    this.swapIn(
+      slot,
+      video,
+      item,
+      index,
+      this.videoPlayOverlay ? this.createVideoPlayOverlay(video) : undefined,
+    );
     const reveal = (): void => onLoad(index);
     video.addEventListener('loadedmetadata', reveal, { once: true });
     video.addEventListener('error', reveal, { once: true });

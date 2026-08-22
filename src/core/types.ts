@@ -139,6 +139,15 @@ export interface GalleryOptions {
   /** DESIGN.md §2.3a — starts a video slide's caption shown instead of hidden; default `false`. No effect on a photo's caption. */
   showVideoCaption?: boolean;
   /**
+   * DESIGN.md §2.3a — shows `.shoji-video-play-overlay`, a large centered
+   * button over a paused HTML5 `<video>` slide, alongside the browser's
+   * own native `<video controls>` play button. Opt-in, default `false` —
+   * a host with its own play affordance shouldn't get a second one
+   * competing with it. `false`/omitted skips creating the button
+   * entirely, not just hiding it. No effect on provider video (§4.3).
+   */
+  videoPlayOverlay?: boolean;
+  /**
    * DESIGN.md §2.2 — `next()`/`prev()` (and the arrow-key/toolbar-button paths
    * that call them) wrap past the last/first item instead of stopping; default
    * true. Does not affect `goTo(index)` with an explicit out-of-range index

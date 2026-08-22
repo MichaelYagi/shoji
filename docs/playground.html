@@ -194,6 +194,7 @@ its own id) rather than a real function input.
             <label><input type="checkbox" id="opt-loop" checked /> loop</label>
             <label><input type="checkbox" id="opt-counter" checked /> counter</label>
             <label><input type="checkbox" id="opt-showVideoCaption" /> showVideoCaption</label>
+            <label><input type="checkbox" id="opt-videoPlayOverlay" /> videoPlayOverlay</label>
             <label><input type="checkbox" id="opt-openOnInit" /> openOnInit</label>
             <label>index <input type="number" id="opt-index" value="0" min="0" /></label>
             <label>preload <input type="number" id="opt-preload" value="1" min="0" /></label>
@@ -776,6 +777,7 @@ its own id) rather than a real function input.
           loop: checked('opt-loop'),
           counter: checked('opt-counter'),
           showVideoCaption: checked('opt-showVideoCaption'),
+          videoPlayOverlay: checked('opt-videoPlayOverlay'),
           openOnInit: checked('opt-openOnInit'),
           index: Number($('opt-index').value) || 0,
           preload: Number($('opt-preload').value) || 0,
