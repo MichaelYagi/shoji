@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.23] - 2026-08-21
+
+### Fixed
+
+- The toolbar overflow popover could show a column count that matched
+  neither what was actually pinned on the row nor what was actually in
+  the popover, specifically on a video slide — reported from real usage:
+  only 2 icons visibly pinned but a 4-column grid. Two compounding
+  causes: the caption-toggle button (only shown on a captioned video
+  slide) wasn't counted as pinned at all, while Zoom's own zoomIn/
+  zoomOut/actualSize buttons — hidden on video slides — were still
+  counted even though invisible. See DESIGN.md §3.1a.
+
 ## [0.1.0-alpha.22] - 2026-08-20
 
 ### Changed

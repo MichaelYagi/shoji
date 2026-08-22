@@ -51,6 +51,19 @@ function renderThumbs(gallery: Gallery, items: GalleryItem[]): void {
 
 if (thumbs && status) {
   const items = buildItems();
+  // DESIGN.md §3.1a — regression fixture for a real bug: the core-owned
+  // caption-toggle button (dom.ts's captionToggleButton, only shown on a
+  // video slide with a caption) is a real, space-consuming, never-
+  // collapsible toolbar button that isn't registered through
+  // ctx.ui.toolbar() at all, so it was invisible to the popover's own
+  // pinned-count math. Doesn't need a genuinely playable video — the
+  // toggle button's own visibility is driven purely by `item.video`
+  // being truthy, unrelated to whether it actually decodes. Absent by
+  // default; `?videoSlide=1` turns item 0 into one, keeping its existing
+  // caption.
+  if (new URLSearchParams(location.search).get('videoSlide') === '1') {
+    items[0]!.video = { provider: 'html5' };
+  }
   // 300 by default — short, so most e2e assertions here don't need to wait
   // out a real 5s default. A test whose own timing would otherwise race that
   // fixed interval can override it via ?interval=<ms> instead of this page

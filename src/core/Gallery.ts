@@ -983,16 +983,38 @@ export class Gallery {
    */
   private positionToolbarOverflowPanel(): void {
     if (!this.dom) return;
-    const { dialog, toolbarOverflowButton, toolbarOverflowPanel, toolbarRight } = this.dom;
+    const {
+      dialog,
+      toolbarOverflowButton,
+      toolbarOverflowPanel,
+      toolbarRight,
+      captionToggleButton,
+    } = this.dom;
     const dialogRight = dialog.getBoundingClientRect().right;
     const caretRight = toolbarOverflowButton.getBoundingClientRect().right;
     const paddingRight = parseFloat(getComputedStyle(toolbarOverflowPanel).paddingRight) || 0;
     const right = dialogRight - caretRight - paddingRight;
     toolbarOverflowPanel.style.right = `${Math.max(0, right)}px`;
 
-    const pinnedCount = this.pluginToolbarButtons.filter(
-      (b) => b.slot === 'right' && b.el.parentElement === toolbarRight,
-    ).length;
+    // A second real bug, reported from real usage on a video slide: still
+    // over/undercounts, even immune to the DOM-parentage issue above.
+    // Undercounts by not knowing about `captionToggleButton` at all — a
+    // real, space-consuming, never-collapsible button that only exists on
+    // video slides, added directly in dom.ts rather than through
+    // `ctx.ui.toolbar()`, so it was never in `pluginToolbarButtons` to
+    // begin with. Overcounts separately, in the other direction: a
+    // registered button hidden for its own content reasons (e.g. Zoom's
+    // zoomIn/zoomOut/actualSize buttons hiding themselves on video slides,
+    // §4.6) still passes the parentage check — hidden means zero layout
+    // size, so `measureToolbarOverflow()`'s collapse loop never needed to
+    // move it into the panel, leaving it sitting in `toolbarRight`,
+    // invisible but still counted as if it occupied a column. Both fixed
+    // by also checking `!b.el.hidden`, and adding one more for
+    // `captionToggleButton` whenever it's currently shown.
+    const pinnedCount =
+      this.pluginToolbarButtons.filter(
+        (b) => b.slot === 'right' && b.el.parentElement === toolbarRight && !b.el.hidden,
+      ).length + (captionToggleButton.hidden ? 0 : 1);
     const columnCount = pinnedCount + 1; // + the caret itself
     toolbarOverflowPanel.style.gridTemplateColumns = `repeat(${columnCount}, 44px)`;
   }

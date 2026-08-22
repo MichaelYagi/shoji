@@ -244,3 +244,53 @@ test('navigating to another slide closes the popover rather than leaving it stra
   await page.locator('.shoji-nav-next').last().click();
   await expect(panel).toBeHidden();
 });
+
+/**
+ * DESIGN.md §3.1a — a second, distinct "pinnedCount" bug, reported from
+ * real usage on a video slide: core's own `captionToggleButton` (dom.ts)
+ * — real, space-consuming, and only ever visible on a video slide with a
+ * caption — isn't registered through `ctx.ui.toolbar()` at all, so it was
+ * invisible to the popover's pinned-count math (undercounting). Separately,
+ * in the opposite direction: Zoom's own zoomIn/zoomOut buttons hide
+ * *themselves* on a video slide (§4.6) — hidden means zero layout size, so
+ * `measureToolbarOverflow()`'s collapse loop never needed to move them into
+ * the panel, leaving them parented in `toolbarRight`, invisible but still
+ * counted as if they occupied a column (overcounting). `?videoSlide=1`
+ * (demo/pages/e2e-plugins.ts) turns item 0 into a captioned video slide,
+ * triggering both at once, same as the real report.
+ */
+test('regression: a video slide with a caption does not skew the popover column count — the caption-toggle button undercounts, self-hidden Zoom buttons overcount', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 500, height: 700 });
+  await page.goto('/pages/e2e-plugins.html?extraToolbarButtons=6&videoSlide=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const captionToggle = page.locator('.shoji-caption-toggle').last();
+  await expect(captionToggle).toBeVisible(); // confirms the fixture actually put us on a captioned video slide
+
+  const caret = page.locator('.shoji-toolbar-overflow').last();
+  await expect(caret).toBeVisible();
+  const panel = page.locator('.shoji-toolbar-overflow-panel').last();
+  await caret.click();
+  await expect(panel).toBeVisible();
+
+  // Independently counted from the DOM, not Gallery.ts's own formula: every
+  // button actually visible on toolbarRight ahead of the caret, plus the
+  // caret itself.
+  const expectedColumns = await page.evaluate(() => {
+    const toolbarRight = document.querySelector('.shoji-toolbar-right')!;
+    const caretEl = document.querySelector('.shoji-toolbar-overflow')!;
+    const closeEl = document.querySelector('.shoji-close')!;
+    const visiblePinned = [...toolbarRight.children].filter(
+      (el) => el !== caretEl && el !== closeEl && !(el as HTMLElement).hidden,
+    ).length;
+    return visiblePinned + 1; // + the caret itself
+  });
+
+  const columns = await panel.evaluate(
+    (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length,
+  );
+  expect(columns).toBe(expectedColumns);
+});
