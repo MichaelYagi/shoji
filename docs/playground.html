@@ -734,7 +734,11 @@ its own id) rather than a real function input.
 
           ctx.gallery.on('afterOpen', attach);
           ctx.gallery.on('afterSlide', attach);
-          ctx.gallery.on('close', cleanup);
+          // beforeClose, not close/afterClose — those fire only after the
+          // close animation finishes, which left this bar mounted for the
+          // whole animation, visibly shrinking away with the rest of the
+          // dialog instead of just vanishing with it up front.
+          ctx.gallery.on('beforeClose', cleanup);
         },
       };
 
