@@ -404,6 +404,13 @@ export class SlideManager {
       return;
     }
 
+    // DESIGN.md §4.3 — shows item.poster immediately, in place of the
+    // generic spinner Phase 2 already put in slot.media, if the host
+    // supplied one; same idea as native <video poster>, just applied to a
+    // provider embed instead. A renderer without a host-supplied poster can
+    // still resolve a fallback of its own via the setPoster callback below.
+    if (item.poster) showProviderPoster(slot, item.poster);
+
     const container = document.createElement('div');
     container.className = 'shoji-slide-provider-video';
     container.hidden = true;
@@ -412,7 +419,8 @@ export class SlideManager {
 
     // Unlike an <img> decode, an iframe embed only actually loads once
     // attached to the live document — attach now, hidden behind the
-    // still-visible spinner, instead of deferring attachment until ready.
+    // still-visible spinner (or poster, above), instead of deferring
+    // attachment until ready.
     slot.media.appendChild(container);
 
     let revealed = false;
@@ -420,15 +428,28 @@ export class SlideManager {
       if (revealed || controller.signal.aborted) return;
       revealed = true;
       container.hidden = false;
-      // Whichever loading indicator (Phase 2's spinner, or an open placeholder) is
-      // still sitting behind the now-visible embed — never the embed itself.
-      slot.media.querySelector('.shoji-slide-spinner, .shoji-slide-open-placeholder')?.remove();
+      // Whichever loading indicator (Phase 2's spinner, a poster, or an
+      // open placeholder) is still sitting behind the now-visible embed —
+      // never the embed itself.
+      slot.media
+        .querySelector(
+          '.shoji-slide-spinner, .shoji-slide-open-placeholder, .shoji-slide-provider-poster',
+        )
+        ?.remove();
       this.applyAspect(slot, item);
       slot.ready = true;
       this.cache.set(index, { node: container, item });
       onLoad(index);
     };
-    renderFn(container, item, onReady, controller.signal);
+    const setPoster = (url: string): void => {
+      // A host-supplied poster (above) always wins over a renderer's own
+      // fallback — and once the real embed is showing, or this slide's
+      // moved on, a fallback resolving late (e.g. an async fetch) must
+      // never replace or paint over it.
+      if (item.poster || revealed || controller.signal.aborted) return;
+      showProviderPoster(slot, url);
+    };
+    renderFn(container, item, onReady, controller.signal, setPoster);
   }
 
   destroy(): void {
@@ -442,6 +463,17 @@ export class SlideManager {
     this.pending.clear();
     this.element.remove();
   }
+}
+
+/** DESIGN.md §4.3 — a provider video's loading placeholder, host-supplied (`item.poster`) or a renderer's own fallback (`setPoster`) — replaces whichever generic indicator (spinner, or an earlier poster call) is currently in `slot.media`, same "only one loading indicator at a time" rule `createOpenPlaceholder`'s own callers already follow. Reuses `.shoji-slide-img`'s sizing, same reasoning as that function. */
+function showProviderPoster(slot: Slot, url: string): void {
+  slot.media.querySelector('.shoji-slide-spinner, .shoji-slide-provider-poster')?.remove();
+  const img = document.createElement('img');
+  img.className = 'shoji-slide-img shoji-slide-provider-poster';
+  img.alt = '';
+  img.draggable = false;
+  img.src = url;
+  slot.media.appendChild(img);
 }
 
 /** DESIGN.md §2.3 — low-res open() placeholder; reuses .shoji-slide-img's sizing so the zoom-in FLIP measures it like real content (zoomTransition.ts's effectiveTargetBox only special-cases the spinner as non-content). */

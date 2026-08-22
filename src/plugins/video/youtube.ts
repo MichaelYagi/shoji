@@ -136,11 +136,20 @@ function handleStateChange(
 }
 
 /**
- * DESIGN.md §4-video — no poster/thumbnail handling at all: the slide shows
- * nothing until the embed itself is ready (same spinner-then-reveal every
- * other slide type gets), never an auto-fetched or guessed preview image.
+ * DESIGN.md §4-video — `item.poster`, if the host supplied one, is already
+ * shown by the time this runs (core's own doing, `SlideManager.ts`) and
+ * always wins over the fallback below. Without one, this falls back to
+ * YouTube's own predictable, unauthenticated thumbnail URL — no API call
+ * needed, unlike Vimeo's oEmbed-based equivalent (`vimeo.ts`) — before
+ * finally falling back to the plain spinner if even that never resolves.
  */
-export const renderYouTube: VideoProviderRenderer = (container, item, onReady, signal) => {
+export const renderYouTube: VideoProviderRenderer = (
+  container,
+  item,
+  onReady,
+  signal,
+  setPoster,
+) => {
   if (item.video?.provider !== 'youtube') return;
   const videoId = item.video.id;
   if (!videoId) {
@@ -156,6 +165,12 @@ export const renderYouTube: VideoProviderRenderer = (container, item, onReady, s
     onReady();
     return;
   }
+
+  // hqdefault.jpg exists for essentially every uploaded video (unlike
+  // maxresdefault.jpg, which many older/short videos never got generated);
+  // a 404 here just leaves the plain spinner showing, same as never calling
+  // setPoster at all — no error handling needed for that.
+  if (!item.poster) setPoster(`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`);
 
   const mount = document.createElement('div');
   container.appendChild(mount);

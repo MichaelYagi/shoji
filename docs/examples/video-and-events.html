@@ -32,15 +32,15 @@
 
     <script src="../dist/shoji.min.js"></script>
     <script>
-      function svgDataUri(label, color) {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="${color}"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+      function svgDataUri(label, color, w = 800, h = 600, fontSize = 140) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${fontSize}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
       }
 
-      // width/height on every item (all 800x600 here) — not just Layout's
-      // measure-free positioning, but required for the open animation and
-      // open-transition placeholder to show at all; see
-      // docs/guides/transitions.html#open-transition-sizing.
+      // width/height on every item (800x600, except storm.mp4 below at its
+      // own real 1280x720) — not just Layout's measure-free positioning,
+      // but required for the open animation and open-transition placeholder
+      // to show at all; see docs/guides/transitions.html#open-transition-sizing.
       const items = [
         {
           id: 'p1',
@@ -75,9 +75,15 @@
           id: 'v1',
           src: 'assets/storm.mp4',
           video: { provider: 'html5' },
-          poster: svgDataUri('Storm.mp4', '#8e44ad'),
-          width: 800,
-          height: 600,
+          // 1280x720 — storm.mp4's own real dimensions, unlike every other
+          // item here (poster and width/height both), which just share the
+          // page's generic 800x600 placeholder size. font-size scaled up to
+          // match (measured against the label's real rendered width so it
+          // fills the bigger box without overflowing — the shared default
+          // of 140 is tuned for 800x600).
+          poster: svgDataUri('Storm.mp4', '#8e44ad', 1280, 720, 180),
+          width: 1280,
+          height: 720,
           // Hidden by default on a video slide — click the toolbar's
           // caption-toggle button to reveal it (GalleryOptions.showVideoCaption
           // flips the default; see the Settings guide).

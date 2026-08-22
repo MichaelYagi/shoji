@@ -56,6 +56,10 @@ test('opens a YouTube slide and loads a real embed, replacing the spinner', asyn
   await expect(container).toBeVisible({ timeout: 15000 });
   await expect(container).not.toHaveAttribute('hidden', '');
   await expect(page.locator('.shoji-slide-spinner')).toHaveCount(0);
+  // DESIGN.md §4.3 — the fixture item has no item.poster, so the fallback
+  // thumbnail (shown while loading, below) must be gone too once revealed,
+  // same as the spinner it replaced never lingering behind the real embed.
+  await expect(page.locator('.shoji-slide-provider-poster')).toHaveCount(0);
 
   const iframe = container.locator('iframe');
   await expect(iframe).toHaveCount(1);
@@ -157,6 +161,11 @@ test('opens a Vimeo slide and loads a real embed, replacing the spinner', async 
   await waitForVimeoReady(container);
   await expect(container).not.toHaveAttribute('hidden', '');
   await expect(page.locator('.shoji-slide-spinner')).toHaveCount(0);
+  // DESIGN.md §4.3 — the fixture item has no item.poster, so the oEmbed
+  // fallback thumbnail (shown while loading, below) must be gone too once
+  // revealed, same as the spinner it replaced never lingering behind the
+  // real embed.
+  await expect(page.locator('.shoji-slide-provider-poster')).toHaveCount(0);
 
   const iframe = container.locator('iframe');
   await expect(iframe).toHaveCount(1);
@@ -227,4 +236,43 @@ test('Autoplay plays the Vimeo embed and waits for its own ended state, not the 
   expect(counter).toMatch(/^\d+ \/ \d+$/);
   const [current] = counter!.split(' / ').map(Number);
   expect(current).toBe(beforeIndex);
+});
+
+/**
+ * DESIGN.md §4.3 — the poster-while-loading fallback, both providers.
+ * Neither fixture item (`demo/pages/video.ts`) sets `item.poster` (only a
+ * `data-shoji-poster` attribute would, and neither anchor has one — the
+ * child `<img>` on each becomes `item.thumb`, the pre-open grid thumbnail,
+ * per `scan.ts`), so this exercises each provider's own tier-2 fallback for
+ * real, not a mocked one.
+ */
+test('YouTube: shows the predictable hqdefault.jpg fallback thumbnail immediately, no network wait needed — unlike Vimeo below, this needs no API call at all', async ({
+  page,
+}) => {
+  await page.goto('/pages/video.html');
+  await page.locator('[data-shoji-id="yt-1"]').click();
+
+  // No wait at all: setPoster() runs synchronously in renderYouTube, before
+  // any async work (the IFrame API load) even starts — if this weren't
+  // true, this assertion would be racing the real network and this test
+  // would be flaky, exactly what every other assertion in this file that
+  // needs a real embed instead uses a generous timeout to avoid.
+  const poster = page.locator('.shoji-slide-provider-poster');
+  await expect(poster).toHaveAttribute(
+    'src',
+    'https://img.youtube.com/vi/jNQXAC9IVRw/hqdefault.jpg',
+  );
+});
+
+test('Vimeo: fetches its own oEmbed thumbnail as the fallback (no predictable URL exists, unlike YouTube above)', async ({
+  page,
+}) => {
+  await page.goto('/pages/video.html');
+  const oembedRequest = page.waitForRequest((request) =>
+    request.url().includes('vimeo.com/api/oembed.json'),
+  );
+  await page.locator('[data-shoji-id="vimeo-1"]').click();
+
+  const request = await oembedRequest;
+  expect(request.url()).toContain(encodeURIComponent('https://vimeo.com/1084537'));
 });

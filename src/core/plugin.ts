@@ -35,12 +35,24 @@ export type KeySpec = string;
  * slide is no longer wanted; a returned cleanup can't work here since setup
  * is often async and may resolve after eviction — release everything on
  * abort instead, checking `signal.aborted` before acting on a stale slide.
+ *
+ * `setPoster(url)` — DESIGN.md §4.3 — shows `url` in place of the spinner
+ * while still waiting on `onReady`. Only meaningful when `item.poster`
+ * itself is unset: core already shows that immediately, before this
+ * renderer even runs, and silently ignores `setPoster` in that case (a
+ * host-supplied poster always wins). Meant for a provider-specific fallback
+ * a renderer can resolve on its own (e.g. a predictable thumbnail URL) when
+ * the host didn't supply one — entirely optional to call at all. A no-op
+ * once `onReady` has already fired or `signal` has aborted, so a
+ * slow-resolving fallback (an async fetch, say) can never replace an
+ * already-showing real embed, or paint over a slide that's moved on.
  */
 export type VideoProviderRenderer = (
   container: HTMLElement,
   item: GalleryItem,
   onReady: () => void,
   signal: AbortSignal,
+  setPoster: (url: string) => void,
 ) => void;
 
 export interface PluginContext {

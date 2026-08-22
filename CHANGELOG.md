@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.27] - 2026-08-22
+
+### Added
+
+- **Provider video (YouTube/Vimeo) slides now show a poster while the embed
+  loads**, instead of just a bare spinner the whole time. Three tiers, in
+  order: `item.poster`, if the host supplied one; else a provider-specific
+  fallback thumbnail; else the plain spinner, unchanged. YouTube's fallback
+  is a predictable, request-free URL (`img.youtube.com/vi/<id>/hqdefault.jpg`);
+  Vimeo has no such pattern, so its fallback is a real fetch to Vimeo's own
+  oEmbed endpoint. A slow-resolving fallback never displaces an
+  already-showing real embed, or a host-supplied poster.
+- **`VideoProviderRenderer`** (`core/plugin.ts`) gained a fifth parameter,
+  `setPoster(url)`, for a custom video provider to opt into the same
+  fallback-poster tiering. See DESIGN.md §4.3.
+
 ## [0.1.0-alpha.26] - 2026-08-22
 
 ### Added

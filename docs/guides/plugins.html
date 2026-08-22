@@ -149,8 +149,11 @@
           <td>
             Renders <code>{ video: { provider: 'youtube' | 'vimeo', id } }</code> items as a real
             embed — core's own native-<code>&lt;video&gt;</code> rendering only handles
-            <code>provider: 'html5'</code>. No poster/thumbnail handling; Autoplay's slideshow waits
-            for the real player's own <code>ended</code> state, same as native video.
+            <code>provider: 'html5'</code>. Shows a poster while the embed loads:
+            <code>item.poster</code> if set, else a fallback thumbnail (YouTube's predictable
+            <code>hqdefault.jpg</code> URL; Vimeo's own oEmbed-fetched one), else the plain spinner.
+            Autoplay's slideshow waits for the real player's own <code>ended</code>
+            state, same as native video.
           </td>
           <td>none — no options object</td>
         </tr>

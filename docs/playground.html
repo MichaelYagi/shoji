@@ -484,11 +484,9 @@ its own id) rather than a real function input.
       // video ("YouTube video", "storm.mp4 (html5)"), too long for
       // svgDataUri's font-size (tuned for short "thumb N"/"ORIGINAL N"
       // labels) to fit without overflowing the box.
-      function posterUri(label, colorIndex) {
-        const w = 480,
-          h = 270;
+      function posterUri(label, colorIndex, w = 480, h = 270, fontSize = 28) {
         const color = COLORS[colorIndex % COLORS.length];
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="28" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${fontSize}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
       }
 
@@ -518,7 +516,13 @@ its own id) rather than a real function input.
         {
           id: '20',
           src: 'examples/assets/storm.mp4',
-          poster: posterUri('storm.mp4 (html5)', 0),
+          // 1280x720 — storm.mp4's own real dimensions, not the shared
+          // 480x270 default other posters here use, so the poster's own
+          // aspect ratio matches the actual video it's standing in for.
+          // font-size scaled up to match (measured against the label's
+          // real rendered width so it fills the bigger box without
+          // overflowing — the shared default of 28 is tuned for 480x270).
+          poster: posterUri('storm.mp4 (html5)', 0, 1280, 720, 104),
           video: true,
           metadata_id: '109',
           caption:

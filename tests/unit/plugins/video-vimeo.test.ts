@@ -118,11 +118,170 @@ describe('renderVimeo — missing both video.id and video.url (a misconfigured i
       video: { provider: 'vimeo' },
     };
 
-    renderVimeo(container, noIdItem, onReady, new AbortController().signal);
+    renderVimeo(container, noIdItem, onReady, new AbortController().signal, vi.fn());
 
     expect(onReady).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.shoji-slide-placeholder')).not.toBeNull();
     expect(instances).toHaveLength(0); // never attempted to construct a player at all
+  });
+});
+
+/**
+ * DESIGN.md §4-video — `setPoster` fallback: a host-supplied `item.poster`
+ * always wins (core's own job, `SlideManager.ts`'s own tests cover that
+ * precedence) — this only covers what `renderVimeo` itself is responsible
+ * for: fetching Vimeo's oEmbed endpoint when there's no `item.poster` and
+ * calling `setPoster` with its `thumbnail_url`, unlike `youtube.ts`'s
+ * request-free predictable URL — Vimeo has no such pattern, so this is a
+ * genuine network round trip, with its own failure modes to swallow.
+ */
+describe('renderVimeo — setPoster fallback via oEmbed (a real fetch, unlike youtube.ts)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('fetches oEmbed for the item’s own url and calls setPoster with thumbnail_url once it resolves', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ thumbnail_url: 'https://i.vimeocdn.com/thumb.jpg' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, setPoster);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `https://vimeo.com/api/oembed.json?url=${encodeURIComponent('https://vimeo.com/76979871')}`,
+    );
+    await vi.waitFor(() =>
+      expect(setPoster).toHaveBeenCalledWith('https://i.vimeocdn.com/thumb.jpg'),
+    );
+  });
+
+  it('builds the oEmbed target from a bare id when the item has no url', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ thumbnail_url: 'https://i.vimeocdn.com/thumb.jpg' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const idOnlyItem: GalleryItem = {
+      id: 'vimeo',
+      src: 'https://vimeo.com/76979871',
+      video: { provider: 'vimeo', id: '76979871' },
+    };
+    renderVimeo(
+      document.createElement('div'),
+      idOnlyItem,
+      vi.fn(),
+      new AbortController().signal,
+      vi.fn(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `https://vimeo.com/api/oembed.json?url=${encodeURIComponent('https://vimeo.com/76979871')}`,
+    );
+  });
+
+  it('never fetches at all when item.poster is already set — a host-supplied poster is core’s job to show, not this renderer’s to second-guess', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const itemWithPoster: GalleryItem = { ...vimeoItem, poster: 'host-poster.jpg' };
+    renderVimeo(
+      document.createElement('div'),
+      itemWithPoster,
+      vi.fn(),
+      new AbortController().signal,
+      vi.fn(),
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('swallows a failed fetch (network error) — never calls setPoster, no unhandled rejection', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, setPoster);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setPoster).not.toHaveBeenCalled();
+  });
+
+  it('does not call setPoster for a non-ok response (e.g. a private/deleted video oEmbed rejects)', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, setPoster);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setPoster).not.toHaveBeenCalled();
+  });
+
+  it('does not call setPoster once the signal has aborted before the fetch resolves', async () => {
+    const { Vimeo } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    let resolveFetch!: (value: unknown) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      ),
+    );
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    const controller = new AbortController();
+    renderVimeo(container, vimeoItem, vi.fn(), controller.signal, setPoster);
+
+    controller.abort();
+    resolveFetch({
+      ok: true,
+      json: () => Promise.resolve({ thumbnail_url: 'https://i.vimeocdn.com/thumb.jpg' }),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setPoster).not.toHaveBeenCalled();
   });
 });
 
@@ -136,7 +295,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const onReady = vi.fn();
     const controller = new AbortController();
 
-    renderVimeo(container, vimeoItem, onReady, controller.signal);
+    renderVimeo(container, vimeoItem, onReady, controller.signal, vi.fn());
     await Promise.resolve(); // loadVimeoApi()'s Promise.resolve(window.Vimeo) fast path
 
     expect(instances).toHaveLength(1);
@@ -161,7 +320,13 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
       src: 'https://vimeo.com/76979871',
       video: { provider: 'vimeo', id: '76979871' },
     };
-    renderVimeo(document.createElement('div'), idOnlyItem, vi.fn(), new AbortController().signal);
+    renderVimeo(
+      document.createElement('div'),
+      idOnlyItem,
+      vi.fn(),
+      new AbortController().signal,
+      vi.fn(),
+    );
     await Promise.resolve();
 
     expect(instances[0]!.options).toEqual({ id: 76979871, playsinline: true });
@@ -178,7 +343,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
       paused?: boolean;
       ended?: boolean;
     };
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.resolveReady();
     await Promise.resolve();
@@ -219,7 +384,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const renderVimeo = await freshRenderVimeo();
 
     const container = document.createElement('div') as HTMLElement & { ended?: boolean };
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.resolveReady();
     await Promise.resolve();
@@ -245,7 +410,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const renderVimeo = await freshRenderVimeo();
 
     const container = document.createElement('div') as HTMLElement & { paused?: boolean };
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.resolveReady();
     await Promise.resolve();
@@ -267,7 +432,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const renderVimeo = await freshRenderVimeo();
 
     const container = document.createElement('div') as HTMLElement & { muted?: boolean };
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.resolveReady();
     await Promise.resolve();
@@ -292,7 +457,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const container = document.createElement('div');
     mount.appendChild(container);
     document.body.appendChild(mount);
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
 
     const onError = vi.fn();
@@ -311,7 +476,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const renderVimeo = await freshRenderVimeo();
 
     const container = document.createElement('div');
-    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal);
+    renderVimeo(container, vimeoItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
 
     const onError = vi.fn();
@@ -330,7 +495,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
 
     const container = document.createElement('div');
     const controller = new AbortController();
-    renderVimeo(container, vimeoItem, vi.fn(), controller.signal);
+    renderVimeo(container, vimeoItem, vi.fn(), controller.signal, vi.fn());
     await Promise.resolve();
     instances[0]!.resolveReady();
     await Promise.resolve();
@@ -348,7 +513,7 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     const container = document.createElement('div');
     const controller = new AbortController();
     controller.abort(); // aborted before renderVimeo is even called
-    renderVimeo(container, vimeoItem, vi.fn(), controller.signal);
+    renderVimeo(container, vimeoItem, vi.fn(), controller.signal, vi.fn());
     await Promise.resolve();
 
     expect(instances).toHaveLength(0);
@@ -362,7 +527,7 @@ describe('renderVimeo — cold start (API not yet loaded)', () => {
 
     const container = document.createElement('div');
     const onReady = vi.fn();
-    renderVimeo(container, vimeoItem, onReady, new AbortController().signal);
+    renderVimeo(container, vimeoItem, onReady, new AbortController().signal, vi.fn());
 
     const scripts = document.querySelectorAll(
       'script[src="https://player.vimeo.com/api/player.js"]',

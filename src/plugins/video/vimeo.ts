@@ -110,11 +110,16 @@ function wirePlayableContract(container: HTMLElement, player: VimeoPlayer): Play
 }
 
 /**
- * DESIGN.md §4-video — no poster/thumbnail handling at all: the slide shows
- * nothing until the embed itself is ready (same spinner-then-reveal every
- * other slide type gets), never an auto-fetched or guessed preview image.
+ * DESIGN.md §4-video — `item.poster`, if the host supplied one, is already
+ * shown by the time this runs (core's own doing, `SlideManager.ts`) and
+ * always wins over the fallback below. Without one, this falls back to a
+ * real thumbnail fetched from Vimeo's own oEmbed endpoint — unlike
+ * YouTube's predictable, request-free thumbnail URL (`youtube.ts`), Vimeo
+ * has no such pattern; its thumbnails live at unpredictable, per-video
+ * CDN paths only oEmbed's response actually reveals — before finally
+ * falling back to the plain spinner if that request never resolves.
  */
-export const renderVimeo: VideoProviderRenderer = (container, item, onReady, signal) => {
+export const renderVimeo: VideoProviderRenderer = (container, item, onReady, signal, setPoster) => {
   if (item.video?.provider !== 'vimeo') return;
   const { id, url } = item.video;
   if (!id && !url) {
@@ -128,6 +133,25 @@ export const renderVimeo: VideoProviderRenderer = (container, item, onReady, sig
     container.appendChild(placeholder);
     onReady();
     return;
+  }
+
+  if (!item.poster) {
+    // `url` (carrying an unlisted video's privacy hash, same reasoning as
+    // the player construction below) is preferred over a bare numeric id
+    // when both exist; oEmbed accepts either a full vimeo.com URL or one
+    // built from just the id.
+    const oembedTarget = url ?? `https://vimeo.com/${id}`;
+    fetch(`https://vimeo.com/api/oembed.json?url=${encodeURIComponent(oembedTarget)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { thumbnail_url?: unknown } | null) => {
+        if (signal.aborted) return; // navigated away before the request resolved
+        if (typeof data?.thumbnail_url === 'string') setPoster(data.thumbnail_url);
+      })
+      // Swallowed deliberately, same reasoning as youtube.ts's 404 case —
+      // a failed request (network error, CORS, rate limit, a private/
+      // deleted video oEmbed itself rejects) just leaves whatever's
+      // already showing (the plain spinner) alone.
+      .catch(() => {});
   }
 
   // shoji-video-mount (styles/shoji.css) — several real bugs, reported from

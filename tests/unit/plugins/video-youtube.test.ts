@@ -104,11 +104,45 @@ describe('renderYouTube — missing video.id (a misconfigured item scan.ts alrea
       video: { provider: 'youtube' },
     };
 
-    renderYouTube(container, noIdItem, onReady, new AbortController().signal);
+    renderYouTube(container, noIdItem, onReady, new AbortController().signal, vi.fn());
 
     expect(onReady).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.shoji-slide-placeholder')).not.toBeNull();
     expect(instances).toHaveLength(0); // never attempted to construct a player at all
+  });
+});
+
+/**
+ * DESIGN.md §4-video — `setPoster` fallback: a host-supplied `item.poster`
+ * always wins (core's own job, `SlideManager.ts`'s own tests cover that
+ * precedence) — this only covers what `renderYouTube` itself is
+ * responsible for: calling `setPoster` with the predictable thumbnail URL
+ * when there's no `item.poster`, and not calling it at all when there is.
+ */
+describe('renderYouTube — setPoster fallback (no oEmbed/API call needed, unlike Vimeo)', () => {
+  it('calls setPoster with the predictable hqdefault.jpg URL when item.poster is unset', async () => {
+    const { YT } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal, setPoster);
+
+    expect(setPoster).toHaveBeenCalledWith('https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
+  });
+
+  it('never calls setPoster when item.poster is already set — a host-supplied poster is core’s job to show, not this renderer’s to second-guess', async () => {
+    const { YT } = makeYTPlayerMock();
+    window.YT = YT;
+    const renderYouTube = await freshRenderYouTube();
+
+    const container = document.createElement('div');
+    const setPoster = vi.fn();
+    const itemWithPoster: GalleryItem = { ...ytItem, poster: 'host-poster.jpg' };
+    renderYouTube(container, itemWithPoster, vi.fn(), new AbortController().signal, setPoster);
+
+    expect(setPoster).not.toHaveBeenCalled();
   });
 });
 
@@ -122,7 +156,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     const onReady = vi.fn();
     const controller = new AbortController();
 
-    renderYouTube(container, ytItem, onReady, controller.signal);
+    renderYouTube(container, ytItem, onReady, controller.signal, vi.fn());
     await Promise.resolve(); // loadYouTubeApi()'s Promise.resolve(window.YT) fast path
 
     expect(instances).toHaveLength(1);
@@ -144,7 +178,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
       paused?: boolean;
       ended?: boolean;
     };
-    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.onReady?.();
 
@@ -182,7 +216,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     const renderYouTube = await freshRenderYouTube();
 
     const container = document.createElement('div') as HTMLElement & { muted?: boolean };
-    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
     instances[0]!.onReady?.();
 
@@ -206,7 +240,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     const container = document.createElement('div');
     mount.appendChild(container);
     document.body.appendChild(mount);
-    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
 
     const onError = vi.fn();
@@ -225,7 +259,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     const renderYouTube = await freshRenderYouTube();
 
     const container = document.createElement('div');
-    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal);
+    renderYouTube(container, ytItem, vi.fn(), new AbortController().signal, vi.fn());
     await Promise.resolve();
 
     const onError = vi.fn();
@@ -242,7 +276,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
 
     const container = document.createElement('div');
     const controller = new AbortController();
-    renderYouTube(container, ytItem, vi.fn(), controller.signal);
+    renderYouTube(container, ytItem, vi.fn(), controller.signal, vi.fn());
     await Promise.resolve();
     instances[0]!.onReady?.();
 
@@ -259,7 +293,7 @@ describe('renderYouTube — API already loaded (window.YT.Player present)', () =
     const container = document.createElement('div');
     const controller = new AbortController();
     controller.abort(); // aborted before renderYouTube is even called
-    renderYouTube(container, ytItem, vi.fn(), controller.signal);
+    renderYouTube(container, ytItem, vi.fn(), controller.signal, vi.fn());
     await Promise.resolve();
 
     expect(instances).toHaveLength(0);
@@ -273,7 +307,7 @@ describe('renderYouTube — cold start (API not yet loaded)', () => {
 
     const container = document.createElement('div');
     const onReady = vi.fn();
-    renderYouTube(container, ytItem, onReady, new AbortController().signal);
+    renderYouTube(container, ytItem, onReady, new AbortController().signal, vi.fn());
 
     const scripts = document.querySelectorAll('script[src="https://www.youtube.com/iframe_api"]');
     expect(scripts).toHaveLength(1);
@@ -295,7 +329,13 @@ describe('renderYouTube — cold start (API not yet loaded)', () => {
     const hostOwnCallback = vi.fn();
     window.onYouTubeIframeAPIReady = hostOwnCallback;
 
-    renderYouTube(document.createElement('div'), ytItem, vi.fn(), new AbortController().signal);
+    renderYouTube(
+      document.createElement('div'),
+      ytItem,
+      vi.fn(),
+      new AbortController().signal,
+      vi.fn(),
+    );
 
     window.YT = YT;
     window.onYouTubeIframeAPIReady?.();

@@ -651,6 +651,138 @@ describe('SlideManager', () => {
       expect(manager.isActiveReady()).toBe(true);
     });
 
+    it('shows item.poster immediately, in place of the spinner, when the host supplied one', () => {
+      const render = vi.fn();
+      const manager = new SlideManager({
+        preload: 0,
+        videoProviders: new Map([['youtube', render]]),
+      });
+
+      manager.render([{ ...ytItem(), poster: 'host-poster.jpg' }], 0, vi.fn());
+
+      expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
+      const poster = manager.element.querySelector<HTMLImageElement>(
+        '.shoji-slide-provider-poster',
+      );
+      expect(poster).not.toBeNull();
+      expect(poster?.src).toContain('host-poster.jpg');
+      expect(poster?.classList.contains('shoji-slide-img')).toBe(true);
+    });
+
+    it('shows a renderer-resolved fallback poster (setPoster) when the host supplied none', () => {
+      let setPoster!: (url: string) => void;
+      const render = vi.fn(
+        (
+          _container: HTMLElement,
+          _item: GalleryItem,
+          _onReady: () => void,
+          _signal: AbortSignal,
+          poster: (url: string) => void,
+        ) => {
+          setPoster = poster;
+        },
+      );
+      const manager = new SlideManager({
+        preload: 0,
+        videoProviders: new Map([['youtube', render]]),
+      });
+
+      manager.render([ytItem()], 0, vi.fn());
+      expect(manager.element.querySelector('.shoji-slide-provider-poster')).toBeNull();
+
+      setPoster('fallback-thumb.jpg');
+
+      expect(manager.element.querySelector('.shoji-slide-spinner')).toBeNull();
+      const poster = manager.element.querySelector<HTMLImageElement>(
+        '.shoji-slide-provider-poster',
+      );
+      expect(poster?.src).toContain('fallback-thumb.jpg');
+    });
+
+    it('ignores setPoster entirely when item.poster is already set — a host-supplied poster always wins, even if the renderer calls setPoster anyway', () => {
+      let setPoster!: (url: string) => void;
+      const render = vi.fn(
+        (
+          _container: HTMLElement,
+          _item: GalleryItem,
+          _onReady: () => void,
+          _signal: AbortSignal,
+          poster: (url: string) => void,
+        ) => {
+          setPoster = poster;
+        },
+      );
+      const manager = new SlideManager({
+        preload: 0,
+        videoProviders: new Map([['youtube', render]]),
+      });
+
+      manager.render([{ ...ytItem(), poster: 'host-poster.jpg' }], 0, vi.fn());
+      setPoster('fallback-thumb.jpg');
+
+      const poster = manager.element.querySelector<HTMLImageElement>(
+        '.shoji-slide-provider-poster',
+      );
+      expect(poster?.src).toContain('host-poster.jpg'); // unchanged
+    });
+
+    it('ignores a fallback poster that resolves after onReady already fired — never replaces or paints over the now-visible real embed', () => {
+      let capturedOnReady!: () => void;
+      let setPoster!: (url: string) => void;
+      const render = vi.fn(
+        (
+          container: HTMLElement,
+          _item: GalleryItem,
+          onReady: () => void,
+          _signal: AbortSignal,
+          poster: (url: string) => void,
+        ) => {
+          capturedOnReady = onReady;
+          setPoster = poster;
+          container.appendChild(document.createElement('iframe'));
+        },
+      );
+      const manager = new SlideManager({
+        preload: 0,
+        videoProviders: new Map([['youtube', render]]),
+      });
+
+      manager.render([ytItem()], 0, vi.fn());
+      capturedOnReady();
+      setPoster('too-late-thumb.jpg'); // e.g. a slow oEmbed fetch resolving after the embed is already showing
+
+      expect(manager.element.querySelector('.shoji-slide-provider-poster')).toBeNull();
+      expect(
+        manager.element.querySelector<HTMLElement>('.shoji-slide-provider-video')?.hidden,
+      ).toBe(false);
+    });
+
+    it('ignores a fallback poster that resolves after the slide has been evicted (signal aborted)', () => {
+      let setPoster!: (url: string) => void;
+      const render = vi.fn(
+        (
+          _container: HTMLElement,
+          _item: GalleryItem,
+          _onReady: () => void,
+          _signal: AbortSignal,
+          poster: (url: string) => void,
+        ) => {
+          setPoster = poster;
+        },
+      );
+      const manager = new SlideManager({
+        preload: 0,
+        videoProviders: new Map([['youtube', render]]),
+      });
+      const mixed: GalleryItem[] = [ytItem(), { id: 'photo', src: 'photo.jpg' }];
+
+      manager.render(mixed, 0, vi.fn());
+      manager.render(mixed, 1, vi.fn()); // preload:0 -> index 0 (still pending) falls fully outside the window, aborting its signal
+      setPoster('stale-thumb.jpg');
+
+      expect(manager.element.querySelector('.shoji-slide-provider-poster')).toBeNull();
+    });
+
     it("routes provider: 'custom' items through the item's own render function, not the registry", () => {
       const registryRender = vi.fn();
       const customRender = vi.fn((_el: HTMLElement, _item: GalleryItem, onReady: () => void) =>
