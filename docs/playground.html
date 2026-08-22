@@ -250,10 +250,15 @@ its own id) rather than a real function input.
             <label><input type="checkbox" id="plugin-autoplay" checked /> Autoplay</label>
             <label><input type="checkbox" id="plugin-myPlugin" checked /> MyPlugin</label>
             <label><input type="checkbox" id="plugin-themePicker" checked /> ThemePicker</label>
+            <label
+              ><input type="checkbox" id="plugin-customVideoControls" /> CustomVideoControls</label
+            >
           </div>
           <p class="note">
-            MyPlugin/ThemePicker are this page's own two custom plugins (not official Shoji ones) —
-            toggleable like the rest.
+            MyPlugin/ThemePicker/CustomVideoControls are this page's own custom plugins (not
+            official Shoji ones) — toggleable like the rest. CustomVideoControls replaces the native
+            HTML5 video controls with a custom bar; off by default so it doesn't fight the native
+            controls on the storm.mp4 slide unless you opt in.
           </p>
         </fieldset>
 
@@ -618,6 +623,121 @@ its own id) rather than a real function input.
         },
       };
 
+      // Replaces the native HTML5 <video> controls with a fully custom bar
+      // (play/pause, seek, time, mute) — real DOM elements Shoji's own CSS
+      // never touches, so every bit of styling is inline here (`pure
+      // plugin`: no stylesheet, no .shoji-* classes). Native controls are
+      // CSS-unreachable, so `video.controls = false` + rebuilding the UI
+      // from scratch is the only way to actually customize them; the
+      // official Video plugin (Shoji.Video, YouTube/Vimeo providers) is a
+      // separate, unrelated thing this doesn't touch. HTML5-only: a
+      // YouTube/Vimeo slide's active media is an <iframe>, not a <video>,
+      // so `querySelector('video')` below is simply null there and this
+      // plugin no-ops for those slides.
+      const CustomVideoControls = {
+        name: 'custom-video-controls',
+        init(ctx) {
+          let bar = null;
+          let video = null;
+
+          function formatTime(seconds) {
+            if (!Number.isFinite(seconds)) return '0:00';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60)
+              .toString()
+              .padStart(2, '0');
+            return `${m}:${s}`;
+          }
+
+          function cleanup() {
+            if (bar) bar.remove();
+            bar = null;
+            video = null;
+          }
+
+          function attach() {
+            cleanup();
+            const media = ctx.gallery.getActiveMedia();
+            video = media ? media.querySelector('video') : null;
+            if (!video) return;
+
+            video.controls = false;
+
+            bar = document.createElement('div');
+            bar.style.cssText =
+              'position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; ' +
+              'display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; ' +
+              'background: rgba(0, 0, 0, 0.6); font: 0.8rem sans-serif; color: #fff;';
+
+            const playButton = document.createElement('button');
+            playButton.type = 'button';
+            playButton.style.cssText =
+              'background: none; border: none; color: #fff; font-size: 1rem; cursor: pointer; padding: 0 0.25rem;';
+
+            const seek = document.createElement('input');
+            seek.type = 'range';
+            seek.min = '0';
+            seek.max = '100';
+            seek.value = '0';
+            seek.style.cssText = 'flex: 1;';
+
+            const time = document.createElement('span');
+            time.style.cssText = 'white-space: nowrap;';
+
+            const muteButton = document.createElement('button');
+            muteButton.type = 'button';
+            muteButton.style.cssText =
+              'background: none; border: none; color: #fff; font-size: 1rem; cursor: pointer; padding: 0 0.25rem;';
+
+            bar.append(playButton, seek, time, muteButton);
+            media.appendChild(bar);
+
+            let seeking = false;
+
+            function updatePlayButton() {
+              playButton.textContent = video.paused ? '▶' : '⏸';
+            }
+            function updateTime() {
+              if (!seeking) seek.value = String((video.currentTime / (video.duration || 1)) * 100);
+              time.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+            }
+            function updateMute() {
+              muteButton.textContent = video.muted ? '🔇' : '🔊';
+            }
+
+            playButton.addEventListener('click', () => {
+              if (video.paused) video.play().catch(() => {});
+              else video.pause();
+            });
+            muteButton.addEventListener('click', () => {
+              video.muted = !video.muted;
+              updateMute();
+            });
+            seek.addEventListener('input', () => {
+              seeking = true;
+              video.currentTime = (Number(seek.value) / 100) * (video.duration || 0);
+            });
+            seek.addEventListener('change', () => {
+              seeking = false;
+            });
+
+            video.addEventListener('play', updatePlayButton);
+            video.addEventListener('pause', updatePlayButton);
+            video.addEventListener('timeupdate', updateTime);
+            video.addEventListener('loadedmetadata', updateTime);
+            video.addEventListener('volumechange', updateMute);
+
+            updatePlayButton();
+            updateTime();
+            updateMute();
+          }
+
+          ctx.gallery.on('afterOpen', attach);
+          ctx.gallery.on('afterSlide', attach);
+          ctx.gallery.on('close', cleanup);
+        },
+      };
+
       const ThemePicker = {
         name: 'theme-picker',
         init(ctx) {
@@ -868,6 +988,7 @@ its own id) rather than a real function input.
         if (checked('plugin-rotateFlip')) plugins.push(Shoji.RotateFlip);
         if (checked('plugin-myPlugin')) plugins.push(MyPlugin);
         if (checked('plugin-themePicker')) plugins.push(ThemePicker);
+        if (checked('plugin-customVideoControls')) plugins.push(CustomVideoControls);
         if (checked('plugin-layout')) plugins.push(Shoji.Layout);
         if (checked('plugin-activeThumbnail')) plugins.push(Shoji.ActiveThumbnail);
         if (checked('plugin-zoom')) plugins.push(Shoji.Zoom);
