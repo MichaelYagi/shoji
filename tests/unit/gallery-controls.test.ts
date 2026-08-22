@@ -443,7 +443,7 @@ describe('Gallery — click-outside-to-close', () => {
     gallery.destroy();
   });
 
-  it("clicking a provider-video slide's container (e.g. the YouTube embed) does not close the gallery — regression: a provider embed is a <div> wrapping an <iframe>, not a <video> element, so it never matched isBackdropClick()'s exclusion list the way a native HTML5 video slide already did. Reported from real usage on mobile: .shoji-toolbar's own empty space is pointer-events:none (so it doesn't block the video underneath it), so tapping there to reveal auto-hidden controls fell through to the provider-video container and read as a backdrop click, closing the gallery on the very tap meant to bring controls back", () => {
+  it("clicking blank space in a provider-video slide's container closes the gallery — matching image/HTML5 video parity. The exclusion was narrowed from the whole .shoji-slide-provider-video container to only .shoji-video-mount and iframe, so blank areas (sides, toolbar-inset padding) now read as backdrop clicks.", () => {
     const el = document.createElement('div');
     const gallery = new Gallery(el, {
       items: [
@@ -462,7 +462,34 @@ describe('Gallery — click-outside-to-close', () => {
     });
     gallery.open(0);
 
+    // Click the container itself (blank space around the embed) — should close
     click(document.querySelector('.shoji-slide-provider-video')!);
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    gallery.destroy();
+  });
+
+  it("clicking the iframe inside a provider-video slide does not close the gallery — the iframe element itself is excluded so an unfocused-frame first-click from the parent-page's hit-testing doesn't trigger a false backdrop-close", () => {
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, {
+      items: [
+        {
+          id: 'yt',
+          src: 'x',
+          video: {
+            provider: 'custom',
+            render: (container, _item, onReady) => {
+              container.appendChild(document.createElement('iframe'));
+              onReady();
+            },
+          },
+        },
+      ],
+    });
+    gallery.open(0);
+
+    // Click the iframe element directly — should not close
+    click(document.querySelector('.shoji-slide-provider-video iframe')!);
 
     expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
     gallery.destroy();
