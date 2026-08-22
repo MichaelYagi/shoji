@@ -222,6 +222,26 @@ its own id) rather than a real function input.
         </fieldset>
 
         <fieldset>
+          <legend>
+            Video play overlay CSS vars (only visible with videoPlayOverlay checked above)
+          </legend>
+          <div class="row">
+            <label
+              >--shoji-video-overlay-size
+              <input type="text" id="var-shoji-video-overlay-size" value="64px"
+            /></label>
+            <label
+              >--shoji-video-overlay-bg
+              <input type="text" id="var-shoji-video-overlay-bg" value="rgba(0, 0, 0, 0.4)"
+            /></label>
+            <label
+              >--shoji-video-overlay-color
+              <input type="text" id="var-shoji-video-overlay-color" value="var(--shoji-color-fg)"
+            /></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
           <legend>gestures (blank = default)</legend>
           <div class="row">
             <label
@@ -743,7 +763,21 @@ its own id) rather than a real function input.
 
       let gallery = null;
 
+      // Pure CSS vars, no GalleryOptions equivalent — applied directly to
+      // :root instead of routed through new Shoji()'s options object, so
+      // they take effect immediately even against an already-open dialog
+      // (CSS custom properties cascade live, no rebuild needed for these
+      // specifically — folded into buildGallery() anyway, just for one
+      // consistent "any field change re-applies everything" flow).
+      function applyVideoOverlayVars() {
+        const root = document.documentElement.style;
+        root.setProperty('--shoji-video-overlay-size', $('var-shoji-video-overlay-size').value);
+        root.setProperty('--shoji-video-overlay-bg', $('var-shoji-video-overlay-bg').value);
+        root.setProperty('--shoji-video-overlay-color', $('var-shoji-video-overlay-color').value);
+      }
+
       function buildGallery() {
+        applyVideoOverlayVars();
         if (gallery) {
           gallery.destroy();
           gallery = null;
