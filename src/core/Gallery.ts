@@ -67,17 +67,16 @@ const DEFAULT_LOCALE = {
  * read as "clicked outside," closing the gallery. `composedPath()` isn't
  * affected by DOM mutations that happen after dispatch.
  *
- * `.shoji-slide-provider-video` (a real bug, reported from real usage,
- * mobile-specific): a provider embed (YouTube) isn't a `<video>` element —
- * it's a plain `<div>` wrapping a cross-origin `<iframe>` — so it never
- * matched `INTERACTIVE_CONTROL_SELECTOR`'s `video` term the way a native
- * HTML5 video slide already did. `.shoji-toolbar`'s own empty space is
- * `pointer-events: none` (so it doesn't block the content underneath), so a
- * tap there falls through to this container and — without this exclusion —
- * read as "clicked outside," closing the gallery on the exact same tap
- * that was meant to reveal auto-hidden controls again. Desktop rarely hit
- * this (hovering reveals controls without ever generating a `click`), but
- * on mobile every reveal attempt is a tap, and a tap is a click.
+ * Provider video (YouTube/Vimeo): exclude only the actual iframe/mount
+ * element, not the entire `.shoji-slide-provider-video` container. This
+ * allows clicks on the blank space around the embed (sides, padding-top
+ * toolbar inset) to close the gallery, matching image and HTML5 video
+ * behaviour. Clicks that land inside the cross-origin iframe never bubble
+ * to the parent at all, so no special handling is needed there; `iframe`
+ * covers the edge case where the frame hasn't yet captured focus and a
+ * click registers on the element itself from the parent-page perspective.
+ * `.shoji-video-mount` is the Vimeo SDK wrapper; YouTube uses a bare
+ * `<iframe>` directly inside `.shoji-slide-provider-video`.
  */
 function isBackdropClick(event: Event): boolean {
   return !event
@@ -86,7 +85,7 @@ function isBackdropClick(event: Event): boolean {
       (node) =>
         node instanceof Element &&
         node.matches(
-          `.shoji-slide-img, .shoji-slide-provider-video, .shoji-counter, ${INTERACTIVE_CONTROL_SELECTOR}`,
+          `.shoji-slide-img, .shoji-video-mount, iframe, .shoji-counter, ${INTERACTIVE_CONTROL_SELECTOR}`,
         ),
     );
 }
