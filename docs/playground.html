@@ -295,6 +295,10 @@ its own id) rather than a real function input.
               ><input type="checkbox" id="opt-autoplay-pauseOnRotateFlip" />
               pauseOnRotateFlip</label
             >
+            <label
+              ><input type="checkbox" id="opt-autoplay-pauseOnCaptionExpand" />
+              pauseOnCaptionExpand</label
+            >
           </div>
         </fieldset>
 
@@ -1033,6 +1037,7 @@ its own id) rather than a real function input.
             autoStart: checked('opt-autoplay-autoStart'),
             pauseOnZoom: checked('opt-autoplay-pauseOnZoom'),
             pauseOnRotateFlip: checked('opt-autoplay-pauseOnRotateFlip'),
+            pauseOnCaptionExpand: checked('opt-autoplay-pauseOnCaptionExpand'),
           },
           activeThumbnail: {
             activeClass: $('opt-activeThumbnail-activeClass').value || 'shoji-thumb-active',

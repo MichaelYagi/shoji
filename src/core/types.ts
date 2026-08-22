@@ -230,6 +230,8 @@ export interface GalleryEvents extends Record<string, unknown> {
   'controls:show': Record<string, never>;
   /** DESIGN.md §2.4/§2.6a — a vertical drag crossing (`true`) or un-crossing (`false`) the same distance a release would close at. Autoplay (§4-autoplay) uses it to pause/resume in step with the drag itself. */
   dragCloseThreshold: { hidden: boolean };
+  /** DESIGN.md §2.3a — fires from `openCaptionModal()`/`closeCaptionModal()`, the truncated-caption "read the rest" overlay. Autoplay's `pauseOnCaptionExpand` (§4-autoplay) uses `open: true` to pause — expanding a caption to read it is a viewer asking for time, not an idle moment to advance past. */
+  captionModalChange: { open: boolean };
   /** DESIGN.md §2.2a-autoplay — emitted by the autoplay plugin, not core. */
   autoplayStart: Record<string, never>;
   autoplayStop: Record<string, never>;

@@ -89,6 +89,16 @@ off(); // stop listening</code></pre>
             End of <code>destroy()</code>, after all teardown — the last event this bus ever emits.
           </td>
         </tr>
+        <tr>
+          <td><code>captionModalChange</code></td>
+          <td><code>{ open }</code></td>
+          <td>
+            The truncated-caption "read the rest" modal opening/closing — unrelated to the gallery's
+            own <code>open</code>/<code>close</code> above, despite the similar shape. Autoplay's
+            <code>pauseOnCaptionExpand</code> (<a href="./settings.html">Settings</a>) reacts to
+            <code>open: true</code>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -1014,6 +1014,85 @@ describe('Gallery — truncated-caption modal (DESIGN.md §2.3a)', () => {
     gallery.destroy();
   });
 
+  it('regression: Space/Enter on the focused caption does not also leak to a registered plugin shortcut for the same key — closeCaptionModal() restores focus to the caption, so any Space-bound shortcut (e.g. Autoplay play/pause) would otherwise also fire the instant the modal closed and a viewer pressed Space to resume', async () => {
+    mockTruncated(true);
+    const shortcut = vi.fn();
+    const spacePlugin: ShojiPlugin = {
+      name: 'e2e-space-shortcut',
+      init(ctx) {
+        ctx.ui.registerShortcut(' ', shortcut);
+      },
+    };
+    const gallery = makeGallery(1, {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'text' }],
+      plugins: [spacePlugin],
+    });
+    gallery.open(0);
+    await flush();
+
+    // Focused directly, not via a modal open/close round trip — the fix
+    // covers this general case too, not just the reported one below: any
+    // time the caption happens to be focused (Tab, or focus restored after
+    // closing its own modal), Space/Enter must be fully absorbed here.
+    caption().focus();
+    caption().dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(modal().hidden).toBe(false);
+    expect(shortcut).not.toHaveBeenCalled();
+
+    gallery.destroy();
+  });
+
+  it('regression: pressing Space to resume right after closing a click-opened caption modal does not also reopen it — closing no longer force-restores focus onto the caption for a click-originated open, only a real keyboard one', async () => {
+    mockTruncated(true);
+    const shortcut = vi.fn();
+    const spacePlugin: ShojiPlugin = {
+      name: 'e2e-space-shortcut',
+      init(ctx) {
+        ctx.ui.registerShortcut(' ', shortcut);
+      },
+    };
+    const gallery = makeGallery(1, {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'text' }],
+      plugins: [spacePlugin],
+    });
+    gallery.open(0);
+    await flush();
+
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(false);
+    document
+      .querySelector('.shoji-caption-modal-close')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal().hidden).toBe(true);
+    // Deliberately not asserting *where* focus ends up (browser-default
+    // fallback, jsdom's own included) — only that it's not the caption,
+    // since that's the one thing that would resurrect this bug.
+    expect(document.activeElement).not.toBe(caption());
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(modal().hidden).toBe(true); // must not have reopened
+    expect(shortcut).toHaveBeenCalledTimes(1); // the actually-intended shortcut still fires
+
+    gallery.destroy();
+  });
+
+  it('regression: closing a *keyboard*-opened caption modal still restores focus to the caption, continuing a real Tab user’s sequence — only the click-originated path above skips it', async () => {
+    mockTruncated(true);
+    const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });
+    gallery.open(0);
+    await flush();
+
+    caption().focus();
+    caption().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(modal().hidden).toBe(false);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(modal().hidden).toBe(true);
+    expect(document.activeElement).toBe(caption());
+
+    gallery.destroy();
+  });
+
   it('a text selection does not count as a click-to-open — the drag-to-select behavior stays intact', async () => {
     mockTruncated(true);
     const gallery = makeGallery(1, { items: [{ id: 'a', src: 'a.jpg', caption: 'text' }] });

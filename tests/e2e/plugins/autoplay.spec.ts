@@ -341,3 +341,97 @@ test('regression: the Play button visibly disables while resume is blocked (zoom
   await page.locator('.shoji-toolbar-button[aria-label="Rotate right"]').click();
   await expect(playButton).toHaveAttribute('aria-disabled', 'true');
 });
+
+/**
+ * DESIGN.md §2.3a/§4.1 — `pauseOnCaptionExpand` (default off, opted in via
+ * ?pauseOnCaptionExpand=1). Unlike pauseOnZoom/pauseOnRotateFlip above,
+ * there's no separate "Play button visibly disables while blocked" test and
+ * no Space-bypass regression test for this one — the caption modal already
+ * makes the Play button (and every other key/click behind it) physically
+ * unreachable while open, core's own doing (focus trap + capture-phase
+ * keydown blocking every key), not something this plugin has to enforce or
+ * that a real browser lets this test attempt in the first place.
+ */
+test('expanding a truncated caption pauses the slideshow, and it stays paused once the caption modal closes', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnCaptionExpand=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const longCaption =
+    'A caption long enough to exceed even the arrow-aware collapsed height, not just one line. '.repeat(
+      20,
+    );
+  await page.evaluate((caption) => {
+    type Item = { id: string; caption?: unknown };
+    type GalleryHandle = { items: Item[]; updateSlides(items: Item[]): void };
+    const gallery = (window as unknown as { __shojiGallery: GalleryHandle }).__shojiGallery;
+    const items = gallery.items.map((item, i) => (i === 0 ? { ...item, caption } : item));
+    gallery.updateSlides(items);
+  }, longCaption);
+  const caption = page.locator('.shoji-caption').last();
+  await expect(caption).toHaveClass(/shoji-caption--truncated/);
+
+  await page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]').click();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
+
+  await caption.click();
+  await expect(page.locator('.shoji-caption-modal').last()).toBeVisible();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // paused
+
+  const counterWhileExpanded = await page.locator('.shoji-counter').textContent();
+  await page.waitForTimeout(700); // several intervals' worth — must not have advanced
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileExpanded!);
+
+  await page.locator('.shoji-caption-modal-close').last().click();
+  await expect(page.locator('.shoji-caption-modal').last()).toBeHidden();
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // still paused, not auto-resumed
+  await page.waitForTimeout(700);
+  await expect(page.locator('.shoji-counter')).toHaveText(counterWhileExpanded!);
+});
+
+/**
+ * DESIGN.md §2.3a — a real bug, reported from real usage against the
+ * feature directly above: `closeCaptionModal()` restores focus to whatever
+ * had it when the modal opened, which for a mouse click is the caption
+ * itself (clicking a tabindex=0 element focuses it as a native browser side
+ * effect). Pressing Space right after to resume the slideshow landed back
+ * on that residually-focused caption first, which reopened the modal
+ * instead of — or alongside — actually resuming. Fixed by only restoring
+ * focus for a genuine keyboard-driven open (Tab+Enter/Space), where
+ * continuing the viewer's tab sequence is the correct, intended behavior;
+ * a mouse-click open no longer force-refocuses the caption on close at all.
+ */
+test('regression: pressing Space to resume right after closing a click-opened caption modal just resumes — it does not also reopen the modal', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnCaptionExpand=1');
+  await page.locator('#thumbs a[data-index="0"]').click();
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+
+  const longCaption =
+    'A caption long enough to exceed even the arrow-aware collapsed height, not just one line. '.repeat(
+      20,
+    );
+  await page.evaluate((caption) => {
+    type Item = { id: string; caption?: unknown };
+    type GalleryHandle = { items: Item[]; updateSlides(items: Item[]): void };
+    const gallery = (window as unknown as { __shojiGallery: GalleryHandle }).__shojiGallery;
+    const items = gallery.items.map((item, i) => (i === 0 ? { ...item, caption } : item));
+    gallery.updateSlides(items);
+  }, longCaption);
+  const caption = page.locator('.shoji-caption').last();
+  await expect(caption).toHaveClass(/shoji-caption--truncated/);
+
+  await caption.click(); // mouse-opened, same as a real viewer clicking to read it
+  await expect(page.locator('.shoji-caption-modal').last()).toBeVisible();
+  await page.locator('.shoji-caption-modal-close').last().click();
+  await expect(page.locator('.shoji-caption-modal').last()).toBeHidden();
+
+  await page.keyboard.press(' ');
+  await expect(page.locator('.shoji-caption-modal').last()).toBeHidden(); // must not have reopened
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1); // the slideshow actually resumed
+});

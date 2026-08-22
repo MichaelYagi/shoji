@@ -53,6 +53,8 @@ export interface AutoplayOptions {
   pauseOnZoom?: boolean;
   /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `false` — opt-in, requested directly: a host embedding a gallery shouldn't have its slideshow's pause behavior silently change just because a viewer happens to touch a zoom/rotate control, unless it asked for that. */
   pauseOnRotateFlip?: boolean;
+  /** Pauses the slideshow when the viewer expands a truncated caption to read the rest (core's own caption modal, DESIGN.md §2.3a) — stays paused until Play is pressed again, same as `pauseOnZoom`/`pauseOnRotateFlip`. No re-check on Play needed the way those two need one: the modal traps both pointer and keyboard input while open (core blocks every key, not just Escape), so Play is physically unreachable until the modal is already closed. Default `false` — same opt-in reasoning as the other two. */
+  pauseOnCaptionExpand?: boolean;
 }
 
 /**
@@ -75,6 +77,7 @@ export const Autoplay: ShojiPlugin = {
     const autoStart = ctx.options.autoStart === true;
     const pauseOnZoom = ctx.options.pauseOnZoom === true;
     const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip === true;
+    const pauseOnCaptionExpand = ctx.options.pauseOnCaptionExpand === true;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -440,6 +443,19 @@ export const Autoplay: ShojiPlugin = {
       if (pauseOnRotateFlip && playing) stop();
       else updateToggleAvailability(); // stop() above already refreshes this; covers rotating while already paused, which stop() wouldn't touch
     });
+    /**
+     * `pauseOnCaptionExpand`'s own doc comment above — unlike the two
+     * listeners above, no `updateToggleAvailability()` companion call and
+     * no `zoomedIn`/`rotatedOrFlipped`-style tracked flag: the caption
+     * modal already makes Play physically unreachable while `open: true`
+     * (core's own focus trap + capture-phase keydown blocking, not
+     * anything this plugin has to enforce), so there's no "pressed Play
+     * while still blocked" case to disable the button for or re-check on
+     * toggle() the way zoom/rotateFlip both need.
+     */
+    const offCaptionModalChange = ctx.on('captionModalChange', ({ open }) => {
+      if (pauseOnCaptionExpand && open && playing) stop();
+    });
 
     button.addEventListener('click', toggle);
 
@@ -505,6 +521,7 @@ export const Autoplay: ShojiPlugin = {
       offDragThreshold();
       offZoomChange();
       offRotateFlipChange();
+      offCaptionModalChange();
     };
   },
 };

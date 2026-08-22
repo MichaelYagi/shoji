@@ -330,6 +330,137 @@ describe('Autoplay — pauseOnRotateFlip (default off)', () => {
   });
 });
 
+/**
+ * DESIGN.md §2.3a/§4-autoplay — `pauseOnCaptionExpand` (default off),
+ * requested directly: expanding a truncated caption to read the rest is the
+ * viewer asking for time, not an idle moment to advance past. Reuses
+ * `core-lightbox.test.ts`'s own `mockTruncated()` approach — jsdom has no
+ * real layout engine, so truncation can't be exercised through real
+ * geometry, only through the scrollHeight/clientHeight comparison
+ * `updateCaptionTruncation()` actually makes.
+ *
+ * No "pressed Play while already engaged" regression test here, unlike
+ * pauseOnZoom/pauseOnRotateFlip above — that scenario is structurally
+ * impossible for this one: the caption modal traps both pointer and
+ * keyboard input while open (core's own focus trap plus a capture-phase
+ * keydown handler that stops propagation for every key, not just Escape),
+ * so the toolbar's Play button is physically unreachable until the modal
+ * is already closed. See `pauseOnCaptionExpand`'s own doc comment
+ * (autoplay/index.ts).
+ */
+describe('Autoplay — pauseOnCaptionExpand (default off)', () => {
+  afterEach(() => {
+    // Not vi.spyOn — jsdom's Range doesn't define this method at all, so
+    // mockTruncated() below assigns it outright; the top-level afterEach's
+    // vi.restoreAllMocks() doesn't touch a non-spied assignment.
+    delete (Range.prototype as { getClientRects?: unknown }).getClientRects;
+  });
+
+  function mockTruncated(): void {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(10);
+    Range.prototype.getClientRects = vi.fn().mockReturnValue([]);
+  }
+
+  function caption(): HTMLElement {
+    return document.querySelector('.shoji-caption') as HTMLElement;
+  }
+
+  function modal(): HTMLElement {
+    return document.querySelector('.shoji-caption-modal') as HTMLElement;
+  }
+
+  function openCaptionModal(): void {
+    caption().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  }
+
+  function makeGalleryWithCaption(options: Record<string, unknown> = {}): Gallery {
+    return new Gallery(document.createElement('div'), {
+      items: [{ id: 'a', src: 'a.jpg', caption: 'the full text' }],
+      plugins: [Autoplay],
+      preload: 0,
+      ...options,
+    });
+  }
+
+  it('is a complete no-op by default, even while the caption modal is open', async () => {
+    vi.useFakeTimers();
+    mockTruncated();
+    const gallery = makeGalleryWithCaption();
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+    expect(isPlaying()).toBe(true);
+
+    openCaptionModal();
+    expect(modal().hidden).toBe(false);
+    expect(isPlaying()).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it('pauseOnCaptionExpand: true pauses a playing slideshow when the caption modal opens', async () => {
+    vi.useFakeTimers();
+    mockTruncated();
+    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+    expect(isPlaying()).toBe(true);
+
+    openCaptionModal();
+    expect(isPlaying()).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('stays paused once the caption modal closes — no auto-resume', async () => {
+    vi.useFakeTimers();
+    mockTruncated();
+    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    openCaptionModal();
+    expect(isPlaying()).toBe(false);
+
+    (document.querySelector('.shoji-caption-modal-close') as HTMLButtonElement).click();
+    expect(modal().hidden).toBe(true);
+    expect(isPlaying()).toBe(false); // still paused, not auto-resumed
+
+    gallery.destroy();
+  });
+
+  it('does not pause a slideshow that was never playing to begin with', async () => {
+    vi.useFakeTimers();
+    mockTruncated();
+    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    gallery.open(0); // never started — playing stays false throughout
+    await flush();
+
+    openCaptionModal();
+    expect(isPlaying()).toBe(false);
+
+    gallery.destroy();
+  });
+
+  it('never disables the Play button while the modal is open — unlike pauseOnZoom/pauseOnRotateFlip, Play is already unreachable there by construction, so there is nothing for this plugin to additionally guard', async () => {
+    vi.useFakeTimers();
+    mockTruncated();
+    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    openCaptionModal();
+    expect(isPlaying()).toBe(false);
+    expect(isToggleDisabled()).toBe(false);
+
+    gallery.destroy();
+  });
+});
+
 describe('Autoplay — view-engagement pausing, general', () => {
   it('is a complete no-op with neither Zoom nor RotateFlip loaded', async () => {
     vi.useFakeTimers();

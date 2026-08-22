@@ -75,6 +75,8 @@ if (thumbs && status) {
   // exercising either.
   const pauseOnZoom = new URLSearchParams(location.search).get('pauseOnZoom') === '1';
   const pauseOnRotateFlip = new URLSearchParams(location.search).get('pauseOnRotateFlip') === '1';
+  const pauseOnCaptionExpand =
+    new URLSearchParams(location.search).get('pauseOnCaptionExpand') === '1';
   // Undefined (the default, Gallery's own 5000ms) unless a test needs a
   // short one to exercise the idle auto-hide timer without a multi-second
   // real wait — same override pattern as ?interval= above.
@@ -134,7 +136,7 @@ if (thumbs && status) {
       ...extraButtonPlugins,
       ...foreignElementPlugin,
     ],
-    autoplay: { interval, pauseOnZoom, pauseOnRotateFlip },
+    autoplay: { interval, pauseOnZoom, pauseOnRotateFlip, pauseOnCaptionExpand },
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),
   });
 

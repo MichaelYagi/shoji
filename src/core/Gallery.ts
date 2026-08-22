@@ -201,6 +201,19 @@ export class Gallery {
   private captionModalOpen = false;
   private captionModalReturnFocus: HTMLElement | null = null;
   /**
+   * DESIGN.md §2.3a — every real path into `openCaptionModal()` starts from
+   * a click *or* a keydown on the caption, so `captionModalReturnFocus`
+   * above is always the caption itself either way; this instead
+   * distinguishes *how* it got there, so `closeCaptionModal()` only
+   * actually calls `.focus()` for the keyboard path (a real Tab+Enter user,
+   * where restoring focus continues their tab sequence correctly) and
+   * leaves it alone for a mouse click (where the resulting focus was
+   * purely incidental — nothing about clicking to read a caption means the
+   * *next* keypress, e.g. a plugin's own Space shortcut, should still
+   * silently target it).
+   */
+  private captionModalOpenedViaKeyboard = false;
+  /**
    * DESIGN.md §3.1a — every `ctx.ui.toolbar()`-registered button, in
    * registration order, alongside the slot it was registered into (so a
    * collapsed one can be restored to the right place, not just anywhere).
@@ -1431,9 +1444,21 @@ export class Gallery {
 
   private readonly onCaptionActivate = (event: Event): void => {
     if (!this.dom?.caption.classList.contains('shoji-caption--truncated')) return;
+    this.captionModalOpenedViaKeyboard = event instanceof KeyboardEvent;
     if (event instanceof KeyboardEvent) {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
+      // A real bug, reported from real usage against Autoplay's
+      // pauseOnCaptionExpand (§4.1 point 18): a *keyboard* activation here
+      // (Tab+Enter/Space, the only path this branch actually runs for)
+      // must not also bubble up to onKeydown's shortcut dispatch — this is
+      // unambiguously "activate this control," not also a global shortcut
+      // key, same reasoning the caption modal's own keydown handler
+      // already uses to isolate itself from onKeydown. This alone doesn't
+      // cover the click path below reopening on a *later*, unrelated
+      // keypress — see `captionModalOpenedViaKeyboard`'s own doc comment
+      // for that half of the fix.
+      event.stopPropagation();
     } else {
       // A mouse-drag that ended in a real text selection is not a click to
       // open — `.shoji-caption` is deliberately excluded from drag-to-
@@ -1496,6 +1521,7 @@ export class Gallery {
     this.captionModalOpen = true;
     this.focusTrap.retarget(this.dom.captionModalPanel);
     document.addEventListener('keydown', this.onCaptionModalKeydown, true);
+    this.bus.emit('captionModalChange', { open: true });
   }
 
   /**
@@ -1516,9 +1542,13 @@ export class Gallery {
     this.captionModalOpen = false;
     this.updateCaptionVisibility();
     this.focusTrap.retarget(this.dom.dialog);
-    this.captionModalReturnFocus?.focus({ preventScroll: true });
+    if (this.captionModalOpenedViaKeyboard) {
+      this.captionModalReturnFocus?.focus({ preventScroll: true });
+    }
     this.captionModalReturnFocus = null;
+    this.captionModalOpenedViaKeyboard = false;
     this.onActivity();
+    this.bus.emit('captionModalChange', { open: false });
   }
 
   private renderCurrentSlide(openPlaceholderSrc?: string): void {

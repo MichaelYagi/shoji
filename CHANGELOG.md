@@ -5,6 +5,29 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.26] - 2026-08-22
+
+### Added
+
+- **`AutoplayOptions.pauseOnCaptionExpand`** (default `false`) — pauses the
+  slideshow when the viewer opens the truncated-caption "read the rest"
+  modal, and stays paused (no auto-resume) once it closes, same shape as
+  `pauseOnZoom`/`pauseOnRotateFlip`. Backed by a new core event,
+  `captionModalChange: { open: boolean }` (`core/types.ts`), emitted from
+  `openCaptionModal()`/`closeCaptionModal()`. See DESIGN.md §4.1 point 18.
+
+### Fixed
+
+- **A real bug found building the feature above: closing the caption modal
+  right before pressing Space to resume the slideshow could also reopen
+  the modal.** `closeCaptionModal()` restored focus to the caption
+  unconditionally, including for a mouse-click-driven open, where that
+  focus was purely incidental — so an unrelated later keypress landed on
+  the caption's own Enter/Space "reopen me" handler first. Focus is now
+  only restored for a genuine keyboard-driven open (Tab+Enter/Space);
+  clicking to open no longer force-refocuses the caption on close at all.
+  See DESIGN.md §2.3a/§4.1.
+
 ## [0.1.0-alpha.25] - 2026-08-22
 
 ### Removed
