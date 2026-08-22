@@ -36,7 +36,6 @@ describe('SlideManager', () => {
   it('creates 2*preload+1 pool slots, positioned by fixed offset', () => {
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const slots = manager.element.querySelectorAll('.shoji-slide');
@@ -53,7 +52,6 @@ describe('SlideManager', () => {
   it('supports preload:0 (single slot)', () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     expect(manager.element.querySelectorAll('.shoji-slide')).toHaveLength(1);
@@ -62,7 +60,6 @@ describe('SlideManager', () => {
   it('renders the image, calls onLoad, and sets aspect-ratio when width/height are known', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const onLoad = vi.fn();
@@ -81,7 +78,6 @@ describe('SlideManager', () => {
   it('shows a spinner (not the previous image) while a genuinely new, uncached index decodes, then swaps it out atomically', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     }); // preload:0 means nothing is ever preloaded/cached
     manager.render(items, 0, vi.fn()); // image 'a'
@@ -114,7 +110,6 @@ describe('SlideManager', () => {
     it('keeps the spinner up until the placeholder itself decodes, then swaps it in, then swaps to the real image once that decodes', async () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       const resolvers = new Map<string, () => void>();
@@ -161,7 +156,6 @@ describe('SlideManager', () => {
     it('only applies to the center slot — a preloaded neighbor never gets a placeholder, even once its own decode resolves', async () => {
       const manager = new SlideManager({
         preload: 1,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       const resolvers = new Map<string, () => void>();
@@ -195,7 +189,6 @@ describe('SlideManager', () => {
     it('does not show a placeholder for a slot whose content is already cached/ready', async () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       manager.render(items, 0, vi.fn()); // 'a' decodes and caches normally
@@ -211,7 +204,6 @@ describe('SlideManager', () => {
     it('swaps to the real image with no inline transform/opacity of its own — the outer zoom transition already handles the growth, a second animation on the image itself would read as a disconnected extra one', async () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       let resolveDecode!: () => void;
@@ -231,7 +223,6 @@ describe('SlideManager', () => {
     it("regression: caps the placeholder at the real photo's own known size (item.width/height) instead of always force-filling the frame — reported from real usage: a genuinely small photo blew up to fill the dialog while the placeholder showed, then snapped back down to its true size once the real image loaded, even though item.width/height were supplied", async () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       const smallItems: GalleryItem[] = [
@@ -306,7 +297,6 @@ describe('SlideManager', () => {
     it('leaves the placeholder to its default CSS force-fill sizing when item.width/height are not known — no inline size to guess from', async () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(),
       });
       const resolvers = new Map<string, () => void>();
@@ -336,7 +326,6 @@ describe('SlideManager', () => {
   it('preload keeps neighbors decoded ahead of time — navigating to one shows it instantly, no spinner, onLoad fires synchronously', async () => {
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const onLoad = vi.fn();
@@ -379,7 +368,6 @@ describe('SlideManager', () => {
 
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const onLoad = vi.fn();
@@ -415,7 +403,6 @@ describe('SlideManager', () => {
 
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     }); // single slot — 'b' is never cached once passed
     manager.render(items, 0, vi.fn());
@@ -436,7 +423,6 @@ describe('SlideManager', () => {
   it('a cached node is the exact same element when reused, not a re-decoded copy', async () => {
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 0, vi.fn());
@@ -460,7 +446,6 @@ describe('SlideManager', () => {
     ];
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(imagesOnly, 1, vi.fn()); // preloads z0 (-1) and z2 (+1)
@@ -487,7 +472,6 @@ describe('SlideManager', () => {
   it('isActiveReady() is false while the active slide is still loading and true once it settles', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     expect(manager.isActiveReady()).toBe(false); // nothing rendered yet
@@ -501,7 +485,6 @@ describe('SlideManager', () => {
   it('isActiveReady() stays true immediately when re-navigating to an already-rendered index (no new load triggered)', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 0, vi.fn());
@@ -515,7 +498,6 @@ describe('SlideManager', () => {
   it('disables native image drag (real bug: browser-native "drag this image out" cancels the pointer sequence a real drag/pan gesture needs)', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 0, vi.fn());
@@ -528,7 +510,6 @@ describe('SlideManager', () => {
   it('leaves out aspect-ratio when width/height are absent', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 1, vi.fn());
@@ -541,7 +522,6 @@ describe('SlideManager', () => {
   it('renders a video item as a real, natively-controllable <video>', () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const onLoad = vi.fn();
@@ -573,7 +553,6 @@ describe('SlideManager', () => {
     };
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
 
@@ -589,7 +568,6 @@ describe('SlideManager', () => {
   it('renders a placeholder when a video item has no src or sources at all', () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const onLoad = vi.fn();
@@ -600,170 +578,6 @@ describe('SlideManager', () => {
     expect(placeholder?.textContent).toBe('Video');
     expect(manager.element.querySelector('video')).toBeNull();
     expect(onLoad).toHaveBeenCalledWith(4);
-  });
-
-  describe('video play-overlay', () => {
-    function videoAndOverlay(manager: SlideManager) {
-      const video = manager.element.querySelector('video.shoji-slide-video') as HTMLVideoElement;
-      const overlay = manager.element.querySelector(
-        '.shoji-video-play-overlay',
-      ) as HTMLButtonElement;
-      return { video, overlay };
-    }
-
-    it('videoPlayOverlay: opt-in, default false — no overlay element at all (not just hidden) when omitted', () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-      });
-      manager.render(items, 3, vi.fn());
-
-      const { video, overlay } = videoAndOverlay(manager);
-      expect(video).not.toBeNull(); // the real <video> still renders
-      expect(overlay).toBeNull(); // no overlay button created at all
-    });
-
-    it('is visible (not hidden) on a freshly rendered, paused video', () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 3, vi.fn());
-
-      const { video, overlay } = videoAndOverlay(manager);
-      expect(video.paused).toBe(true); // jsdom default — nothing has played it
-      expect(overlay).not.toBeNull();
-      expect(overlay.hidden).toBe(false);
-      expect(overlay.getAttribute('aria-label')).toBe('Play video');
-    });
-
-    it('hides when the video starts playing, reappears on pause (after the debounce) and immediately on ended', () => {
-      vi.useFakeTimers();
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 3, vi.fn());
-      const { video, overlay } = videoAndOverlay(manager);
-
-      video.dispatchEvent(new Event('play'));
-      expect(overlay.hidden).toBe(true);
-
-      video.dispatchEvent(new Event('pause'));
-      expect(overlay.hidden).toBe(true); // not yet — debounced, see the dedicated test below
-      vi.advanceTimersByTime(200);
-      expect(overlay.hidden).toBe(false);
-
-      video.dispatchEvent(new Event('play'));
-      expect(overlay.hidden).toBe(true);
-      video.dispatchEvent(new Event('ended'));
-      expect(overlay.hidden).toBe(false); // ended is never debounced — always a real, terminal state
-      vi.useRealTimers();
-    });
-
-    it("regression: a native scrub-bar's transient pause-then-resume (well within the debounce window) never flashes the overlay", () => {
-      // Real browsers pause <video> for the duration of a seek-bar drag —
-      // showing the overlay for every one of those would flash it on every
-      // scrub interaction, which is what this whole debounce exists to fix.
-      vi.useFakeTimers();
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 3, vi.fn());
-      const { video, overlay } = videoAndOverlay(manager);
-      video.dispatchEvent(new Event('play'));
-
-      video.dispatchEvent(new Event('pause')); // scrub-drag starts
-      vi.advanceTimersByTime(50); // well within the drag, short of the debounce
-      expect(overlay.hidden).toBe(true);
-      video.dispatchEvent(new Event('play')); // scrub-drag released, playback resumes
-
-      vi.advanceTimersByTime(500); // long past where the (now-cancelled) timer would have fired
-      expect(overlay.hidden).toBe(true); // never flashed
-
-      vi.useRealTimers();
-    });
-
-    it('clicking it plays the video and does not bubble to backdrop-click-to-close', () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 3, vi.fn());
-      const { video, overlay } = videoAndOverlay(manager);
-
-      const bubbledTo = vi.fn();
-      manager.element.addEventListener('click', bubbledTo);
-      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-
-      expect(video.play).toHaveBeenCalledTimes(1);
-      expect(bubbledTo).not.toHaveBeenCalled();
-    });
-
-    it("regression: clicking it attaches a .catch() to play()'s result, instead of leaving a rejection (e.g. a broken/missing source throwing NotSupportedError) unhandled", () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 3, vi.fn());
-      const { video, overlay } = videoAndOverlay(manager);
-      // A bare thenable stand-in with a spied .catch — proves the click
-      // handler actually attaches one, without needing a real rejected
-      // Promise (whose own unhandled-rejection reporting is unreliable to
-      // assert on directly across test runners/Node versions).
-      const catchSpy = vi.fn();
-      video.play = vi.fn(() => ({ catch: catchSpy })) as unknown as typeof video.play;
-
-      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-
-      expect(catchSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('is absent for the no-source video placeholder (nothing to play)', () => {
-      const manager = new SlideManager({
-        preload: 0,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      manager.render(items, 4, vi.fn()); // 'video-no-source'
-
-      expect(manager.element.querySelector('.shoji-video-play-overlay')).toBeNull();
-    });
-
-    it('travels with the video across cache-hit reuse (preloaded neighbor becoming active)', () => {
-      const manager = new SlideManager({
-        preload: 1,
-        playVideoLabel: 'Play video',
-        videoProviders: new Map(),
-        videoPlayOverlay: true,
-      });
-      // centerIndex 2 ('c'): offsets -1/0/+1 → 'b' / 'c' / the video (index 3) —
-      // preloaded as the +1 neighbor, not yet active, but already built and
-      // inserted regardless (video swaps in immediately, per renderVideo).
-      manager.render(items, 2, vi.fn());
-      const { video: originalVideo, overlay: originalOverlay } = videoAndOverlay(manager);
-      expect(originalOverlay.hidden).toBe(false);
-
-      manager.render(items, 3, vi.fn()); // navigate onto it — a cache hit, not a fresh render
-
-      const { video, overlay } = videoAndOverlay(manager);
-      expect(video).toBe(originalVideo); // same element, reused from cache
-      expect(overlay).toBe(originalOverlay); // its overlay came along with it
-      expect(overlay.hidden).toBe(false);
-    });
   });
 
   describe('provider video (registerVideoProvider / custom)', () => {
@@ -779,7 +593,6 @@ describe('SlideManager', () => {
       });
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
       const onLoad = vi.fn();
@@ -809,7 +622,6 @@ describe('SlideManager', () => {
       });
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
 
@@ -827,7 +639,6 @@ describe('SlideManager', () => {
     it('falls back to the same plain placeholder as no-source video for an unregistered provider name', () => {
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map(), // nothing registered for 'youtube'
       });
       const onLoad = vi.fn();
@@ -847,7 +658,6 @@ describe('SlideManager', () => {
       );
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', registryRender]]),
       });
       const customItem: GalleryItem = {
@@ -887,7 +697,6 @@ describe('SlideManager', () => {
       );
       const manager = new SlideManager({
         preload: 1,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
       const mixed: GalleryItem[] = [{ id: 'photo', src: 'photo.jpg' }, ytItem()];
@@ -922,7 +731,6 @@ describe('SlideManager', () => {
       );
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
       const mixed: GalleryItem[] = [ytItem(), { id: 'photo', src: 'photo.jpg' }];
@@ -945,7 +753,6 @@ describe('SlideManager', () => {
       );
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
 
@@ -962,7 +769,6 @@ describe('SlideManager', () => {
       });
       const manager = new SlideManager({
         preload: 0,
-        playVideoLabel: 'Play video',
         videoProviders: new Map([['youtube', render]]),
       });
       const onLoad = vi.fn();
@@ -978,7 +784,6 @@ describe('SlideManager', () => {
   it('a genuinely new (uncached) navigation onto a video-holding slot shows a spinner immediately, pausing/releasing the outgoing video up front rather than leaving it visible mid-decode', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 3, vi.fn()); // video item
@@ -1017,7 +822,6 @@ describe('SlideManager', () => {
     ];
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(custom, 2, vi.fn()); // slots: -1→x1, 0→x2 (video), +1→x3
@@ -1049,7 +853,6 @@ describe('SlideManager', () => {
     ];
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(custom, 1, vi.fn()); // slots: -1→y0 (video), 0→y1, +1→y2
@@ -1070,7 +873,6 @@ describe('SlideManager', () => {
   it('clears a slot when its offset falls outside the item range', async () => {
     const manager = new SlideManager({
       preload: 1,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 0, vi.fn());
@@ -1083,7 +885,6 @@ describe('SlideManager', () => {
   it('does not re-render a slot already showing the requested index', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 0, vi.fn());
@@ -1099,7 +900,6 @@ describe('SlideManager', () => {
   it('destroy() empties all slots and detaches the element', async () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     const root = document.createElement('div');
@@ -1116,7 +916,6 @@ describe('SlideManager', () => {
   it('destroy() pauses and releases a currently-playing video', () => {
     const manager = new SlideManager({
       preload: 0,
-      playVideoLabel: 'Play video',
       videoProviders: new Map(),
     });
     manager.render(items, 3, vi.fn()); // video item

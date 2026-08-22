@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.25] - 2026-08-22
+
+### Removed
+
+- **Breaking:** the HTML5 video play overlay (`.shoji-video-play-overlay`,
+  `GalleryOptions.videoPlayOverlay`) is removed entirely — no option, no
+  CSS, no DOM node. Shipped in alpha.24 as opt-in; on further discussion,
+  a host wanting genuinely custom video controls replaces native
+  `controls` outright (`video.controls = false` + a plugin building its
+  own UI via `gallery.getActiveMedia()`) rather than layering anything
+  Shoji-drawn on top of native controls either way, which left the
+  overlay's own middle ground not worth keeping. Native `<video
+controls>` is the only play affordance now, same as before alpha.24.
+  See DESIGN.md §2.3a.
+
 ## [0.1.0-alpha.24] - 2026-08-22
 
 ### Changed

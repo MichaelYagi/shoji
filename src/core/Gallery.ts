@@ -48,7 +48,6 @@ const DEFAULT_LOCALE = {
   close: 'Close',
   previous: 'Previous image',
   next: 'Next image',
-  playVideo: 'Play video',
   showCaption: 'Show caption',
   hideCaption: 'Hide caption',
   fullCaption: 'Full caption', // DESIGN.md §2.3a
@@ -484,9 +483,7 @@ export class Gallery {
     if (this.dom) return;
     this.slides = new SlideManager({
       preload: this.preload,
-      playVideoLabel: this.locale.playVideo,
       videoProviders: this.videoProviders,
-      videoPlayOverlay: this.options.videoPlayOverlay === true,
     });
     this.transition = new SlideTransition(this.slides, (clonedMedia) => {
       const settlers: Array<() => void> = [];

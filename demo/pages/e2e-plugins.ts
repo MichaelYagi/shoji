@@ -75,9 +75,6 @@ if (thumbs && status) {
   // exercising either.
   const pauseOnZoom = new URLSearchParams(location.search).get('pauseOnZoom') === '1';
   const pauseOnRotateFlip = new URLSearchParams(location.search).get('pauseOnRotateFlip') === '1';
-  // Off by default (GalleryOptions.videoPlayOverlay's own default) — same
-  // override pattern as ?pauseOnZoom= above, for the opt-in regression test.
-  const videoPlayOverlay = new URLSearchParams(location.search).get('videoPlayOverlay') === '1';
   // Undefined (the default, Gallery's own 5000ms) unless a test needs a
   // short one to exercise the idle auto-hide timer without a multi-second
   // real wait — same override pattern as ?interval= above.
@@ -138,7 +135,6 @@ if (thumbs && status) {
       ...foreignElementPlugin,
     ],
     autoplay: { interval, pauseOnZoom, pauseOnRotateFlip },
-    videoPlayOverlay,
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),
   });
 

@@ -194,7 +194,6 @@ its own id) rather than a real function input.
             <label><input type="checkbox" id="opt-loop" checked /> loop</label>
             <label><input type="checkbox" id="opt-counter" checked /> counter</label>
             <label><input type="checkbox" id="opt-showVideoCaption" /> showVideoCaption</label>
-            <label><input type="checkbox" id="opt-videoPlayOverlay" /> videoPlayOverlay</label>
             <label><input type="checkbox" id="opt-openOnInit" /> openOnInit</label>
             <label>index <input type="number" id="opt-index" value="0" min="0" /></label>
             <label>preload <input type="number" id="opt-preload" value="1" min="0" /></label>
@@ -218,26 +217,6 @@ its own id) rather than a real function input.
               >mode
               <select id="opt-mode"></select
             ></label>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>
-            Video play overlay CSS vars (only visible with videoPlayOverlay checked above)
-          </legend>
-          <div class="row">
-            <label
-              >--shoji-video-overlay-size
-              <input type="text" id="var-shoji-video-overlay-size" value="64px"
-            /></label>
-            <label
-              >--shoji-video-overlay-bg
-              <input type="text" id="var-shoji-video-overlay-bg" value="rgba(0, 0, 0, 0.4)"
-            /></label>
-            <label
-              >--shoji-video-overlay-color
-              <input type="text" id="var-shoji-video-overlay-color" value="var(--shoji-color-fg)"
-            /></label>
           </div>
         </fieldset>
 
@@ -763,21 +742,7 @@ its own id) rather than a real function input.
 
       let gallery = null;
 
-      // Pure CSS vars, no GalleryOptions equivalent — applied directly to
-      // :root instead of routed through new Shoji()'s options object, so
-      // they take effect immediately even against an already-open dialog
-      // (CSS custom properties cascade live, no rebuild needed for these
-      // specifically — folded into buildGallery() anyway, just for one
-      // consistent "any field change re-applies everything" flow).
-      function applyVideoOverlayVars() {
-        const root = document.documentElement.style;
-        root.setProperty('--shoji-video-overlay-size', $('var-shoji-video-overlay-size').value);
-        root.setProperty('--shoji-video-overlay-bg', $('var-shoji-video-overlay-bg').value);
-        root.setProperty('--shoji-video-overlay-color', $('var-shoji-video-overlay-color').value);
-      }
-
       function buildGallery() {
-        applyVideoOverlayVars();
         if (gallery) {
           gallery.destroy();
           gallery = null;
@@ -811,7 +776,6 @@ its own id) rather than a real function input.
           loop: checked('opt-loop'),
           counter: checked('opt-counter'),
           showVideoCaption: checked('opt-showVideoCaption'),
-          videoPlayOverlay: checked('opt-videoPlayOverlay'),
           openOnInit: checked('opt-openOnInit'),
           index: Number($('opt-index').value) || 0,
           preload: Number($('opt-preload').value) || 0,

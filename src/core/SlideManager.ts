@@ -1,10 +1,6 @@
-import { PLAY_ICON } from './icons';
 import type { VideoProviderRenderer } from './plugin';
 import type { GalleryItem } from './types';
 import { containedBox } from './zoomTransition';
-
-/** Native scrub-bar dragging genuinely pauses `<video>` for its duration — showing the play-overlay immediately on every `pause` would flash it on every seek. Long enough to swallow that, short enough a real pause doesn't feel delayed. */
-const PAUSE_OVERLAY_DELAY_MS = 200;
 
 interface Slot {
   root: HTMLElement;
@@ -21,17 +17,11 @@ interface Slot {
 interface CacheEntry {
   node: HTMLElement;
   item: GalleryItem;
-  /** Video play-overlay button, if any — travels with `node` across cache reuse. */
-  extra?: HTMLElement;
 }
 
 export interface SlideManagerOptions {
   preload: number;
-  /** Play-overlay button's label. */
-  playVideoLabel: string;
   videoProviders: Map<string, VideoProviderRenderer>;
-  /** GalleryOptions.videoPlayOverlay — default false, opt-in. */
-  videoPlayOverlay?: boolean;
 }
 
 /**
@@ -48,9 +38,7 @@ export class SlideManager {
   readonly element: HTMLElement;
   private readonly slots: Slot[];
   private readonly preload: number;
-  private readonly playVideoLabel: string;
   private readonly videoProviders: Map<string, VideoProviderRenderer>;
-  private readonly videoPlayOverlay: boolean;
   private dragOffsetPx = 0;
 
   /** Ready nodes keyed by item index — trimmed to `centerIndex ± preload` each `render()`, same window the slots cover, so an evicted entry's video/iframe resources get released even if no slot ever reclaims it. */
@@ -70,8 +58,6 @@ export class SlideManager {
     this.element = document.createElement('div');
     this.element.className = 'shoji-slides';
     this.preload = options.preload;
-    this.playVideoLabel = options.playVideoLabel;
-    this.videoPlayOverlay = options.videoPlayOverlay ?? false;
     this.videoProviders = options.videoProviders;
 
     const count = options.preload * 2 + 1;
@@ -225,20 +211,13 @@ export class SlideManager {
     }
   }
 
-  /** Releases the slot's old content and swaps the new node in, caching it. `extra` rides as a second child. `ensureImageDecoding` goes through `moveIn` instead. */
-  private swapIn(
-    slot: Slot,
-    node: HTMLElement,
-    item: GalleryItem,
-    index: number,
-    extra?: HTMLElement,
-  ): void {
+  /** Releases the slot's old content and swaps the new node in, caching it. `ensureImageDecoding` goes through `moveIn` instead. */
+  private swapIn(slot: Slot, node: HTMLElement, item: GalleryItem, index: number): void {
     releaseVideo(slot.media);
     this.applyAspect(slot, item);
-    if (extra) slot.media.replaceChildren(node, extra);
-    else slot.media.replaceChildren(node);
+    slot.media.replaceChildren(node);
     slot.ready = true;
-    this.cache.set(index, { node, item, extra });
+    this.cache.set(index, { node, item });
   }
 
   /**
@@ -249,8 +228,7 @@ export class SlideManager {
    */
   private moveIn(slot: Slot, entry: CacheEntry, index: number): void {
     this.applyAspect(slot, entry.item);
-    if (entry.extra) slot.media.replaceChildren(entry.node, entry.extra);
-    else slot.media.replaceChildren(entry.node);
+    slot.media.replaceChildren(entry.node);
     slot.ready = true;
     this.cache.set(index, entry);
   }
@@ -400,61 +378,10 @@ export class SlideManager {
     // `poster` attribute already shows something meaningful without
     // waiting on `loadedmetadata`, so there's no decode-style gap to close
     // here; deferring would only make video slides slower to show anything.
-    // videoPlayOverlay opt-in (GalleryOptions, default false) — skipped
-    // entirely rather than created-then-hidden when off, so a host that
-    // doesn't want it pays nothing for it (no DOM node, no listeners).
-    this.swapIn(
-      slot,
-      video,
-      item,
-      index,
-      this.videoPlayOverlay ? this.createVideoPlayOverlay(video) : undefined,
-    );
+    this.swapIn(slot, video, item, index);
     const reveal = (): void => onLoad(index);
     video.addEventListener('loadedmetadata', reveal, { once: true });
     video.addEventListener('error', reveal, { once: true });
-  }
-
-  /** Tracks the video's own play/pause/ended state. Hide `.shoji-video-play-overlay` in CSS to opt out. */
-  private createVideoPlayOverlay(video: HTMLVideoElement): HTMLElement {
-    const overlay = document.createElement('button');
-    overlay.type = 'button';
-    overlay.className = 'shoji-video-play-overlay';
-    overlay.innerHTML = PLAY_ICON;
-    overlay.ariaLabel = overlay.title = this.playVideoLabel;
-    overlay.hidden = !video.paused;
-
-    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
-    const clearPauseTimer = (): void => {
-      if (pauseTimer === null) return;
-      clearTimeout(pauseTimer);
-      pauseTimer = null;
-    };
-
-    overlay.addEventListener('click', (event) => {
-      event.stopPropagation();
-      // A broken/missing source (bad path, unsupported format) rejects with
-      // NotSupportedError — a real, if unusual, host-data problem, not a
-      // reason to crash with an unhandled rejection; the native controls
-      // already show their own error state once the 'error' event fires.
-      video.play().catch(() => {});
-    });
-    video.addEventListener('play', () => {
-      clearPauseTimer();
-      overlay.hidden = true;
-    });
-    video.addEventListener('pause', () => {
-      clearPauseTimer();
-      pauseTimer = setTimeout(() => {
-        pauseTimer = null;
-        if (video.paused) overlay.hidden = false;
-      }, PAUSE_OVERLAY_DELAY_MS);
-    });
-    video.addEventListener('ended', () => {
-      clearPauseTimer();
-      overlay.hidden = false;
-    });
-    return overlay;
   }
 
   /** DESIGN.md §4-video. Unregistered provider → same placeholder as no-source video. */
