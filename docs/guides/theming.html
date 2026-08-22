@@ -88,6 +88,13 @@
           </td>
         </tr>
         <tr>
+          <td><code>--shoji-progress</code></td>
+          <td colspan="2">
+            <code>var(--shoji-color-accent)</code> — the autoplay progress bar's own fill color,
+            independently overridable without touching <code>--shoji-color-accent</code> itself.
+          </td>
+        </tr>
+        <tr>
           <td><code>--shoji-color-backdrop</code></td>
           <td><code>#000000</code></td>
           <td><code>#ffffff</code></td>
@@ -201,6 +208,16 @@
           </td>
         </tr>
         <tr>
+          <td><code>--shoji-caption-collapsed-max-height</code></td>
+          <td>
+            <code
+              >max(calc(50% - 22px - var(--shoji-spacing-md) - var(--shoji-spacing-sm)), calc(1.6em
+              + 2 * var(--shoji-spacing-sm)))</code
+            >
+            — set on <code>:root</code>
+          </td>
+        </tr>
+        <tr>
           <td><code>--shoji-caption-max-width</code></td>
           <td>
             <code>calc(100% - 2 * var(--shoji-spacing-md))</code>; above a 768px viewport,
@@ -227,6 +244,12 @@
       toolbar's real, live-measured height, kept up to date by a <code>ResizeObserver</code> in
       <code>Gallery.ts</code> — correct even if a busy toolbar wraps to multiple rows on a narrow
       viewport) is actually set on for the substitution to see it.
+      <code>--shoji-caption-collapsed-max-height</code> is the collapsed default applied on top of
+      that cap — as tall as the caption can grow while staying clear of the vertically-centered nav
+      arrows sharing its left edge, floored at roughly one line so a pathologically short dialog
+      can't collapse it to zero. A caption tall enough to still clip past both gets
+      <code>.shoji-caption--truncated</code> and its own modal (<code>--shoji-z-caption-modal</code>
+      below) to read the rest.
       <code>--shoji-caption-max-width</code> caps how wide it can grow before wrapping — spans
       (almost) the full dialog width on a narrow/mobile viewport, unchanged from the original
       behavior, but narrows to roughly a quarter of the viewport above a 768px breakpoint (floored
@@ -237,6 +260,30 @@
       never sits under it — also the caption height cap's own fallback, before the real measurement
       above has landed (normally one animation frame after mount). That one doesn't apply to HTML5
       video, which has no top-of-player UI to protect against.
+    </p>
+
+    <h2>Loading spinner</h2>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-spinner-size</code></td>
+          <td><code>40px</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-spinner-thickness</code></td>
+          <td><code>3px</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Shown over a slide while its media is still loading; ring color is
+      <code>--shoji-color-disabled</code>.
     </p>
 
     <h2>Z-index layers</h2>
@@ -283,19 +330,84 @@
         <tr>
           <td><code>--shoji-z-toast</code></td>
           <td><code>40</code></td>
-          <td>Above everything else.</td>
+          <td>Toasts.</td>
+        </tr>
+        <tr>
+          <td><code>--shoji-z-caption-modal</code></td>
+          <td><code>50</code></td>
+          <td>
+            A truncated caption's full-text modal — above everything else in the dialog, a nested
+            dialog of its own.
+          </td>
         </tr>
       </tbody>
     </table>
 
     <h2>Layout plugin properties</h2>
     <p>
-      Set internally by the plugin per relayout (<code>columnWidth</code>/gutter feed into these),
-      not typically hand-authored — but overridable the same way as any custom property. Full list
-      in the <a href="../api/index.html">API reference</a>'s <code>LayoutOptions</code> —
-      <code>--shoji-layout-column-width</code>, <code>--shoji-layout-gutter</code>,
-      <code>--shoji-layout-tile-aspect</code>, and the <code>--shoji-layout-heading-*</code> family
-      for section heading typography.
+      <code>--shoji-layout-column-width</code>, <code>--shoji-layout-gutter</code>, and
+      <code>--shoji-layout-tile-aspect</code> are set internally by the plugin per relayout (its
+      <code>columnWidth</code>/<code>gutter</code> JS options feed into these — see
+      <code>LayoutOptions</code> in the <a href="../api/index.html">API reference</a>) — but
+      overridable the same way as any custom property. The <code>--shoji-layout-heading-*</code>
+      family styles section heading typography and is plain CSS, never JS-driven.
+    </p>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>--shoji-layout-column-width</code></td>
+          <td><code>240px</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-gutter</code></td>
+          <td><code>8px</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-tile-aspect</code></td>
+          <td><code>1</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-font-family</code></td>
+          <td><code>inherit</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-title-font-size</code></td>
+          <td><code>0.875rem</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-title-font-weight</code></td>
+          <td><code>400</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-title-color</code></td>
+          <td><code>#767676</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-subtitle-font-size</code></td>
+          <td><code>0.875rem</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-subtitle-font-weight</code></td>
+          <td><code>700</code></td>
+        </tr>
+        <tr>
+          <td><code>--shoji-layout-heading-subtitle-color</code></td>
+          <td><code>inherit</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>.shoji-layout-heading</code> itself deliberately has no <code>font-size</code> custom
+      property of its own — only its <code>-title-</code>/<code>-subtitle-</code> children do; a
+      host targeting <code>.shoji-layout-heading</code> directly in CSS can already set a shared
+      base size for both, so a redundant third property would only invite drift between the two ways
+      of doing the same thing.
     </p>
 
     <h2>Icons</h2>
