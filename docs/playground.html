@@ -390,8 +390,8 @@ its own id) rather than a real function input.
 
         <fieldset>
           <legend>
-            All --shoji-* CSS variables (advanced — prefilled with shoji.css's own defaults, applied
-            live to :root)
+            All --shoji-* CSS variables (advanced, blank = default — placeholder shows shoji.css's
+            own default; only fields you fill in are applied to :root)
           </legend>
           <div class="row" id="css-vars-row"></div>
         </fieldset>
@@ -783,6 +783,17 @@ its own id) rather than a real function input.
         ['--shoji-easing', 'cubic-bezier(0.4, 0, 0.2, 1)'],
         ['--shoji-momentum-easing', 'cubic-bezier(0.2, 0, 0, 1)'],
         ['--shoji-provider-video-top-inset', 'calc(44px + 2 * var(--shoji-spacing-sm))'],
+        // Real default is narrower above a 768px viewport (shoji.css's own
+        // @media rule); the value below is only the base (mobile) formula.
+        // Inline-setting a var always beats a stylesheet media query
+        // regardless of viewport, so this one specifically must never be
+        // force-applied on load — a real regression caught by hand:
+        // pinning this to the mobile formula on a wide viewport let the
+        // caption grow to nearly full dialog width, which in turn broke
+        // its max-height clamp too (an indefinite-percentage edge case).
+        // Blank-by-default (below) avoids that for every var here, not
+        // just this one, so a value only ever overrides once you actually
+        // type something in.
         ['--shoji-caption-max-width', 'calc(100% - 2 * var(--shoji-spacing-md))'],
         [
           '--shoji-caption-collapsed-max-height',
@@ -822,7 +833,7 @@ its own id) rather than a real function input.
           const input = document.createElement('input');
           input.type = 'text';
           input.id = `var-${name}`;
-          input.value = defaultValue;
+          input.placeholder = defaultValue;
           input.size = 18;
           label.appendChild(input);
           row.appendChild(label);
@@ -832,7 +843,12 @@ its own id) rather than a real function input.
       function applyCssVars() {
         const root = document.documentElement.style;
         for (const [name] of CSS_VARS) {
-          root.setProperty(name, $(`var-${name}`).value);
+          const value = $(`var-${name}`).value;
+          if (value) {
+            root.setProperty(name, value);
+          } else {
+            root.removeProperty(name);
+          }
         }
       }
 
