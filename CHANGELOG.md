@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.29] - 2026-08-23
+
+### Fixed
+
+- **The page scroll lock's touchmove blocker was too broad on Android**:
+  it blocked touch-scrolling in _any_ host-app UI outside `.shoji-outer`,
+  not just the page body behind the lightbox — a Bootstrap modal or
+  sidebar opened on top of it, with its own genuinely scrollable content,
+  couldn't be scrolled. `bodyScrollLock.ts` now also lets a touch through
+  when it starts on a genuinely scrollable ancestor (real overflow, not
+  just `overflow-y: auto`/`scroll` set with nothing to scroll) outside the
+  lightbox, walking up and stopping at `document.documentElement` — the
+  exact background scroll this lock exists to block. Computed once per
+  gesture in a new `touchstart` listener and cached for `touchmove` to
+  read, not recomputed on every move. See DESIGN.md §2.6a's fifth real bug.
+
 ## [0.1.0-alpha.28] - 2026-08-22
 
 ### Fixed

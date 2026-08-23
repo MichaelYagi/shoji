@@ -33,6 +33,44 @@ function isRtl(): boolean {
 }
 
 /**
+ * Walks up from `node` looking for a real scrollable container — lets
+ * `onTouchMove` below allow touch-scrolling through to something like a
+ * host-app modal/sidebar opened on top of the lightbox, instead of
+ * blocking it just because it's outside `.shoji-outer`. Stops at
+ * `document.documentElement` deliberately — that's the exact background
+ * scroll this lock exists to block, not a container to exempt from it.
+ */
+function hasScrollableAncestor(node: Node | null): boolean {
+  let el = node instanceof Element ? node : (node?.parentElement ?? null);
+  while (el && el !== document.documentElement) {
+    const style = getComputedStyle(el);
+    if (
+      (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+      el.scrollHeight > el.clientHeight
+    ) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+// Computed once per gesture, in onTouchStart below, not recomputed on every
+// onTouchMove — a touch's `event.target` stays fixed to the original
+// touchstart target for the whole gesture regardless of where the finger
+// moves (Touch Events spec), so re-walking the ancestor chain and calling
+// getComputedStyle again on every move would just repeat the same, not-free
+// answer for no benefit (CLAUDE.md: no forced synchronous layout in hot
+// paths like gestures/scroll).
+let touchAllowsScrollThrough = false;
+
+function onTouchStart(event: TouchEvent): void {
+  const target = event.target;
+  const insideLightbox = target instanceof Element && target.closest(LIGHTBOX_SELECTOR) !== null;
+  touchAllowsScrollThrough = !insideLightbox && hasScrollableAncestor(target as Node | null);
+}
+
+/**
  * A real gap: `overflow: hidden` on `<html>` doesn't reliably block iOS
  * Safari's own touch-driven rubber-band/bounce scroll in every case — a
  * well-known limitation of this technique across the ecosystem. The common
@@ -46,11 +84,18 @@ function isRtl(): boolean {
  * its own `preventDefault`, see `GestureEngine.ts`) completely untouched.
  * Not a passive listener — `preventDefault` is genuinely required here to
  * suppress the browser's native scroll, not just observe it.
+ *
+ * Also untouched: a touch that started on a genuinely scrollable ancestor
+ * outside the lightbox (`touchAllowsScrollThrough`, set in `onTouchStart`
+ * above) — a real bug, reported from real usage: this used to block
+ * touch-scrolling in *any* host-app UI outside `.shoji-outer`, including
+ * something like a Bootstrap modal or sidebar opened on top of the
+ * lightbox, not just the page body behind it.
  */
 function onTouchMove(event: TouchEvent): void {
   const target = event.target;
   const insideLightbox = target instanceof Element && target.closest(LIGHTBOX_SELECTOR) !== null;
-  if (!insideLightbox) event.preventDefault();
+  if (!insideLightbox && !touchAllowsScrollThrough) event.preventDefault();
 }
 
 /**
@@ -164,6 +209,9 @@ export function lockBodyScroll(): void {
     savedHtmlOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
 
+    // passive: true — onTouchStart only ever reads/caches, never calls
+    // preventDefault(), unlike onTouchMove below.
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('touchmove', onTouchMove, { passive: false });
 
     // Starts observing only after the writes above have already landed, so
@@ -183,6 +231,7 @@ export function unlockBodyScroll(): void {
   if (lockCount === 0) {
     styleObserver?.disconnect();
     styleObserver = null;
+    document.removeEventListener('touchstart', onTouchStart);
     document.removeEventListener('touchmove', onTouchMove);
 
     document.documentElement.style.overflow = savedHtmlOverflow;
