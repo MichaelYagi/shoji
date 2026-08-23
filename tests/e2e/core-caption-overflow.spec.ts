@@ -135,6 +135,36 @@ test('regression: even a short caption on a full-bleed video click-throughs to t
   expect(hitsVideo).toBe(true);
 });
 
+test('regression: clicking a caption on a letterboxed video (nothing directly underneath it) does not close the gallery', async ({
+  page,
+}) => {
+  // A real bug, reported from real usage: the click-through above only
+  // stays safe when the video genuinely fills the space the caption sits
+  // over — this fixture's <video> never resolves real metadata
+  // (nonexistent.mp4), so it renders at the browser's own small intrinsic
+  // default (letterboxed within the dialog) without the full-bleed
+  // override the test above applies. The caption's own bottom-left
+  // position then sits over plain .shoji-slide-media background, not the
+  // video — clicking through used to fall all the way to a genuine
+  // backdrop click and close the gallery on what was meant as an
+  // interaction with the caption, not "click outside to close."
+  await page.goto('/pages/e2e-plugins.html');
+  await openVideoGallery(page, 'A short caption');
+
+  const caption = page.locator('.shoji-caption').last();
+  await expect(caption).toBeVisible();
+
+  const hitsSlideMedia = await caption.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return hit?.classList.contains('shoji-slide-media');
+  });
+  expect(hitsSlideMedia).toBe(true); // confirms this really is the letterboxed-gap case, not accidentally full-bleed
+
+  await caption.click({ force: true }); // force: true — pointer-events:none makes Playwright's own actionability check see nothing clickable there otherwise
+  await expect(page.locator('.shoji-outer.shoji-open').last()).toHaveCount(1); // must still be open
+});
+
 test('a rich HTML caption on a video slide keeps its own links clickable, even though the caption background click-throughs', async ({
   page,
 }) => {

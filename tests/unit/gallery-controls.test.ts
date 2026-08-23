@@ -545,6 +545,119 @@ describe('Gallery — click-outside-to-close', () => {
     }
     gallery.destroy();
   });
+
+  /**
+   * DESIGN.md §2.3a/§2.6a — a real bug, reported from real usage:
+   * `.shoji-caption--video`'s `pointer-events: none` (letting a click reach
+   * a video's own native controls underneath it) only stays safe when the
+   * video actually fills the space the caption sits over. A letterboxed
+   * video (narrower/shorter than the dialog) leaves the caption's own
+   * bottom-left position over plain `.shoji-slide-media` background
+   * instead — `pointer-events: none` removes the caption from
+   * `composedPath()` entirely, so the click fell all the way through to a
+   * genuine backdrop click and closed the gallery. Fixed with a coordinate
+   * check in `isBackdropClick()` (the one place in that function that has
+   * to be coordinate-based, since `pointer-events: none` is exactly what
+   * makes the selector-based check unable to see the caption at all).
+   *
+   * jsdom has no real layout engine — `getBoundingClientRect()` always
+   * returns an all-zero rect, and a plain `click()` dispatch defaults
+   * `clientX`/`clientY` to `0` too, so every click would trivially read as
+   * "inside" a zeroed rect without mocking both explicitly, same reasoning
+   * `gallery-lightbox.test.ts`'s own `mockTruncated()` documents for a
+   * different geometry-dependent feature.
+   */
+  describe('a video caption whose click-through lands on empty space (letterboxed video), not the video itself', () => {
+    function mockCaptionRect(): void {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.classList.contains('shoji-caption')) {
+          return {
+            left: 0,
+            right: 100,
+            top: 500,
+            bottom: 540,
+            width: 100,
+            height: 40,
+            x: 0,
+            y: 500,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return {
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    }
+
+    function clickAt(el: Element, x: number, y: number): void {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not close the gallery when the click lands within the caption’s own bounding box, even though it hit plain slide-media background', () => {
+      mockCaptionRect();
+      const gallery = new Gallery(document.createElement('div'), {
+        items: [{ id: 'v', src: 'x.mp4', video: { provider: 'html5' }, caption: 'short' }],
+        showVideoCaption: true,
+      });
+      gallery.open(0);
+
+      clickAt(document.querySelector('.shoji-slide-media')!, 50, 520); // inside the mocked caption rect
+
+      expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+      gallery.destroy();
+    });
+
+    it('still closes the gallery for a click outside the caption’s bounding box — the fix is scoped to the caption’s own area, not all of .shoji-slide-media', () => {
+      mockCaptionRect();
+      const gallery = new Gallery(document.createElement('div'), {
+        items: [{ id: 'v', src: 'x.mp4', video: { provider: 'html5' }, caption: 'short' }],
+        showVideoCaption: true,
+      });
+      gallery.open(0);
+
+      clickAt(document.querySelector('.shoji-slide-media')!, 500, 10); // well outside the mocked caption rect
+
+      expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    });
+
+    it('does not protect that same area when the caption is hidden (showVideoCaption defaults to false)', () => {
+      mockCaptionRect();
+      const gallery = new Gallery(document.createElement('div'), {
+        items: [{ id: 'v', src: 'x.mp4', video: { provider: 'html5' }, caption: 'short' }],
+      });
+      gallery.open(0);
+
+      clickAt(document.querySelector('.shoji-slide-media')!, 50, 520); // same coordinates as the first test above
+
+      expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    });
+
+    it('does not protect a photo slide’s caption area — there’s nothing underneath it that click-through was ever needed for', () => {
+      mockCaptionRect();
+      const gallery = new Gallery(document.createElement('div'), {
+        items: [{ id: 'p', src: 'p.jpg', caption: 'short' }],
+      });
+      gallery.open(0);
+
+      clickAt(document.querySelector('.shoji-slide-media')!, 50, 520);
+
+      expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    });
+  });
 });
 
 describe('Gallery — backdropOpacity', () => {

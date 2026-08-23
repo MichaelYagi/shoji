@@ -5,6 +5,24 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.28] - 2026-08-22
+
+### Fixed
+
+- **Clicking a shown video caption could close the gallery outright**, not
+  just click through to a control underneath it. `.shoji-caption--video`'s
+  `pointer-events: none` (letting a click reach a video's own native
+  controls) only stayed safe when the video actually filled the space the
+  caption sits over — a letterboxed video (narrower/shorter than the
+  dialog) leaves the caption's own position sitting over plain
+  `.shoji-slide-media` background instead, and the click fell all the way
+  through to a genuine backdrop click. `isBackdropClick()` (`Gallery.ts`)
+  now also checks whether the click landed within the caption's own
+  bounding box while it's a visible video caption, the one coordinate-based
+  check in an otherwise selector-based function — `pointer-events: none` is
+  exactly what makes the existing selector exclusion unable to see the
+  caption for these clicks. See DESIGN.md §2.3a's fourth real bug.
+
 ## [0.1.0-alpha.27] - 2026-08-22
 
 ### Changed

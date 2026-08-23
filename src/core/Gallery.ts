@@ -77,9 +77,25 @@ const DEFAULT_LOCALE = {
  * click registers on the element itself from the parent-page perspective.
  * `.shoji-video-mount` is the Vimeo SDK wrapper; YouTube uses a bare
  * `<iframe>` directly inside `.shoji-slide-provider-video`.
+ *
+ * `caption` — a real bug, reported from real usage: `.shoji-caption--video`
+ * (DESIGN.md §2.3a) is `pointer-events: none` so a click on it reaches the
+ * video's own native controls underneath, which works fine when the video
+ * fills enough of the slide to actually BE underneath it. A letterboxed
+ * video (narrower or shorter than the dialog, so the caption's own
+ * bottom-left position sits over plain `.shoji-slide-media` background
+ * instead) has nothing there to click through *to* — the click fell all
+ * the way through to a genuine backdrop click, closing the gallery on what
+ * was meant as an interaction with the caption/video area, not "click
+ * outside to close." `pointer-events: none` is exactly what removes the
+ * caption from `composedPath()` in the first place, so this can't be fixed
+ * by adding `.shoji-caption` to the selector above (already there — it
+ * already protects a normal, non-click-through caption on a photo slide)
+ * — checked by coordinates instead, the one place in this function that
+ * has to be.
  */
-function isBackdropClick(event: Event): boolean {
-  return !event
+function isBackdropClick(event: MouseEvent, caption: HTMLElement | null): boolean {
+  const hitsProtectedElement = event
     .composedPath()
     .some(
       (node) =>
@@ -88,6 +104,19 @@ function isBackdropClick(event: Event): boolean {
           `.shoji-slide-img, .shoji-video-mount, iframe, .shoji-counter, ${INTERACTIVE_CONTROL_SELECTOR}`,
         ),
     );
+  if (hitsProtectedElement) return false;
+
+  if (caption && !caption.hidden && caption.classList.contains('shoji-caption--video')) {
+    const rect = caption.getBoundingClientRect();
+    const withinCaption =
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+    if (withinCaption) return false;
+  }
+
+  return true;
 }
 
 function isDangerousHtmlCaption(value: unknown): value is DangerousHtmlCaption {
@@ -257,7 +286,7 @@ export class Gallery {
   };
 
   private readonly onOuterClick = (event: MouseEvent): void => {
-    if (this.closable && isBackdropClick(event)) this.close();
+    if (this.closable && isBackdropClick(event, this.dom?.caption ?? null)) this.close();
   };
 
   /**
