@@ -67,6 +67,42 @@ function isInVideoControlsMargin(event: PointerEvent, video: HTMLVideoElement): 
 }
 
 /**
+ * A real bug, found auditing this feature end to end with a real browser
+ * (not caught by any jsdom unit test — real `click`-after-drag retargeting
+ * only happens in a real browser, same gap `GestureEngine`'s own
+ * `suppressRetargetedClick` doc comment describes): a drag starting inside
+ * a video's reserved bottom margin is correctly never tracked as a Shoji
+ * gesture (see `isInVideoControlsMargin` above) — left alone for the
+ * browser's own scrub-bar handling. But the pointer is free to move
+ * anywhere before release, the same way a real scrub-bar drag routinely
+ * does, and an un-captured pointer's trailing `click` lands wherever it
+ * actually ends up — often well past the video's own rendered bounds, in
+ * `.shoji-slide-media`'s empty letterbox padding around it. That's not a
+ * real interactive control (`INTERACTIVE_CONTROL_SELECTOR`), so `Gallery.ts`'s
+ * `isBackdropClick` read it as a genuine backdrop click and closed the
+ * gallery — defeating "left alone for the browser's own controls" the
+ * moment a real scrub-bar interaction moved vertically at all. Confirmed
+ * directly: a drag starting 5px above a video's bottom edge, moving 200px
+ * down, closed the gallery even though `isInVideoControlsMargin` correctly
+ * ignored the pointerdown. Same fix as a captured drag's own retargeted
+ * click — swallow exactly one trailing click, capture phase, so it never
+ * reaches `isBackdropClick` at all. A fallback timeout also removes the
+ * listener in case no `click` ever comes, so it can't swallow a later,
+ * unrelated one.
+ */
+function suppressNextClick(dialog: HTMLElement): void {
+  let done = false;
+  const cleanup = (event?: MouseEvent): void => {
+    if (done) return;
+    done = true;
+    event?.stopPropagation();
+    dialog.removeEventListener('click', cleanup, { capture: true });
+  };
+  dialog.addEventListener('click', cleanup, { capture: true });
+  setTimeout(cleanup, 500);
+}
+
+/**
  * `.shoji-caption--video` (shoji.css, DESIGN.md §2.3a/§4-video) sets
  * `pointer-events: none` on a video slide's caption, letting a click reach
  * the video/provider controls underneath it — which also means it never
@@ -89,12 +125,20 @@ function isOverVideoCaption(event: PointerEvent, caption: HTMLElement): boolean 
   );
 }
 
-/** A click/drag starting on a real control (or, on a video slide, its click-through caption — see `isOverVideoCaption`) shouldn't also be captured as a gesture — see `GESTURE_IGNORE_SELECTOR`/`isInVideoControlsMargin`. */
-function shouldIgnoreGesture(event: PointerEvent, caption: HTMLElement): boolean {
+/** A click/drag starting on a real control (or, on a video slide, its click-through caption — see `isOverVideoCaption`) shouldn't also be captured as a gesture — see `GESTURE_IGNORE_SELECTOR`/`isInVideoControlsMargin`. Ignoring specifically for the video-margin reason also arms `suppressNextClick` — see its own doc comment. */
+function shouldIgnoreGesture(
+  event: PointerEvent,
+  caption: HTMLElement,
+  dialog: HTMLElement,
+): boolean {
   if (isOverVideoCaption(event, caption)) return true;
   const path = event.composedPath();
   const video = path.find((node): node is HTMLVideoElement => node instanceof HTMLVideoElement);
-  if (video) return isInVideoControlsMargin(event, video);
+  if (video) {
+    if (!isInVideoControlsMargin(event, video)) return false;
+    suppressNextClick(dialog);
+    return true;
+  }
   return path.some((node) => node instanceof Element && node.matches(GESTURE_IGNORE_SELECTOR));
 }
 
@@ -154,7 +198,7 @@ export class GestureController {
     this.engine = new GestureEngine(
       host.dialog,
       {
-        ignore: (event) => shouldIgnoreGesture(event, host.caption),
+        ignore: (event) => shouldIgnoreGesture(event, host.caption, host.dialog),
         shouldCapture: () => !host.isZoomed(),
         onDragStart: () => host.onActivity(),
         onDragMove: this.onDragMove,

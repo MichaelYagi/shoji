@@ -114,7 +114,12 @@ test('the cursor stays visible once a vertical drag crosses the close threshold,
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveCSS('cursor', /^(?!none$)/);
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  // `.first()` in DOM order picked the wrong slot once loop-wrap-around
+  // (DESIGN.md §2.3) started preloading a real image into the boundary
+  // slot that used to be empty — see `core-drag-gesture.spec.ts`'s
+  // `activeMedia()` for the full story. The active slot's `.shoji-slide`
+  // root always carries `translateX(calc(0% ...))` regardless of DOM order.
+  const media = page.locator('.shoji-slide[style*="calc(0%"] .shoji-slide-media');
   const box = (await media.boundingBox())!;
   const x = box.x + box.width / 2;
   const startY = box.y + box.height * 0.3;

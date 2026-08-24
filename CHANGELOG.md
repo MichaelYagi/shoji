@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.37] - 2026-08-24
+
+### Fixed
+
+- **A drag starting inside a video's reserved bottom margin (left alone
+  for the browser's own scrub-bar controls) could still close the
+  gallery**, if the pointer moved far enough that its un-captured trailing
+  `click` landed outside the video's own rendered bounds, in the slide's
+  empty letterbox padding — read as a genuine backdrop click. Confirmed on
+  a mobile-sized viewport, where a 200px vertical drag routinely exceeds
+  the video's own rendered height. Fixed by suppressing that one trailing
+  click, the same way an already-captured drag's own retargeted click was
+  already suppressed. See DESIGN.md §2.4.
+
 ## [0.1.0-alpha.36] - 2026-08-24
 
 ### Fixed

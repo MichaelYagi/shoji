@@ -1,7 +1,25 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import path from 'node:path';
 
 const corePath = () => '/@fs' + path.join(process.cwd(), 'src/core/index.ts').replace(/\\/g, '/');
+
+/**
+ * `.shoji-slide-media:has(img)').first()` picked the first slide with an
+ * `<img>` in DOM order — reliable only while the boundary pool slot stayed
+ * empty. Loop-wrap-around (DESIGN.md §2.3) now preloads real content into
+ * that slot too, so at either end of the gallery the wrapped-in neighbor
+ * sorts earlier in the DOM than the actual active slide, and every test
+ * below that dragged "the first media it found" was silently dragging the
+ * wrong (often off-screen) slot instead — confirmed directly: with the
+ * correct locator the drag registers as a real navigation, with the old one
+ * nothing happens at all. The active slot's `.shoji-slide` root always
+ * carries `translateX(calc(0% ...))` (`SlideManager.ts`'s
+ * `applyTransforms`) regardless of DOM order — a real, robust discriminator
+ * that doesn't depend on position.
+ */
+function activeMedia(page: Page): Locator {
+  return page.locator('.shoji-slide[style*="calc(0%"] .shoji-slide-media').last();
+}
 
 /**
  * DESIGN.md §2.4 — a real bug, reported from real usage: completing a
@@ -28,7 +46,7 @@ test('completing a horizontal drag navigates to the next slide and does not clos
   await expect(page.locator('.shoji-dialog')).toBeVisible();
   await expect(page.locator('.shoji-counter')).toHaveText('1 / 4');
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const startX = box.x + box.width * 0.8;
   const endX = box.x + box.width * 0.2;
@@ -60,7 +78,7 @@ test('completing a horizontal drag past the last slide wraps around to the first
   await expect(page.locator('.shoji-dialog')).toBeVisible();
   await expect(page.locator('.shoji-counter')).toHaveText('4 / 4');
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const startX = box.x + box.width * 0.8;
   const endX = box.x + box.width * 0.2;
@@ -82,7 +100,7 @@ test('completing a vertical drag still closes the gallery — the fix only suppr
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const x = box.x + box.width / 2;
   const startY = box.y + box.height * 0.3;
@@ -121,7 +139,7 @@ test('completing a vertical drag does not pop the image back to full opacity bef
   const dialog = page.locator('.shoji-dialog');
   await expect(dialog).toBeVisible();
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const x = box.x + box.width / 2;
   const startY = box.y + box.height * 0.3;
@@ -157,7 +175,7 @@ async function captureCloseLanding(
 ): Promise<{ left: number; top: number; width: number; height: number }> {
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   await media.evaluate(
     (el) =>
       new Promise<void>((resolve) => {
@@ -228,7 +246,7 @@ test("a completed vertical drag lands exactly where a button-close does — not 
   await expect(page.locator('.shoji-dialog')).toBeHidden();
 
   const dragLanding = await captureCloseLanding(page, async () => {
-    const media = page.locator('.shoji-slide-media:has(img)').first();
+    const media = activeMedia(page);
     const box = (await media.boundingBox())!;
     const x = box.x + box.width / 2;
     const startY = box.y + box.height * 0.3;
@@ -278,7 +296,7 @@ test('a very large vertical drag does not snap to a different position on releas
   await expect(page.locator('.shoji-dialog')).toBeHidden();
 
   const dragLanding = await captureCloseLanding(page, async () => {
-    const media = page.locator('.shoji-slide-media:has(img)').first();
+    const media = activeMedia(page);
     const box = (await media.boundingBox())!;
     const x = box.x + box.width / 2;
     const startY = box.y + box.height * 0.5;
@@ -366,7 +384,7 @@ test('a plain click on the image (no drag at all) is unaffected — still does n
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   await media.click();
 
   await expect(page.locator('.shoji-dialog')).toBeVisible();
@@ -465,7 +483,7 @@ test('a vertical drag past the close threshold hides the toolbar, and dragging b
   const toolbar = page.locator('.shoji-toolbar').last();
   await expect(toolbar).toHaveCSS('opacity', '1');
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const x = box.x + box.width / 2;
   const startY = box.y + box.height * 0.3;
@@ -504,7 +522,7 @@ test('the toolbar stays visually anchored in place while a vertical drag moves t
   await expect(toolbar).toBeVisible();
   const toolbarBoxBefore = (await toolbar.boundingBox())!;
 
-  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const media = activeMedia(page);
   const box = (await media.boundingBox())!;
   const x = box.x + box.width / 2;
   const startY = box.y + box.height * 0.3;
