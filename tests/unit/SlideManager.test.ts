@@ -49,6 +49,75 @@ describe('SlideManager', () => {
     expect((slots[2] as HTMLElement).style.transform).toBe('translateX(calc(100% + 0px))');
   });
 
+  it('wraps the pool around the ends when loop is true — the slot just past the last item preloads the first item, not nothing', async () => {
+    // Real bug, reported from real usage: swiping past the last slide
+    // showed nothing coming in, even though the completed navigation
+    // itself already wraps correctly (Gallery.ts's nextIndex()) — the pool
+    // preload computation never accounted for looping at all, only the
+    // final index-after-release did.
+    const manager = new SlideManager({
+      preload: 1,
+      videoProviders: new Map(),
+    });
+    manager.render(items, items.length - 1, vi.fn(), undefined, true); // loop: true, centered on the last item
+    await flush();
+
+    const slots = manager.element.querySelectorAll('.shoji-slide');
+    const nextSlotMedia = slots[2]!.querySelector('.shoji-slide-media') as HTMLElement; // offset +1, physically last in DOM
+    const img = nextSlotMedia.querySelector('img.shoji-slide-img') as HTMLImageElement | null;
+    expect(img?.src).toContain('a.jpg'); // wraps to items[0], not empty
+  });
+
+  it('wraps the pool around the start too — the slot just before the first item preloads the last item', async () => {
+    const manager = new SlideManager({
+      preload: 1,
+      videoProviders: new Map(),
+    });
+    manager.render(items, 0, vi.fn(), undefined, true); // loop: true, centered on the first item
+    await flush();
+
+    const slots = manager.element.querySelectorAll('.shoji-slide');
+    const prevSlotMedia = slots[0]!.querySelector('.shoji-slide-media') as HTMLElement; // offset -1, physically first in DOM
+    const placeholder = prevSlotMedia.querySelector('.shoji-slide-placeholder'); // last item ('video-no-source') has no playable src
+    expect(placeholder).not.toBeNull(); // wraps to items[items.length - 1], not empty
+  });
+
+  it('does not wrap when loop is false (default) — the slot past the last item stays empty, same as before', async () => {
+    const manager = new SlideManager({
+      preload: 1,
+      videoProviders: new Map(),
+    });
+    manager.render(items, items.length - 1, vi.fn()); // loop omitted — defaults to false
+    await flush();
+
+    const slots = manager.element.querySelectorAll('.shoji-slide');
+    const nextSlotMedia = slots[2]!.querySelector('.shoji-slide-media') as HTMLElement;
+    expect(nextSlotMedia.children).toHaveLength(0);
+  });
+
+  it('does not wrap when there are fewer items than pool slots, even with loop: true — avoids assigning two slots to the same index at once', async () => {
+    // A real bug found wiring wrapping up: with too few items to fill the
+    // pool without revisiting one, some offsets are mathematically
+    // guaranteed to wrap to the same index as another offset in the same
+    // pool — two/three slots independently decoding/rendering the same
+    // item at once, racing over which one isActiveReady()/reveal() treats
+    // as "the" slot for that index.
+    const twoItems: GalleryItem[] = [
+      { id: 'x', src: 'x.jpg' },
+      { id: 'y', src: 'y.jpg' },
+    ];
+    const manager = new SlideManager({
+      preload: 1, // pool size 3, more than the 2 real items
+      videoProviders: new Map(),
+    });
+    manager.render(twoItems, 1, vi.fn(), undefined, true); // loop: true, centered on the last (only 2) items
+    await flush();
+
+    const slots = manager.element.querySelectorAll('.shoji-slide');
+    const nextSlotMedia = slots[2]!.querySelector('.shoji-slide-media') as HTMLElement; // offset +1 — would wrap to index 0, colliding with offset -1
+    expect(nextSlotMedia.children).toHaveLength(0); // stays empty, same as loop: false, rather than colliding
+  });
+
   it('supports preload:0 (single slot)', () => {
     const manager = new SlideManager({
       preload: 0,

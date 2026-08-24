@@ -112,30 +112,48 @@ export class SlideManager {
     }
   }
 
-  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only from `Gallery.open()`) swaps the centerIndex slot's spinner for a low-res placeholder once it decodes, if not already ready. */
+  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only from `Gallery.open()`) swaps the centerIndex slot's spinner for a low-res placeholder once it decodes, if not already ready. `loop` matches `Gallery.ts`'s own `nextIndex()`/`prevIndex()` wrap-around — without it, the pool slot just past the last (or before the first) item has no item to preload at all, so a boundary drag reveals nothing even though the completed navigation itself already wraps correctly. */
   render(
     items: readonly GalleryItem[],
     centerIndex: number,
     onLoad: (index: number) => void,
     openPlaceholderSrc?: string,
+    loop = false,
   ): void {
-    // Trim the cache to the same centerIndex ± preload window the slots
-    // cover — releases a dropped video here rather than just letting the
-    // reference disappear (which would leave it paused-in-place, never
-    // actually released).
+    // A real bug found wiring this up: wrapping is only safe when there are
+    // enough real items to fill the whole pool without revisiting one twice
+    // — `items.length >= this.slots.length` (`2*preload + 1`). Below that,
+    // some offsets are mathematically guaranteed to wrap to the very same
+    // index as another offset in the same pool (e.g. a 1-2 item gallery),
+    // assigning two/three slots to the same index at once — each
+    // independently decoding/rendering it, racing over which one
+    // `isActiveReady()`/`reveal()` ends up treating as "the" slot for that
+    // index. Below the threshold, an out-of-range offset just shows nothing
+    // at that edge, same as `loop: false` — correct for a gallery too small
+    // to usefully "loop" through anyway.
+    const canWrap = loop && items.length >= this.slots.length;
+    const targets = this.slots.map((_, i) => {
+      const offset = i - this.preload;
+      const rawIndex = centerIndex + offset;
+      const index = canWrap ? ((rawIndex % items.length) + items.length) % items.length : rawIndex;
+      const item = index >= 0 && index < items.length ? items[index] : undefined;
+      return { offset, index, item };
+    });
+
+    // Trim the cache to the same window the slots above now cover — the
+    // *wrapped* set of indices, not a raw numeric range, matching `loop`;
+    // a raw-range check would otherwise immediately evict a just-cached
+    // wrapped entry (e.g. index 0, preloaded one slot past the last item)
+    // since it falls far outside `centerIndex ± preload` as plain numbers.
+    // Releases a dropped video here rather than just letting the reference
+    // disappear (which would leave it paused-in-place, never released).
+    const windowIndices = new Set(targets.map((t) => t.index));
     for (const [index, entry] of this.cache) {
-      if (index < centerIndex - this.preload || index > centerIndex + this.preload) {
+      if (!windowIndices.has(index)) {
         releaseVideoNode(entry.node);
         this.cache.delete(index);
       }
     }
-
-    const targets = this.slots.map((_, i) => {
-      const offset = i - this.preload;
-      const index = centerIndex + offset;
-      const item = index >= 0 && index < items.length ? items[index] : undefined;
-      return { offset, index, item };
-    });
 
     // Phase 1 — claim in place, before anything gets destructively
     // released. A target already resident and ready in *some* slot (not

@@ -43,6 +43,38 @@ test('completing a horizontal drag navigates to the next slide and does not clos
   await expect(page.locator('.shoji-dialog')).toBeVisible(); // still open — the bug closed it here
 });
 
+/**
+ * DESIGN.md §2.3 — a real bug, reported from real usage: swiping past the
+ * last slide showed nothing coming in mid-drag, even though releasing it
+ * would correctly wrap to the first slide (`Gallery.ts`'s own `nextIndex()`
+ * always wrapped) — the pool's own preload computation never accounted for
+ * looping at all. `tests/unit/SlideManager.test.ts` covers the preload/
+ * wrap math directly; this confirms a real drag past the boundary actually
+ * completes into slide 1, not just that the wrapped content was preloaded.
+ */
+test('completing a horizontal drag past the last slide wraps around to the first', async ({
+  page,
+}) => {
+  await page.goto('/pages/e2e-plugins.html');
+  await page.locator('#thumbs a[data-index="3"]').click(); // last of 4
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+  await expect(page.locator('.shoji-counter')).toHaveText('4 / 4');
+
+  const media = page.locator('.shoji-slide-media:has(img)').first();
+  const box = (await media.boundingBox())!;
+  const startX = box.x + box.width * 0.8;
+  const endX = box.x + box.width * 0.2;
+  const y = box.y + box.height / 2;
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(endX, y, { steps: 10 });
+  await page.mouse.up();
+
+  await expect(page.locator('.shoji-counter')).toHaveText('1 / 4');
+  await expect(page.locator('.shoji-dialog')).toBeVisible();
+});
+
 test('completing a vertical drag still closes the gallery — the fix only suppresses the click a captured drag leaves behind, it does not disable click-outside-to-close entirely', async ({
   page,
 }) => {

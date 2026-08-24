@@ -1599,6 +1599,7 @@ export class Gallery {
         }
       },
       openPlaceholderSrc,
+      this.loop,
     );
     this.setSlideLoading(!this.slides.isActiveReady());
 

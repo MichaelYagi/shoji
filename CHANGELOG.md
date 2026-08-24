@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.35] - 2026-08-24
+
+### Fixed
+
+- **Swiping past the last slide (or before the first) showed nothing
+  coming in, even with `loop: true` (the default)** — the completed
+  navigation itself already wrapped correctly, but the pool's own preload
+  computation never accounted for looping at all, so the boundary-adjacent
+  slot simply had no item to show during the drag. `SlideManager`'s pool
+  now wraps around the ends the same way `Gallery`'s own navigation
+  already does, whenever there are enough items to fill the pool without
+  revisiting one twice — below that item count, a boundary slot still
+  shows nothing, same as `loop: false`. See DESIGN.md §2.3.
+
 ## [0.1.0-alpha.34] - 2026-08-24
 
 ### Fixed

@@ -878,14 +878,22 @@ describe('Gallery — loading state while the active slide loads', () => {
 
   it('does re-trigger the loading state navigating past the preloaded window (not cached)', async () => {
     const el = document.createElement('div');
+    // 4 items, not 3 — with loop: true (the default) and preload: 1, the
+    // pool wraps around the ends (DESIGN.md §2.3/§2.4's swipe-shows-the-
+    // wrapped-neighbor fix), so a 3-item gallery would preload every item
+    // at least once (pool size 3 == item count 3) and this test's premise
+    // ("'c' is not [preloaded]") would no longer hold. 4 items keeps one
+    // (here, 'c') genuinely outside the wrapped window: centered on 'a',
+    // offsets -1/0/+1 wrap to 'd'/'a'/'b' — 'c' is never among them.
     const gallery = new Gallery(el, {
       items: [
         { id: 'a', src: 'a.jpg' },
         { id: 'b', src: 'b.jpg' },
         { id: 'c', src: 'c.jpg' },
+        { id: 'd', src: 'd.jpg' },
       ],
       plugins: [plugin],
-      preload: 1, // 'b' is preloaded alongside 'a'; 'c' is not
+      preload: 1, // 'b' (and, via wrap, 'd') are preloaded alongside 'a'; 'c' is not
     });
     gallery.open(0);
     await Promise.resolve();

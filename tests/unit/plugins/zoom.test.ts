@@ -51,8 +51,29 @@ function dialog(): HTMLElement {
   return document.querySelector('.shoji-dialog') as HTMLElement;
 }
 
+/**
+ * Scoped to the offset-0 `.shoji-slide` specifically (`translateX(calc(0%
+ * ...`), not just the first `.shoji-slide-img` in DOM order — a real gap in
+ * this helper, caught by SlideManager.ts's loop-wrap fix (DESIGN.md §2.3):
+ * slots are physically fixed in DOM order at construction (`i - preload`),
+ * so the "prev" slot is always first in the document regardless of which
+ * offset it's currently relabeled to. Before loop-wrapping, that slot had
+ * no image at all at either end of a small gallery, so the plain selector
+ * happened to skip past it to the real active one; wrapping populates it
+ * with the (real) wrapped-around neighbor, so the plain selector started
+ * finding that instead. Plain JS traversal, not a
+ * `[style*="calc(0%"] descendant` CSS selector — jsdom's selector engine
+ * fails to match that combination (confirmed directly: `Element.matches()`
+ * on the slide alone succeeds, but `querySelector` with a descendant
+ * combinator after it does not), most likely the unbalanced `(` inside the
+ * attribute-value string tripping up the same-engine's compound-selector
+ * path specifically.
+ */
 function activeImg(): HTMLImageElement {
-  return document.querySelector('.shoji-slide-img') as HTMLImageElement;
+  const slide = Array.from(document.querySelectorAll<HTMLElement>('.shoji-slide')).find((el) =>
+    el.style.transform.includes('calc(0%'),
+  );
+  return slide?.querySelector('.shoji-slide-img') as HTMLImageElement;
 }
 
 function button(label: string): HTMLButtonElement {
