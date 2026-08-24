@@ -1656,8 +1656,20 @@ export class Gallery {
       this.captionFadePending = true;
       this.dom.caption.style.opacity = '0';
     }
+    // A real bug/inconsistency: a video item *does* have a known naturalSize
+    // (its aspect ratio), but the low-res placeholder this unlocks is a
+    // dead end — it's a static photo, immediately replaced by something
+    // entirely different (an error state, or the real embed), not the same
+    // image sharpening the way a photo's placeholder-to-full-res handoff
+    // is. That made a fresh open() inconsistent with navigating back to an
+    // already-cached video slide (no placeholder shown there at all, since
+    // navigate() never passes one) — same "no second, disconnected
+    // transition" reasoning as the naturalSize-unknown case above, just
+    // triggered by content type instead of missing dimensions.
     this.renderCurrentSlide(
-      naturalSize ? this.resolveOpenPlaceholderSrc(this.itemList[index], origin) : undefined,
+      naturalSize && !this.itemList[index]?.video
+        ? this.resolveOpenPlaceholderSrc(this.itemList[index], origin)
+        : undefined,
     );
     this.dom!.outer.classList.add('shoji-open');
     document.addEventListener('keydown', this.onKeydown);

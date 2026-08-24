@@ -181,6 +181,12 @@ export class SlideManager {
       slot.ready = false;
       releaseVideo(slot.media);
       slot.media.replaceChildren(createSpinner());
+      // Early, not just from swapIn/moveIn/onReady below — a provider
+      // video's poster (shown synchronously, well before onReady) needs
+      // --shoji-provider-video-aspect (shoji.css) set before it ever
+      // paints, or it always letterboxes to the 16:9 fallback regardless of
+      // the item's own declared shape.
+      this.applyAspect(slot, item);
       if (index === centerIndex && openPlaceholderSrc) {
         const naturalSize =
           item.width && item.height ? { width: item.width, height: item.height } : undefined;
@@ -208,6 +214,21 @@ export class SlideManager {
       slot.media.style.aspectRatio = `${item.width} / ${item.height}`;
     } else {
       slot.media.style.removeProperty('aspect-ratio');
+    }
+    // A provider video's real shape (YouTube/Vimeo iframe, via
+    // shoji.css's cqw/cqh sizing) — kept separate from the aspect-ratio
+    // above since that alone can't shape a non-replaced element like an
+    // iframe/div (see shoji.css's own comment on this). Only set for a
+    // video item: harmless either way, but meaningless for a photo, whose
+    // own object-fit: contain already uses its real decoded dimensions
+    // directly.
+    if (item.video && item.width && item.height) {
+      slot.media.style.setProperty(
+        '--shoji-provider-video-aspect',
+        `calc(${item.width} / ${item.height})`,
+      );
+    } else {
+      slot.media.style.removeProperty('--shoji-provider-video-aspect');
     }
   }
 
@@ -317,9 +338,17 @@ export class SlideManager {
     const img = createOpenPlaceholder(src);
     const reveal = (): void => {
       if (slot.assignedIndex !== index || slot.ready) return; // stale, or the real content already won the race
-      // Only the spinner, not slot.media wholesale — a provider video may
-      // have already appended its own (still-hidden) container alongside it.
-      slot.media.querySelector('.shoji-slide-spinner')?.remove();
+      // Only loading indicators, not slot.media wholesale — a provider video
+      // may have already appended its own (still-hidden) container alongside
+      // it. A real bug: this only ever cleared the spinner, not a
+      // `.shoji-slide-provider-poster` a provider video's `item.poster`
+      // (`showProviderPoster`, below) may have *already* synchronously
+      // inserted by the time this async decode resolves — leaving both
+      // visible at once, the poster at its own small natural size next to
+      // this placeholder's explicitly-computed large box.
+      slot.media
+        .querySelectorAll('.shoji-slide-spinner, .shoji-slide-provider-poster')
+        .forEach((el) => el.remove());
       slot.media.appendChild(img);
       if (naturalSize) {
         const containerRect = slot.root.getBoundingClientRect();
@@ -362,6 +391,15 @@ export class SlideManager {
     video.controls = true;
     video.playsInline = true;
     if (item.poster) video.poster = item.poster;
+    // Before `loadedmetadata`, a <video> has no real intrinsic size to
+    // contain itself against (object-fit: contain, above) — the UA default
+    // (300x150) until then, visibly jumping to the real shape once it
+    // loads. item.width/item.height (already known up front, unlike a
+    // photo's real dimensions) sidesteps that: same shape from the first
+    // frame the poster shows, no jump once metadata actually arrives.
+    if (item.width && item.height) {
+      video.style.aspectRatio = `${item.width} / ${item.height}`;
+    }
 
     if (item.sources && item.sources.length > 0) {
       for (const s of item.sources) {
@@ -428,14 +466,23 @@ export class SlideManager {
       if (revealed || controller.signal.aborted) return;
       revealed = true;
       container.hidden = false;
-      // Whichever loading indicator (Phase 2's spinner, a poster, or an
-      // open placeholder) is still sitting behind the now-visible embed —
-      // never the embed itself.
+      // Whichever loading indicator(s) — Phase 2's spinner, a poster, an
+      // open placeholder — are still sitting behind the now-visible embed,
+      // never the embed itself. A real bug: a host-supplied `item.poster`
+      // (`showProviderPoster`, above) and `Gallery.open()`'s own low-res
+      // placeholder (`revealOpenPlaceholder`, below) are added independently
+      // of each other and neither replaces the other, so *both* can be
+      // sitting in `slot.media` at once by the time this runs.
+      // `querySelector(...).remove()` only ever removed the first match in
+      // DOM order, permanently leaking whichever indicator lost that
+      // race — visible as the leaked one's image bleeding through the
+      // transparent letterboxing gaps around a provider embed that isn't
+      // exactly the container's own aspect ratio.
       slot.media
-        .querySelector(
+        .querySelectorAll(
           '.shoji-slide-spinner, .shoji-slide-open-placeholder, .shoji-slide-provider-poster',
         )
-        ?.remove();
+        .forEach((el) => el.remove());
       this.applyAspect(slot, item);
       slot.ready = true;
       this.cache.set(index, { node: container, item });
@@ -467,7 +514,16 @@ export class SlideManager {
 
 /** DESIGN.md §4.3 — a provider video's loading placeholder, host-supplied (`item.poster`) or a renderer's own fallback (`setPoster`) — replaces whichever generic indicator (spinner, or an earlier poster call) is currently in `slot.media`, same "only one loading indicator at a time" rule `createOpenPlaceholder`'s own callers already follow. Reuses `.shoji-slide-img`'s sizing, same reasoning as that function. */
 function showProviderPoster(slot: Slot, url: string): void {
-  slot.media.querySelector('.shoji-slide-spinner, .shoji-slide-provider-poster')?.remove();
+  // A real bug: this only ever cleared the spinner/a previous poster, never
+  // an already-shown `.shoji-slide-open-placeholder` (`revealOpenPlaceholder`,
+  // above) — that placeholder's async image decode can resolve *before*
+  // this (e.g. `setPoster`'s fallback, resolved later than the initial
+  // synchronous poster call), leaving both visible at once.
+  slot.media
+    .querySelectorAll(
+      '.shoji-slide-spinner, .shoji-slide-open-placeholder, .shoji-slide-provider-poster',
+    )
+    .forEach((el) => el.remove());
   const img = document.createElement('img');
   img.className = 'shoji-slide-img shoji-slide-provider-poster';
   img.alt = '';

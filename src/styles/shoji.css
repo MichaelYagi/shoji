@@ -366,6 +366,19 @@
      .shoji-slide, coincidentally the same size — explicit here so that
      stays true even if that ever changes). */
   position: relative;
+  /* DESIGN.md §4-video — a provider video's real shape (YouTube/Vimeo/
+     html5), as a plain number SlideManager sets from item.width/item.height
+     (`applyAspect()`); `calc(16 / 9)` here is only the fallback for an item
+     that never declares a size, kept exact via calc() rather than a rounded
+     decimal. `.shoji-slide-provider-poster` below reads this directly.
+     `.shoji-slide-provider-video > iframe`/`.shoji-video-mount` also read it,
+     through their own nearer `container-type: size` context (still on
+     `.shoji-slide-provider-video` itself, unchanged) — declared again here
+     too only so a poster, `.shoji-slide-provider-video`'s own *sibling*
+     rather than a descendant of it, has a container-type ancestor to
+     resolve cqw/cqh against at all. */
+  --shoji-provider-video-aspect: calc(16 / 9);
+  container-type: size;
 }
 
 .shoji-slide-img,
@@ -385,6 +398,21 @@
 .shoji-slide-open-placeholder {
   width: 100%;
   height: 100%;
+}
+
+/* A provider video's poster (§4.3, `item.poster`/a renderer's own fallback)
+   is the same "usually a small thumbnail file, needs to be forced up to
+   fill the frame" case as the open placeholder above — a real bug, a small
+   poster rendering as a postage-stamp-sized image floating in the slide
+   instead of filling it. Sized to the *video's* real shape
+   (`--shoji-provider-video-aspect`, `.shoji-slide-media` above) via the same
+   cqw/cqh contain-within-either-axis formula the real embed below uses, not
+   plain width/height: 100% — so the poster occupies exactly the box the
+   embed will occupy once it swaps in, instead of the two visibly jumping
+   between a video-shaped box and a dialog-shaped one. */
+.shoji-slide-provider-poster {
+  width: min(100cqw, calc(100cqh * var(--shoji-provider-video-aspect)));
+  height: min(100cqh, calc(100cqw / var(--shoji-provider-video-aspect)));
 }
 
 /* DESIGN.md §4-video — a provider's embed (an <iframe>, typically) has no
@@ -408,18 +436,24 @@
    instead of inside it, showing Shoji's own dark backdrop through this
    element's own transparent background rather than the provider's white. */
 .shoji-slide-provider-video {
-  position: relative;
+  /* `position: absolute; inset: 0` instead of sizing this as a centered flex
+     item: a real bug, reported from real usage, traced to this box's parent
+     (`.shoji-slide-media`, `justify-content: center`) miscentering it once
+     `container-type: size` (below) is also in play — confirmed directly via
+     `getBoundingClientRect()` on the real reported case, rendering the box
+     shifted half its own width off-screen. Taking it out of flex flow
+     entirely sidesteps the centering pass for this element altogether: it
+     fills `.shoji-slide-media` directly (already `position: relative`), no
+     distribution/centering math involved. `.shoji-slide-media`'s own
+     `justify-content: center` is untouched — still needed for photo/HTML5-
+     video slides, where content can be smaller than the box. */
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
   box-sizing: border-box;
   padding-top: var(--shoji-provider-video-top-inset);
-  /* Establishes `cqw`/`cqh` below as this element's own *content* box
-     (padding already excluded) — safe to size independently of children
-     since its own width/height already come from its parent, not from
-     whatever ends up inside it. */
   container-type: size;
 }
 
@@ -433,7 +467,7 @@
    alone computation, ignoring how much height is actually available either
    way) — `!important` discards whatever it tries to set inline. The direct
    `> iframe` case is YouTube, which has no such wrapper at all.
-   `min(100cqw, 100cqh * 16/9)`/`min(100cqh, 100cqw * 9/16)` is the
+   `min(100cqw, 100cqh * ratio)`/`min(100cqh, 100cqw / ratio)` is the
    contain-within-either-axis formula `object-fit: contain` gives an
    <img>/<video> natively — plain `aspect-ratio` alone can't do this for a
    non-replaced element like a div/iframe: it only ever derives *one*
@@ -443,11 +477,19 @@
    whichever direction wasn't the binding constraint. Confirmed directly at
    both a wide-short viewport (height the binding constraint) and a
    narrow-tall one (width the binding constraint) — container query units
-   are what actually solve both at once, not `aspect-ratio` by itself. */
+   are what actually solve both at once, not `aspect-ratio` by itself.
+   `--shoji-provider-video-aspect` (`.shoji-slide-media` above) is the
+   item's own real `width`/`height` ratio when known — a real bug/gap this
+   replaces a hardcoded `16/9` to fix: every provider video rendered as if
+   it were 16:9 regardless of its declared shape, YouTube/Vimeo/html5 alike
+   (html5's own `<video>` element is fixed the same way, directly, in
+   `SlideManager.ts`'s `renderVideo()` — it doesn't go through this
+   container-query-based sizing at all, having a real intrinsic size of its
+   own once it loads). */
 .shoji-slide-provider-video > iframe,
 .shoji-video-mount {
-  width: min(100cqw, calc(100cqh * 16 / 9)) !important;
-  height: min(100cqh, calc(100cqw * 9 / 16)) !important;
+  width: min(100cqw, calc(100cqh * var(--shoji-provider-video-aspect))) !important;
+  height: min(100cqh, calc(100cqw / var(--shoji-provider-video-aspect))) !important;
   margin: 0 !important;
   padding: 0 !important;
 }

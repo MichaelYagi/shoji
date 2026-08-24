@@ -5,6 +5,43 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.30] - 2026-08-23
+
+### Fixed
+
+- **A provider video (YouTube/Vimeo) with `item.width`/`item.height` set
+  could render shifted half its own width off-screen**, cut down the
+  middle of the dialog, with an unrelated poster/thumbnail image visible
+  behind it. `.shoji-slide-provider-video` was sized as a centered flex
+  item, which at least one Chromium build miscentered once combined with
+  `container-type: size`; it's now positioned out of flex flow entirely
+  (`position: absolute; inset: 0`).
+- **A provider video's poster and `Gallery.open()`'s own low-res
+  open-placeholder could both remain visible at once** — a small floating
+  thumbnail next to a larger image — because the code that reveals the
+  real embed only ever cleared the _first_ matching loading indicator, not
+  every one still present. Fixed to clear all of them.
+- **A small `item.poster` file rendered at its own tiny native pixel
+  size** instead of filling the slide, unlike a native `<video poster>`,
+  which always fills its element regardless of the poster image's own
+  resolution.
+- **Opening a video item always showed a low-res placeholder photo before
+  swapping to the real (often visually unrelated) content** — inconsistent
+  with navigating back to an already-cached video slide, which shows the
+  final content directly. Video items now skip the placeholder on open,
+  matching that behavior.
+- **DOM-mode (`data-shoji-*`) video items silently lost `item.width`/
+  `item.height`** — `scan.ts` never read those attributes for a video item
+  the way it already did for a photo, so every fix above only ever worked
+  in dynamic (`items: [...]`) mode.
+- **A provider video always rendered as if it were exactly 16:9, regardless
+  of its declared `item.width`/`item.height`** — the letterboxing formula
+  had `16/9` hardcoded. Now driven by a CSS variable
+  (`--shoji-provider-video-aspect`) set from the item's real dimensions,
+  covering YouTube, Vimeo, and HTML5 `<video>` alike; HTML5 video also gets
+  its shape immediately via `aspect-ratio`, instead of only once
+  `loadedmetadata` fires. See DESIGN.md §4.3.
+
 ## [0.1.0-alpha.29] - 2026-08-23
 
 ### Fixed

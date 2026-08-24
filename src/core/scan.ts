@@ -110,6 +110,12 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
     if (sources.length) item.sources = sources;
     const poster = videoEl.getAttribute('poster');
     if (poster) item.poster = poster;
+    // Same bug as the data-shoji-video branch below: without this, these
+    // fall through into item.data.width/height as strings instead.
+    const width = numAttr(element, 'data-shoji-width');
+    if (width !== undefined) item.width = width;
+    const height = numAttr(element, 'data-shoji-height');
+    if (height !== undefined) item.height = height;
     applyCommon(element, item, src);
     return item;
   }
@@ -122,6 +128,15 @@ function scanVideo(element: HTMLElement): GalleryItem | undefined {
     if (resolved.sources) item.sources = resolved.sources;
     const poster = attr(element, 'data-shoji-poster');
     if (poster) item.poster = poster;
+    // A real bug: unlike `scanImage`, this never read these — they fell
+    // through into `item.data.width`/`item.data.height` as strings instead
+    // of `item.width`/`item.height`, silently losing `applyAspect()`'s
+    // aspect-ratio and the open-placeholder's explicit natural-size box for
+    // every DOM-mode (`data-shoji-*`) provider-video item.
+    const width = numAttr(element, 'data-shoji-width');
+    if (width !== undefined) item.width = width;
+    const height = numAttr(element, 'data-shoji-height');
+    if (height !== undefined) item.height = height;
     applyCommon(element, item, videoUrl);
     return item;
   }
