@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.36] - 2026-08-24
+
+### Fixed
+
+- **Hotfix for alpha.35's pool-wrap feature: two provider-video items that
+  a real fixture deliberately keeps apart (a spacer tile between them,
+  specifically so at most one embed is ever resident in the DOM at once)
+  could end up wrapped into the same pool together anyway**, when the
+  gallery's real item count exactly matched the pool size
+  (`2*preload + 1`) — the "prev" slot at the first item and the "next"
+  slot at the last item both wrap to the _other_ end regardless of what
+  sits between them in the source array. alpha.35's own collision guard
+  (`items.length >= pool size`) allowed exactly this case through, since
+  no single index is ever assigned twice here — only strictly more items
+  than pool slots (`>`, not `>=`) actually prevents the first and last
+  items from becoming pool-adjacent. See DESIGN.md §2.3.
+
 ## [0.1.0-alpha.35] - 2026-08-24
 
 ### Fixed

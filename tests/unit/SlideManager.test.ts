@@ -118,6 +118,41 @@ describe('SlideManager', () => {
     expect(nextSlotMedia.children).toHaveLength(0); // stays empty, same as loop: false, rather than colliding
   });
 
+  it('does not wrap when there are exactly as many items as pool slots, even with loop: true — the first and last items would otherwise become pool-adjacent despite never colliding on one index', async () => {
+    // A second, real bug found the same way as the one directly above, in
+    // real CI usage rather than reasoning about it up front: exactly
+    // `items.length === slots.length` never assigns two slots to the same
+    // index (no collision, unlike the two-item case above) — but it does
+    // mean the "prev" slot at the first item and the "next" slot at the
+    // last item both wrap to the *other* end, making them pool-adjacent.
+    // A real fixture (demo/pages/video.ts) relies on two provider-video
+    // items never being within `preload` of each other — a spacer tile
+    // deliberately sits between them in the array — specifically so at
+    // most one `.shoji-slide-provider-video` is ever resident in the DOM
+    // at once, which some e2e tests depend on. In CI, that fixture's own
+    // photo tiles come from `demo/assets/` (gitignored, empty on a fresh
+    // checkout), collapsing it to exactly 3 items with preload: 1 (pool
+    // size 3) — opening the first of the 3 wrapped its "prev" slot to the
+    // third (the *other* video item), despite the spacer still sitting
+    // between them in the array, putting both video containers in the DOM
+    // at once.
+    const threeItems: GalleryItem[] = [
+      { id: 'x', src: 'x.jpg' },
+      { id: 'spacer', src: 'spacer.jpg' },
+      { id: 'y', src: 'y.jpg' },
+    ];
+    const manager = new SlideManager({
+      preload: 1, // pool size 3, exactly matching the 3 real items
+      videoProviders: new Map(),
+    });
+    manager.render(threeItems, 0, vi.fn(), undefined, true); // loop: true, centered on the first item
+    await flush();
+
+    const slots = manager.element.querySelectorAll('.shoji-slide');
+    const prevSlotMedia = slots[0]!.querySelector('.shoji-slide-media') as HTMLElement; // offset -1 — would wrap to index 2 ('y'), pool-adjacent to index 0 ('x') despite the spacer between them
+    expect(prevSlotMedia.children).toHaveLength(0); // stays empty, same as loop: false
+  });
+
   it('supports preload:0 (single slot)', () => {
     const manager = new SlideManager({
       preload: 0,

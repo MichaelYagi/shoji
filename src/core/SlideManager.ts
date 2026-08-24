@@ -120,18 +120,30 @@ export class SlideManager {
     openPlaceholderSrc?: string,
     loop = false,
   ): void {
-    // A real bug found wiring this up: wrapping is only safe when there are
-    // enough real items to fill the whole pool without revisiting one twice
-    // — `items.length >= this.slots.length` (`2*preload + 1`). Below that,
-    // some offsets are mathematically guaranteed to wrap to the very same
-    // index as another offset in the same pool (e.g. a 1-2 item gallery),
-    // assigning two/three slots to the same index at once — each
-    // independently decoding/rendering it, racing over which one
-    // `isActiveReady()`/`reveal()` ends up treating as "the" slot for that
-    // index. Below the threshold, an out-of-range offset just shows nothing
-    // at that edge, same as `loop: false` — correct for a gallery too small
-    // to usefully "loop" through anyway.
-    const canWrap = loop && items.length >= this.slots.length;
+    // A real bug found wiring this up, in two parts:
+    // 1. Wrapping is only safe from an *index-collision* standpoint when
+    //    there are enough real items to fill the whole pool without
+    //    revisiting one twice. `items.length === this.slots.length`
+    //    (`2*preload + 1`) looks like exactly enough — but that's the
+    //    degenerate case where the pool *is* the whole gallery: the "prev"
+    //    slot at the first item and the "next" slot at the last item both
+    //    wrap to the *other* end, making the first and last items adjacent
+    //    in the pool even though nothing actually collides on one index.
+    //    Confirmed directly, reproduced in CI: a real fixture built
+    //    specifically to keep two provider-video items apart (never within
+    //    `preload` of each other, so at most one `.shoji-slide-provider-
+    //    video` is ever resident) broke exactly this way once its
+    //    `demo/assets/`-dependent photo tiles were empty (gitignored, so a
+    //    fresh CI checkout has none) — collapsing it down to precisely
+    //    `items.length === this.slots.length`, wrapping the two video items
+    //    into each other's pool despite the fixture's own spacer tile still
+    //    sitting between them in the array. Requiring *strictly* more items
+    //    than pool slots (`>`, not `>=`) is what actually guarantees the
+    //    first and last items are never both in the wrapped pool at once.
+    // 2. Below that threshold, an out-of-range offset just shows nothing at
+    //    that edge, same as `loop: false` — correct for a gallery too small
+    //    to usefully "loop" through anyway.
+    const canWrap = loop && items.length > this.slots.length;
     const targets = this.slots.map((_, i) => {
       const offset = i - this.preload;
       const rawIndex = centerIndex + offset;
