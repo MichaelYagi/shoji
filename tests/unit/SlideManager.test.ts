@@ -507,6 +507,18 @@ describe('SlideManager', () => {
     expect(img.draggable).toBe(false);
   });
 
+  it('disables native video drag (same real bug as the image case above, never fixed here until a real e2e drag over an actual <video controls> element caught it: horizontal navigate/vertical close over a video slide silently failed in every real browser, though jsdom never reproduces the underlying pointercancel-vs-native-drag race)', async () => {
+    const manager = new SlideManager({
+      preload: 0,
+      videoProviders: new Map(),
+    });
+    manager.render(items, 3, vi.fn());
+    await flush();
+
+    const video = manager.element.querySelector('video.shoji-slide-video') as HTMLVideoElement;
+    expect(video.draggable).toBe(false);
+  });
+
   it('leaves out aspect-ratio when width/height are absent', async () => {
     const manager = new SlideManager({
       preload: 0,

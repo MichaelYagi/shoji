@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.34] - 2026-08-24
+
+### Fixed
+
+- **Swipe-to-navigate and drag-to-close over an HTML5 video slide could
+  fail — most reliably for a horizontal navigate drag, in every browser.**
+  `<video>` is natively draggable by default, same as `<img>` (already
+  fixed for photos); left on, a real drag gesture could lose the race to
+  the browser's own native media-drag recognition, which fires
+  `pointercancel` and hands the interaction to `dragstart`/`drag` instead
+  — the gesture appears to move once, then stop dead. `video.draggable =
+false` now matches the existing photo fix. See DESIGN.md §2.4.
+
 ## [0.1.0-alpha.33] - 2026-08-24
 
 ### Fixed

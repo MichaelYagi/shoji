@@ -390,6 +390,21 @@ export class SlideManager {
     video.className = 'shoji-slide-video';
     video.controls = true;
     video.playsInline = true;
+    // Same real bug as the image path's own `img.draggable = false` above
+    // (`ensureImageDecoding()`), never fixed here since no e2e test
+    // previously drove a real mouse drag over an actual native
+    // `<video controls>` element to catch it: a `<video>` is natively
+    // draggable by default too (drag-to-save-elsewhere), and left on, a
+    // real drag gesture (navigate, vertical-close) can lose the race to the
+    // browser's own "start a native media drag" recognition — it fires
+    // `pointercancel` and hands the interaction to `dragstart`/`drag`
+    // instead, so the gesture appears to move once, then stop dead, since
+    // every pointer event after the cancel is simply never dispatched here
+    // again. Confirmed directly: reproduced consistently (every browser
+    // project) for a horizontal drag specifically, though the same
+    // mechanism can affect vertical too. Disabling native drag makes
+    // Pointer Events own the gesture unconditionally, same as for photos.
+    video.draggable = false;
     if (item.poster) video.poster = item.poster;
     // Before `loadedmetadata`, a <video> has no real intrinsic size to
     // contain itself against (object-fit: contain, above) — the UA default
