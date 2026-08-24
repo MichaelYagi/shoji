@@ -66,8 +66,32 @@ function isInVideoControlsMargin(event: PointerEvent, video: HTMLVideoElement): 
   return event.clientY >= rect.bottom - (Number.isFinite(margin) ? margin : 0);
 }
 
-/** A click/drag starting on a real control shouldn't also be captured as a gesture — see `GESTURE_IGNORE_SELECTOR`/`isInVideoControlsMargin`. */
-function shouldIgnoreGesture(event: PointerEvent): boolean {
+/**
+ * `.shoji-caption--video` (shoji.css, DESIGN.md §2.3a/§4-video) sets
+ * `pointer-events: none` on a video slide's caption, letting a click reach
+ * the video/provider controls underneath it — which also means it never
+ * appears in `event.composedPath()` there at all, so
+ * `GESTURE_IGNORE_SELECTOR`'s selector-based check can't see it, the same
+ * gap `Gallery.ts`'s `isBackdropClick()` already solves the same way:
+ * checked by coordinates instead, the one place this function has to be.
+ * A real bug this fixes: swipe-to-navigate/drag-to-close over a provider
+ * video's own letterboxed margins (below) would otherwise engage right
+ * through the caption sitting over them.
+ */
+function isOverVideoCaption(event: PointerEvent, caption: HTMLElement): boolean {
+  if (caption.hidden || !caption.classList.contains('shoji-caption--video')) return false;
+  const rect = caption.getBoundingClientRect();
+  return (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+}
+
+/** A click/drag starting on a real control (or, on a video slide, its click-through caption — see `isOverVideoCaption`) shouldn't also be captured as a gesture — see `GESTURE_IGNORE_SELECTOR`/`isInVideoControlsMargin`. */
+function shouldIgnoreGesture(event: PointerEvent, caption: HTMLElement): boolean {
+  if (isOverVideoCaption(event, caption)) return true;
   const path = event.composedPath();
   const video = path.find((node): node is HTMLVideoElement => node instanceof HTMLVideoElement);
   if (video) return isInVideoControlsMargin(event, video);
@@ -77,6 +101,8 @@ function shouldIgnoreGesture(event: PointerEvent): boolean {
 /** What `GestureController` needs from `Gallery` — narrow on purpose, so this module never reaches into Gallery internals beyond this contract. */
 export interface GestureControllerHost {
   dialog: HTMLElement;
+  /** Read live, not snapshotted — `shouldIgnoreGesture()` needs its current bounding box/visibility on every gesture start, not whatever it was when `GestureController` was constructed. See `isOverVideoCaption`. */
+  caption: HTMLElement;
   slides: SlideManager;
   canGoNext(): boolean;
   canGoPrev(): boolean;
@@ -128,7 +154,7 @@ export class GestureController {
     this.engine = new GestureEngine(
       host.dialog,
       {
-        ignore: shouldIgnoreGesture,
+        ignore: (event) => shouldIgnoreGesture(event, host.caption),
         shouldCapture: () => !host.isZoomed(),
         onDragStart: () => host.onActivity(),
         onDragMove: this.onDragMove,

@@ -656,6 +656,7 @@ export class Gallery {
     this.gesture = new GestureController(
       {
         dialog: dom.dialog,
+        caption: dom.caption,
         slides: this.slides,
         canGoNext: () => this.loop || this.activeIndex < this.itemList.length - 1,
         canGoPrev: () => this.loop || this.activeIndex > 0,

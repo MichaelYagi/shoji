@@ -3,14 +3,16 @@ import { Gallery } from '../../src/core';
 import type { GalleryItem } from '../../src/core/types';
 
 /**
- * DESIGN.md §2.4/§4.3 — swipe-to-navigate/drag-to-close over an HTML5 video
- * slide. `INTERACTIVE_CONTROL_SELECTOR` (GestureController.ts) still
- * excludes `<video>` wholesale for backdrop-click/caption-selection
- * purposes, but a *separate* gesture-only carve-out lets Shoji's own
- * gestures reach the video body — everywhere except a reserved bottom
- * margin (`--shoji-video-gesture-margin`), left alone for the browser's own
- * scrub-bar/tap-to-toggle chrome, which isn't real DOM Shoji can measure or
- * exclude by selector.
+ * DESIGN.md §2.4/§4.3 — swipe-to-navigate/drag-to-close over a video slide.
+ * `INTERACTIVE_CONTROL_SELECTOR` (GestureController.ts) still excludes
+ * `<video>` wholesale for backdrop-click/caption-selection purposes, but a
+ * *separate* gesture-only carve-out lets Shoji's own gestures reach the
+ * video body — for HTML5, everywhere except a reserved bottom margin
+ * (`--shoji-video-gesture-margin`), left alone for the browser's own
+ * scrub-bar/tap-to-toggle chrome; for a provider (YouTube/Vimeo/custom),
+ * everywhere outside the caption's own bounds — the iframe/embed itself is
+ * architecturally unreachable regardless (cross-origin isolation), so only
+ * the letterboxed margins around it are ever in play there.
  *
  * A separate file, not added to `gallery-gestures.test.ts` (already past
  * CLAUDE.md's ~400-line split guideline) — same helper patterns as that
@@ -171,6 +173,139 @@ function dragVerticalFromVideo(startY: number, endY: number): void {
   firePointer(dialog(), 'pointermove', { clientX: 0, clientY: endY, timeStamp: 20 });
   firePointer(dialog(), 'pointerup', { clientX: 0, clientY: endY, timeStamp: 30 });
 }
+
+/** A `provider: 'custom'` renderer builds a real (synthetic) iframe synchronously — same shape a YouTube/Vimeo renderer's own container ends up in, without needing their real SDKs mocked. */
+function providerVideoItems(n: number): GalleryItem[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: String(i),
+    src: 'x',
+    caption: `caption ${i}`,
+    video: {
+      provider: 'custom' as const,
+      render: (container: HTMLElement, _item: GalleryItem, onReady: () => void) => {
+        const iframe = document.createElement('iframe');
+        container.appendChild(iframe);
+        onReady();
+      },
+    },
+  }));
+}
+
+function providerContainer(): HTMLElement {
+  return document.querySelector('.shoji-slide-provider-video') as HTMLElement;
+}
+
+function caption(): HTMLElement {
+  return document.querySelector('.shoji-caption') as HTMLElement;
+}
+
+/** A video caption defaults to hidden (Gallery.ts's captionVisibleOnVideo, DESIGN.md §2.3a) — `isOverVideoCaption()`'s exclusion only ever matters once it's actually shown, same as a real viewer would have to reveal it first. */
+function revealVideoCaption(): void {
+  (document.querySelector('.shoji-caption-toggle') as HTMLButtonElement).click();
+}
+
+/** 300 wide, 40 tall, bottom-left — distinct from PROVIDER_RECT below so a touch can land in either without ambiguity. */
+const CAPTION_RECT: DOMRect = {
+  top: 260,
+  left: 0,
+  right: 300,
+  bottom: 300,
+  width: 300,
+  height: 40,
+  x: 0,
+  y: 260,
+  toJSON: () => ({}),
+};
+
+/** Same box `.shoji-slide-provider-video` fills — matches DIALOG_RECT (position: absolute; inset: 0, shoji.css), so margin/gutter coordinates outside the (synthetic, zero-sized-in-jsdom) iframe are just "anywhere in this box". */
+const PROVIDER_RECT = DIALOG_RECT;
+
+/** Mocks real rects for `.shoji-slide-provider-video` and `.shoji-caption`, distinct from every other element — same jsdom-has-no-layout-engine reasoning as `mockVideoGeometry` above. No `getComputedStyle` override needed here: `isInVideoControlsMargin()` only ever runs for a real `<video>`, never a provider's `<iframe>`/container div. */
+function mockProviderGeometry(): void {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.classList.contains('shoji-caption')) return CAPTION_RECT;
+    if (this.classList.contains('shoji-slide-provider-video')) return PROVIDER_RECT;
+    return DIALOG_RECT;
+  });
+}
+
+describe("Gallery — swipe-to-navigate/drag-to-close over a provider video (custom/YouTube/Vimeo)'s own letterboxed margins (DESIGN.md §2.4/§4.3)", () => {
+  it('a horizontal drag starting in the margin (outside the caption) navigates to the next slide', () => {
+    mockProviderGeometry();
+    const gallery = new Gallery(document.body, {
+      items: providerVideoItems(3),
+      preload: 0,
+    });
+    gallery.open(0);
+
+    // y=50 — well clear of CAPTION_RECT's [260, 300] band.
+    firePointer(providerContainer(), 'pointerdown', { clientX: 0, clientY: 50, timeStamp: 0 });
+    firePointer(dialog(), 'pointermove', { clientX: 11, clientY: 50, timeStamp: 10 });
+    firePointer(dialog(), 'pointermove', { clientX: -80, clientY: 50, timeStamp: 20 });
+    firePointer(dialog(), 'pointerup', { clientX: -80, clientY: 50, timeStamp: 30 });
+    fireTransitionEnd(slideRoot());
+
+    expect(gallery.currentIndex).toBe(1);
+    gallery.destroy();
+  });
+
+  it("a horizontal drag starting within the video caption's bounds does not navigate, even though pointer-events: none means the event target is the provider container underneath, not the caption itself", () => {
+    mockProviderGeometry();
+    const gallery = new Gallery(document.body, {
+      items: providerVideoItems(3),
+      preload: 0,
+    });
+    gallery.open(0);
+    revealVideoCaption();
+    expect(caption().hidden).toBe(false);
+    expect(caption().classList.contains('shoji-caption--video')).toBe(true);
+
+    // y=280 — inside CAPTION_RECT's [260, 300] band. Dispatched on the
+    // provider container (not the caption) — pointer-events: none means a
+    // real browser's hit-test would land here too, never on the caption
+    // itself; composedPath() alone can't see it, which is exactly what
+    // isOverVideoCaption()'s coordinate check exists for.
+    firePointer(providerContainer(), 'pointerdown', { clientX: 0, clientY: 280, timeStamp: 0 });
+    firePointer(dialog(), 'pointermove', { clientX: 11, clientY: 280, timeStamp: 10 });
+    firePointer(dialog(), 'pointermove', { clientX: -80, clientY: 280, timeStamp: 20 });
+    firePointer(dialog(), 'pointerup', { clientX: -80, clientY: 280, timeStamp: 30 });
+    fireTransitionEnd(slideRoot());
+
+    expect(gallery.currentIndex).toBe(0);
+    gallery.destroy();
+  });
+
+  it('a vertical drag starting in the margin (outside the caption) closes the gallery', () => {
+    mockProviderGeometry();
+    const gallery = new Gallery(document.body, { items: providerVideoItems(1), preload: 0 });
+    gallery.open(0);
+
+    firePointer(providerContainer(), 'pointerdown', { clientX: 150, clientY: 50, timeStamp: 0 });
+    firePointer(dialog(), 'pointermove', { clientX: 150, clientY: 61, timeStamp: 10 });
+    firePointer(dialog(), 'pointermove', { clientX: 150, clientY: 300, timeStamp: 20 });
+    firePointer(dialog(), 'pointerup', { clientX: 150, clientY: 300, timeStamp: 30 });
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).toBeNull();
+    gallery.destroy();
+  });
+
+  it("a vertical drag starting within the video caption's bounds does not close", () => {
+    mockProviderGeometry();
+    const gallery = new Gallery(document.body, { items: providerVideoItems(1), preload: 0 });
+    gallery.open(0);
+    revealVideoCaption();
+    expect(caption().hidden).toBe(false);
+
+    // y=270 — inside CAPTION_RECT's [260, 300] band.
+    firePointer(providerContainer(), 'pointerdown', { clientX: 150, clientY: 270, timeStamp: 0 });
+    firePointer(dialog(), 'pointermove', { clientX: 150, clientY: 281, timeStamp: 10 });
+    firePointer(dialog(), 'pointermove', { clientX: 150, clientY: 500, timeStamp: 20 });
+    firePointer(dialog(), 'pointerup', { clientX: 150, clientY: 500, timeStamp: 30 });
+
+    expect(document.querySelector('.shoji-outer.shoji-open')).not.toBeNull();
+    gallery.destroy();
+  });
+});
 
 describe('Gallery — swipe-to-navigate/drag-to-close over HTML5 video (DESIGN.md §2.4/§4.3)', () => {
   it('a horizontal drag starting above the reserved bottom margin navigates to the next slide', () => {

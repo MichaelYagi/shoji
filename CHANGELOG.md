@@ -5,6 +5,24 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.32] - 2026-08-24
+
+### Added
+
+- **Swipe-to-navigate and vertical drag-to-close now also work over a
+  provider video's own letterboxed margins (YouTube/Vimeo)** — the same
+  reserved-margin approach alpha.31 added for HTML5. This was already
+  possible (a provider's `<iframe>`/container was never in the gesture
+  exclusion list to begin with) except for one gap: a video slide's
+  caption is click-through (`pointer-events: none`), so it never appeared
+  in the touch event's own path — meaning a swipe/drag starting visually
+  over the caption would engage right through it. Fixed with a
+  coordinate-based check (`isOverVideoCaption()`), the same approach
+  `isBackdropClick()` already used for the identical click-through gap. As
+  with the iframe body itself, this can only ever cover the _margins_
+  around a provider embed — a touch starting inside the iframe is outside
+  the browser's reach for Shoji entirely. See DESIGN.md §2.4.
+
 ## [0.1.0-alpha.31] - 2026-08-24
 
 ### Added
