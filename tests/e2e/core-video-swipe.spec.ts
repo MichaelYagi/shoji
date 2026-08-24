@@ -31,11 +31,23 @@ const TINY_MP4 =
  * math with synthetic events; this confirms a real mouse drag against a
  * real, laid-out `<video>` element produces the same behavior end to end.
  *
- * Y coordinates below are computed from the *real*, measured margin
- * boundary (`rect.bottom - marginPx`, both read live from the page) rather
- * than an assumed absolute pixel offset — robust to whatever the video
- * actually renders at, not just the `item.width`/`item.height` declared.
- * Clamped to stay within the video's own bounds either way.
+ * Two real bugs found getting this to pass consistently across every
+ * browser project in CI (never reproduced locally — this sandbox's e2e
+ * harness has its own unrelated networking issue, DESIGN.md's own
+ * documented gap class for this kind of thing):
+ * 1. An empty/invalid `data:` URI never gives the video real intrinsic
+ *    dimensions (fixed above, `TINY_MP4`).
+ * 2. Reading `--shoji-video-gesture-margin` back via `getComputedStyle()`
+ *    from *this test itself* and computing an exact boundary position
+ *    (`rect.bottom - margin ± a few px`) was itself a second, independent
+ *    source of imprecision — close enough to the real boundary that
+ *    cross-browser sub-pixel/rendering differences could land a "should
+ *    be just outside the margin" point on the wrong side of it. Dropped
+ *    entirely: the two "should engage" tests below start at the video's
+ *    own *top* edge, and the two "should be ignored" tests start at its
+ *    very *bottom* edge — unambiguously on the correct side of any
+ *    plausible margin value, not dependent on computing the boundary at
+ *    all.
  */
 async function openVideoGallery(page: Page, itemCount = 2): Promise<void> {
   await page.goto('/pages/e2e-plugins.html');
@@ -73,30 +85,16 @@ async function openVideoGallery(page: Page, itemCount = 2): Promise<void> {
     );
 }
 
-/** `rect.bottom - marginPx`, both read live in the same `evaluate()` call — no Playwright round-trip staleness between measuring the box and the margin. Clamped 20px inside the video's own top edge, in case the video renders shorter than `marginPx` itself. */
-async function marginBoundary(page: Page): Promise<{ boundary: number; box: DOMRect }> {
-  return page
-    .locator('.shoji-slide-video')
-    .last()
-    .evaluate((el) => {
-      const rect = el.getBoundingClientRect();
-      const marginPx = parseFloat(
-        getComputedStyle(el).getPropertyValue('--shoji-video-gesture-margin'),
-      );
-      const margin = Number.isFinite(marginPx) ? marginPx : 0;
-      return { boundary: rect.bottom - margin, box: rect.toJSON() };
-    });
-}
-
-test('a horizontal drag starting above the reserved bottom margin navigates to the next video slide', async ({
+test('a horizontal drag starting at the top of the video (unambiguously above any reserved margin) navigates to the next video slide', async ({
   page,
 }) => {
   await openVideoGallery(page);
   const counter = page.locator('.shoji-counter').last();
   await expect(counter).toHaveText('1 / 2');
 
-  const { boundary, box } = await marginBoundary(page);
-  const y = Math.max(box.y + 5, boundary - 20);
+  const video = page.locator('.shoji-slide-video').last();
+  const box = (await video.boundingBox())!;
+  const y = box.y + 10;
   const startX = box.x + box.width * 0.8;
   const endX = box.x + box.width * 0.2;
 
@@ -108,15 +106,16 @@ test('a horizontal drag starting above the reserved bottom margin navigates to t
   await expect(counter).toHaveText('2 / 2');
 });
 
-test('a horizontal drag starting inside the reserved bottom margin does not navigate — native scrub-bar territory', async ({
+test('a horizontal drag starting at the very bottom edge of the video (unambiguously inside any reserved margin) does not navigate — native scrub-bar territory', async ({
   page,
 }) => {
   await openVideoGallery(page);
   const counter = page.locator('.shoji-counter').last();
   await expect(counter).toHaveText('1 / 2');
 
-  const { boundary, box } = await marginBoundary(page);
-  const y = Math.min(box.y + box.height - 5, boundary + 15);
+  const video = page.locator('.shoji-slide-video').last();
+  const box = (await video.boundingBox())!;
+  const y = box.y + box.height - 5;
   const startX = box.x + box.width * 0.8;
   const endX = box.x + box.width * 0.2;
 
@@ -128,15 +127,16 @@ test('a horizontal drag starting inside the reserved bottom margin does not navi
   await expect(counter).toHaveText('1 / 2'); // unchanged
 });
 
-test('a vertical drag starting above the reserved bottom margin closes the gallery, same as a photo slide', async ({
+test('a vertical drag starting at the top of the video (unambiguously above any reserved margin) closes the gallery, same as a photo slide', async ({
   page,
 }) => {
   await openVideoGallery(page, 1);
   const dialog = page.locator('.shoji-dialog').last();
   await expect(dialog).toBeVisible();
 
-  const { boundary, box } = await marginBoundary(page);
-  const startY = Math.max(box.y + 5, boundary - 40);
+  const video = page.locator('.shoji-slide-video').last();
+  const box = (await video.boundingBox())!;
+  const startY = box.y + 10;
   const x = box.x + box.width / 2;
 
   await page.mouse.move(x, startY);
@@ -147,15 +147,16 @@ test('a vertical drag starting above the reserved bottom margin closes the galle
   await expect(dialog).toBeHidden();
 });
 
-test('a vertical drag starting inside the reserved bottom margin does not close — native scrub-bar territory', async ({
+test('a vertical drag starting at the very bottom edge of the video (unambiguously inside any reserved margin) does not close — native scrub-bar territory', async ({
   page,
 }) => {
   await openVideoGallery(page, 1);
   const dialog = page.locator('.shoji-dialog').last();
   await expect(dialog).toBeVisible();
 
-  const { boundary, box } = await marginBoundary(page);
-  const startY = Math.min(box.y + box.height - 5, boundary + 15);
+  const video = page.locator('.shoji-slide-video').last();
+  const box = (await video.boundingBox())!;
+  const startY = box.y + box.height - 5;
   const x = box.x + box.width / 2;
 
   await page.mouse.move(x, startY);
