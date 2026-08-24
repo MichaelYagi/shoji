@@ -59,6 +59,16 @@
      so the video never resizes as the toolbar fades in/out. HTML5 video
      has no top-of-player UI at all, so it's untouched by that use. */
   --shoji-provider-video-top-inset: calc(44px + 2 * var(--shoji-spacing-sm));
+  /* DESIGN.md §2.4/§4.3 — a native <video controls>'s own scrub-bar/tap-
+     region is browser-rendered chrome, not real DOM Shoji can measure or
+     exclude by selector; approximated as a fixed bottom margin instead,
+     read by GestureController.ts's isInVideoControlsMargin(). 56px covers
+     the tallest common native controls bar (mobile Safari) with a little
+     headroom; a host that knows its target browsers render a shorter one
+     can safely set this lower. Swipe-to-navigate/drag-to-close only ever
+     reach the video body above this margin — never guaranteed to line up
+     with the real control bar pixel-for-pixel, just a reasonable default. */
+  --shoji-video-gesture-margin: 56px;
   /* Caps how wide the caption box can grow before wrapping — `width:
      fit-content` alone let a long caption wrap out to the dialog's full
      width (only actually bounded by the padding subtracted below),

@@ -35,11 +35,43 @@ const VERTICAL_FEEDBACK_DISTANCE = 160;
 export const INTERACTIVE_CONTROL_SELECTOR =
   'button, video, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption, .shoji-caption-modal, .shoji-toolbar-overflow-panel';
 
-/** A click/drag starting on a real control shouldn't also be captured as a gesture — see `INTERACTIVE_CONTROL_SELECTOR`. */
+/**
+ * `INTERACTIVE_CONTROL_SELECTOR` minus `video` — everything else there still
+ * needs a real click/drag to behave natively (select/scroll caption text,
+ * a plugin's own control, etc.), same reasoning as that selector's own doc
+ * comment. `video` is carved out separately, below: unlike those, a native
+ * `<video controls>`'s own interactive surface (tap-to-toggle, the
+ * scrub-bar drag) isn't the *whole* element — DESIGN.md §2.4/§4.3's
+ * swipe-to-navigate-video-slides feature needs gestures to reach the rest
+ * of it, not be blocked outright the way the shared selector above still
+ * blocks it for backdrop-click/caption-selection purposes.
+ */
+const GESTURE_IGNORE_SELECTOR =
+  'button, input, select, textarea, a[href], [data-shoji-no-drag], .shoji-caption, .shoji-caption-modal, .shoji-toolbar-overflow-panel';
+
+/**
+ * A native `<video controls>`'s own scrub-bar/tap-to-toggle chrome is
+ * browser-rendered, not real DOM Shoji can measure — there's no element to
+ * exclude by selector the way `GESTURE_IGNORE_SELECTOR` excludes a real
+ * `<button>`. Approximated instead as a fixed bottom margin
+ * (`--shoji-video-gesture-margin`, shoji.css), reserved for the browser's
+ * own touch handling; a touch starting above it is fair game for Shoji's
+ * own gestures, same as anywhere on a photo slide.
+ */
+function isInVideoControlsMargin(event: PointerEvent, video: HTMLVideoElement): boolean {
+  const rect = video.getBoundingClientRect();
+  const margin = parseFloat(
+    getComputedStyle(video).getPropertyValue('--shoji-video-gesture-margin'),
+  );
+  return event.clientY >= rect.bottom - (Number.isFinite(margin) ? margin : 0);
+}
+
+/** A click/drag starting on a real control shouldn't also be captured as a gesture — see `GESTURE_IGNORE_SELECTOR`/`isInVideoControlsMargin`. */
 function shouldIgnoreGesture(event: PointerEvent): boolean {
-  return event
-    .composedPath()
-    .some((node) => node instanceof Element && node.matches(INTERACTIVE_CONTROL_SELECTOR));
+  const path = event.composedPath();
+  const video = path.find((node): node is HTMLVideoElement => node instanceof HTMLVideoElement);
+  if (video) return isInVideoControlsMargin(event, video);
+  return path.some((node) => node instanceof Element && node.matches(GESTURE_IGNORE_SELECTOR));
 }
 
 /** What `GestureController` needs from `Gallery` — narrow on purpose, so this module never reaches into Gallery internals beyond this contract. */

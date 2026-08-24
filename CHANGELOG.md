@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.31] - 2026-08-24
+
+### Added
+
+- **Swipe-to-navigate and vertical drag-to-close now work over an HTML5
+  `<video>` slide**, the same as they already do over a photo — previously
+  `<video>` was excluded from every gesture entirely. A native `<video
+controls>`'s own scrub-bar/tap-to-toggle chrome isn't real DOM Shoji can
+  measure, so it's approximated as a fixed reserved margin along the
+  bottom (`--shoji-video-gesture-margin`, defaults to `56px`,
+  host-overridable) — gestures only ever engage above that margin, leaving
+  the browser's own touch handling untouched below it. Scoped to HTML5
+  only: a touch starting inside a YouTube/Vimeo `<iframe>` never reaches
+  Shoji's gesture engine at all (cross-origin isolation), so there's
+  nothing to extend there. See DESIGN.md §2.4.
+
 ## [0.1.0-alpha.30] - 2026-08-23
 
 ### Fixed
