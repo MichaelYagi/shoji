@@ -189,6 +189,19 @@
      interactive regardless (this is about implicit browser gesture
      handling, not pointer-events). */
   touch-action: none;
+  /* DESIGN.md §2.4 — a real bug, reported from real usage: a drag over the
+     photo/video (navigate/close) also started the browser's own native
+     text/image selection — visible as the image or video highlighting blue
+     mid-drag. `GestureEngine.ts` only calls `preventDefault()` on
+     `pointermove` once a direction has locked past `lockThreshold`
+     (horizontal) or not at all (vertical, DESIGN.md's own gesture-engine
+     notes above) — by then, or for a vertical drag, ever, the browser's own
+     selection-start heuristic has already had its chance. `user-select:
+     none` stops it at the source instead of racing preventDefault's own
+     timing. `.shoji-caption` below re-enables it — selecting caption text
+     is a deliberate, still-supported gesture-exclusion (this section,
+     "ignore()"), not something this should also block. */
+  user-select: none;
   /* Caps how tall the caption box (a descendant, DESIGN.md §2.3a) can grow
      before it scrolls internally — grows naturally with its content up to
      that point, no cap kicking in early. The real ceiling is this
@@ -590,6 +603,11 @@
   bottom: var(--shoji-spacing-md);
   left: var(--shoji-spacing-md);
   z-index: var(--shoji-z-toolbar);
+  /* Re-enables text selection `.shoji-dialog`'s own user-select: none
+     (above) turns off broadly — caption text staying selectable is a
+     deliberate, existing feature (this section's "ignore()"), unaffected
+     by that fix for the photo/video's own native-selection bug. */
+  user-select: text;
   width: fit-content;
   max-width: var(--shoji-caption-max-width);
   max-height: min(var(--shoji-caption-max-height), var(--shoji-caption-collapsed-max-height));

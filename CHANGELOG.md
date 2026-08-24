@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.33] - 2026-08-24
+
+### Fixed
+
+- **Dragging to navigate or close a slide also started the browser's own
+  native text/image selection**, visible as the photo or video
+  highlighting blue mid-drag. `GestureEngine`'s own `preventDefault()`
+  only ever fires once a horizontal drag's direction has locked (and
+  never for a vertical one at all), so the browser's selection-start
+  heuristic already had a head start regardless. Fixed with `user-select:
+none` on the dialog, with the caption explicitly re-enabling it —
+  selecting caption text is unaffected. See DESIGN.md §2.4.
+
 ## [0.1.0-alpha.32] - 2026-08-24
 
 ### Added
