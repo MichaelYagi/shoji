@@ -306,6 +306,25 @@ export const Zoom: ShojiPlugin = {
       zoomTo(scale + deltaScale, x, y);
     });
 
+    /**
+     * A generic command surface, requested directly (DESIGN.md §4.6), so a
+     * *custom* (host-authored) plugin's own button can drive zoom without
+     * importing this plugin at all — same "events over inheritance"
+     * decoupling `pinchStart`/`doubleTap`/`wheelZoom` above already use,
+     * just in the opposite direction (a command in, not a gesture relay).
+     * `GalleryEvents` (`core/types.ts`) already extends `Record<string,
+     * unknown>`, so `ctx.emit('requestZoomIn', {})` from any plugin —
+     * official or custom — type-checks with zero core changes; this is
+     * just the listening half. Each mirrors its real toolbar button
+     * exactly — same functions, same behavior on a video slide (a no-op,
+     * `zoomInStep`/`zoomOutStep`/`actualSizeToggle` all bail via `getImg()`
+     * returning null there).
+     */
+    const offRequestZoomIn = ctx.on('requestZoomIn', zoomInStep);
+    const offRequestZoomOut = ctx.on('requestZoomOut', zoomOutStep);
+    const offRequestZoomActualSize = ctx.on('requestZoomActualSize', actualSizeToggle);
+    const offRequestZoomReset = ctx.on('requestZoomReset', () => reset(true));
+
     // --- pan while zoomed — the one gesture core's relay doesn't cover; see the plugin doc comment for why this can't reuse GestureEngine. ---
     let panPointerId: number | null = null;
     let lastX = 0;
@@ -406,16 +425,8 @@ export const Zoom: ShojiPlugin = {
       else zoomTo(scale / buttonStep, x, y, maxScale, true);
     }
 
-    const zoomInBtn = buildButton(ZOOM_IN_ICON, zoomInLabel);
-    const zoomOutBtn = buildButton(ZOOM_OUT_ICON, zoomOutLabel);
-    const actualSizeBtn = buildButton(ZOOM_ACTUAL_SIZE_ICON, actualSizeLabel);
-
-    zoomInBtn.addEventListener('click', zoomInStep);
-    zoomOutBtn.addEventListener('click', zoomOutStep);
-    actualSizeBtn.addEventListener('click', () => {
-      // Reads natural.width directly (unlike every other entry point, which
-      // just hands zoomTo a target and lets it call ensureNatural itself) —
-      // needs its own whenSettled wrap for that reason, not just zoomTo's.
+    /** Shared by the actual-size toolbar button and `requestZoomActualSize` below. Reads natural.width directly (unlike every other entry point, which just hands zoomTo a target and lets it call ensureNatural itself) — needs its own whenSettled wrap for that reason, not just zoomTo's. */
+    function actualSizeToggle(): void {
       whenSettled(() => {
         const img = getImg();
         if (!img || !img.naturalWidth) return;
@@ -428,7 +439,15 @@ export const Zoom: ShojiPlugin = {
         const { x, y } = centerAnchor();
         zoomTo(targetScale, x, y, targetScale, true); // ceiling = targetScale — bypasses maxScale deliberately
       });
-    });
+    }
+
+    const zoomInBtn = buildButton(ZOOM_IN_ICON, zoomInLabel);
+    const zoomOutBtn = buildButton(ZOOM_OUT_ICON, zoomOutLabel);
+    const actualSizeBtn = buildButton(ZOOM_ACTUAL_SIZE_ICON, actualSizeLabel);
+
+    zoomInBtn.addEventListener('click', zoomInStep);
+    zoomOutBtn.addEventListener('click', zoomOutStep);
+    actualSizeBtn.addEventListener('click', actualSizeToggle);
 
     // 'right' — registered in this order, so they cluster left-to-right as
     // zoomIn, zoomOut, actualSize, then whatever later plugin (or the close
@@ -532,6 +551,10 @@ export const Zoom: ShojiPlugin = {
       offPinchEnd();
       offDoubleTap();
       offWheelZoom();
+      offRequestZoomIn();
+      offRequestZoomOut();
+      offRequestZoomActualSize();
+      offRequestZoomReset();
       outer.removeEventListener('pointerdown', onPointerDown);
       outer.removeEventListener('pointermove', onPointerMove);
       outer.removeEventListener('pointerup', onPointerUp);

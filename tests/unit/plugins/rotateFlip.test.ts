@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../../src/core';
 import { RotateFlip } from '../../../src/plugins/rotateFlip';
+import type { PluginContext } from '../../../src/core/plugin';
+
+/** A minimal stand-in for a host-authored custom plugin — captures `ctx.emit` so a test can fire a `request*` command the same way a real custom plugin's own button click would, with zero import of RotateFlip itself. */
+class EmitterPlugin {
+  name = 'test-emitter';
+  emit!: PluginContext['emit'];
+  init(ctx: PluginContext): void {
+    this.emit = ctx.emit;
+  }
+}
 
 const items = [
   { id: 'a', src: 'a.jpg' },
@@ -519,5 +529,58 @@ describe('RotateFlip — cleanup', () => {
     gallery.destroy();
 
     expect(document.querySelector('.shoji-toolbar-button')).toBeNull();
+  });
+});
+
+describe('RotateFlip — request* commands (DESIGN.md §4.5), a generic surface for a custom plugin', () => {
+  function makeGalleryWithEmitter(): { gallery: Gallery; emitter: EmitterPlugin } {
+    const emitter = new EmitterPlugin();
+    const gallery = new Gallery(document.createElement('div'), {
+      items,
+      plugins: [RotateFlip, emitter],
+      preload: 0,
+    });
+    return { gallery, emitter };
+  }
+
+  it('requestRotateRight mirrors the toolbar button exactly', () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+
+    emitter.emit('requestRotateRight', {});
+
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(90deg)');
+    gallery.destroy();
+  });
+
+  it('requestRotateLeft mirrors the toolbar button exactly', () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+
+    emitter.emit('requestRotateLeft', {});
+
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(1) rotate(-90deg)');
+    gallery.destroy();
+  });
+
+  it('requestFlipHorizontal mirrors the toolbar button exactly, including aria-pressed', () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+
+    emitter.emit('requestFlipHorizontal', {});
+
+    expect(activeMedia().style.transform).toBe('scaleX(-1) scaleY(1) rotate(0deg)');
+    expect(button('Flip horizontal').getAttribute('aria-pressed')).toBe('true');
+    gallery.destroy();
+  });
+
+  it('requestFlipVertical mirrors the toolbar button exactly', () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+
+    emitter.emit('requestFlipVertical', {});
+
+    expect(activeMedia().style.transform).toBe('scaleX(1) scaleY(-1) rotate(0deg)');
+    gallery.destroy();
   });
 });

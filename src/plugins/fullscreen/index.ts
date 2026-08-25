@@ -88,10 +88,12 @@ export const Fullscreen: ShojiPlugin = {
       button.setAttribute('aria-pressed', String(active));
     }
 
-    button.addEventListener('click', () => {
+    /** Shared by the toolbar button and `requestFullscreenToggle` below. */
+    function toggleFullscreen(): void {
       if (isActive()) exitFullscreen();
       else requestFullscreen(outer);
-    });
+    }
+    button.addEventListener('click', toggleFullscreen);
 
     const onChange = (): void => {
       const active = isActive();
@@ -112,12 +114,24 @@ export const Fullscreen: ShojiPlugin = {
     const offClose = ctx.on('close', () => {
       if (isActive()) exitFullscreen();
     });
+    /**
+     * A generic command surface, requested directly (DESIGN.md §4.4), so a
+     * *custom* (host-authored) plugin's own button can toggle fullscreen
+     * without importing this plugin at all — same "events over
+     * inheritance" decoupling `close` above already uses.
+     * `GalleryEvents` (`core/types.ts`) already extends `Record<string,
+     * unknown>`, so `ctx.emit('requestFullscreenToggle', {})` from any
+     * plugin — official or custom — type-checks with zero core changes;
+     * this is just the listening half.
+     */
+    const offRequestToggle = ctx.on('requestFullscreenToggle', toggleFullscreen);
 
     return () => {
       document.removeEventListener('fullscreenchange', onChange);
       document.removeEventListener('webkitfullscreenchange', onChange);
       removeButton();
       offClose();
+      offRequestToggle();
       if (isActive()) exitFullscreen();
     };
   },

@@ -376,25 +376,31 @@ export const Autoplay: ShojiPlugin = {
       ctx.emit('autoplayStop', {});
     }
 
+    // A real bug, reported from real usage: zooming in *first*, then
+    // pressing Play, never paused at all — clicking Play doesn't itself
+    // fire zoomChange/rotateFlipChange, and a single-step "toggle back to
+    // neutral" action afterward (Actual size, double-tap-to-reset) only
+    // ever emits the *already-neutral* event, never one crossing the
+    // engaged threshold — so nothing downstream would ever have caught it
+    // either. Re-checked here instead, right after a genuine manual
+    // start — the one path a viewer can actually reach a non-neutral view
+    // state from *before* pressing Play. `zoomedIn`/`rotatedOrFlipped`
+    // (below) track only the *current* state, purely for this check —
+    // deliberately not reused for the pause-on-event logic itself, which
+    // reacts to each event directly. Shared by toggle()'s manual-start path
+    // and requestAutoplayStart below — both are "a genuine manual start,"
+    // just triggered from a different control.
+    function reCheckEngagedAfterManualStart(): void {
+      if ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped)) stop();
+    }
+
     function toggle(): void {
       if (playing) {
         stop();
         return;
       }
       start();
-      // A real bug, reported from real usage: zooming in *first*, then
-      // pressing Play, never paused at all — clicking Play doesn't itself
-      // fire zoomChange/rotateFlipChange, and a single-step "toggle back to
-      // neutral" action afterward (Actual size, double-tap-to-reset) only
-      // ever emits the *already-neutral* event, never one crossing the
-      // engaged threshold — so nothing downstream would ever have caught it
-      // either. Re-checked here instead, right after a genuine manual
-      // start — the one path a viewer can actually reach a non-neutral view
-      // state from *before* pressing Play. `zoomedIn`/`rotatedOrFlipped`
-      // (below) track only the *current* state, purely for this check —
-      // deliberately not reused for the pause-on-event logic itself, which
-      // reacts to each event directly.
-      if ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped)) stop();
+      reCheckEngagedAfterManualStart();
     }
 
     /**
@@ -524,6 +530,32 @@ export const Autoplay: ShojiPlugin = {
     const offSlideItemLoad = ctx.on('slideItemLoad', ({ index }) => {
       if (playing && awaitingProviderVideo && index === gallery.currentIndex) enterSlide();
     });
+    /**
+     * DESIGN.md §4.1 point 20 — a generic command surface, requested
+     * directly, so a *custom* (host-authored) plugin's own toolbar button
+     * can start/pause the slideshow without importing this plugin at all,
+     * the same "events over inheritance" decoupling every other listener
+     * here already uses for official plugins (`zoomChange`,
+     * `rotateFlipChange`, `captionModalChange`, `dragCloseThreshold`).
+     * `GalleryEvents` (`core/types.ts`) already extends `Record<string,
+     * unknown>`, so `ctx.emit('requestAutoplayPause', {})` from any plugin
+     * — official or custom — type-checks with zero core changes; this is
+     * just the listening half. Deliberately two separate commands, not one
+     * toggle — a custom plugin building its own distinct Play/Pause
+     * controls (rather than one button that flips) needs to command each
+     * state directly, not guess at the current one. Both no-op in the
+     * already-there state (`stop()`'s own existing guard for pause;
+     * `start()`'s own existing guard, plus the same manual-start re-check
+     * `toggle()`'s button/Space path uses, for start).
+     */
+    const offRequestPause = ctx.on('requestAutoplayPause', () => {
+      if (playing) stop();
+    });
+    const offRequestStart = ctx.on('requestAutoplayStart', () => {
+      if (playing) return;
+      start();
+      reCheckEngagedAfterManualStart();
+    });
     const offClose = ctx.on('close', () => stop());
     const offOpen = ctx.on('afterOpen', () => {
       zoomedIn = false;
@@ -547,6 +579,8 @@ export const Autoplay: ShojiPlugin = {
       offZoomChange();
       offRotateFlipChange();
       offCaptionModalChange();
+      offRequestPause();
+      offRequestStart();
     };
   },
 };

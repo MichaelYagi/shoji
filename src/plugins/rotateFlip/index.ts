@@ -259,22 +259,31 @@ export const RotateFlip: ShojiPlugin = {
       return clockwise !== flippedOnOneAxis ? 90 : -90;
     }
 
-    rotateLeftBtn.addEventListener('click', () => {
+    /** Shared by the rotate-left toolbar button and `requestRotateLeft` below. */
+    function rotateLeft(): void {
       const delta = rotateDelta(false);
       update({ rotation: state.rotation + delta }, delta);
-    });
-    rotateRightBtn.addEventListener('click', () => {
+    }
+    /** Shared by the rotate-right toolbar button and `requestRotateRight` below. */
+    function rotateRight(): void {
       const delta = rotateDelta(true);
       update({ rotation: state.rotation + delta }, delta);
-    });
-    flipHBtn.addEventListener('click', () => {
+    }
+    /** Shared by the flip-horizontal toolbar button and `requestFlipHorizontal` below. */
+    function flipHorizontal(): void {
       visualFlipH = !visualFlipH;
       update({ flipH: !state.flipH });
-    });
-    flipVBtn.addEventListener('click', () => {
+    }
+    /** Shared by the flip-vertical toolbar button and `requestFlipVertical` below. */
+    function flipVertical(): void {
       visualFlipV = !visualFlipV;
       update({ flipV: !state.flipV });
-    });
+    }
+
+    rotateLeftBtn.addEventListener('click', rotateLeft);
+    rotateRightBtn.addEventListener('click', rotateRight);
+    flipHBtn.addEventListener('click', flipHorizontal);
+    flipVBtn.addEventListener('click', flipVertical);
 
     function reset(): void {
       state = { ...NEUTRAL };
@@ -316,6 +325,21 @@ export const RotateFlip: ShojiPlugin = {
       ctx.ui.toolbar('right', button),
     );
 
+    /**
+     * A generic command surface, requested directly (DESIGN.md §4.5), so a
+     * *custom* (host-authored) plugin's own button can rotate/flip without
+     * importing this plugin at all — same "events over inheritance"
+     * decoupling every other listener here already uses.
+     * `GalleryEvents` (`core/types.ts`) already extends `Record<string,
+     * unknown>`, so `ctx.emit('requestRotateLeft', {})` from any plugin —
+     * official or custom — type-checks with zero core changes; this is
+     * just the listening half. Each mirrors its real toolbar button
+     * exactly — same functions, same behavior.
+     */
+    const offRequestRotateLeft = ctx.on('requestRotateLeft', rotateLeft);
+    const offRequestRotateRight = ctx.on('requestRotateRight', rotateRight);
+    const offRequestFlipHorizontal = ctx.on('requestFlipHorizontal', flipHorizontal);
+    const offRequestFlipVertical = ctx.on('requestFlipVertical', flipVertical);
     const offOpen = ctx.on('afterOpen', reset);
     // Un-animated, and on beforeSlide rather than only afterSlide below —
     // same fix, same reasoning, as the Zoom plugin's own identical bug
@@ -353,6 +377,10 @@ export const RotateFlip: ShojiPlugin = {
 
     return () => {
       for (const remove of removeButtons) remove();
+      offRequestRotateLeft();
+      offRequestRotateRight();
+      offRequestFlipHorizontal();
+      offRequestFlipVertical();
       offOpen();
       offBeforeSlide();
       offSlide();

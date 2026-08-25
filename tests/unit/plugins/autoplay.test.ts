@@ -30,6 +30,15 @@ const items = [
   { id: 'd', src: 'd.jpg' },
 ];
 
+/** A minimal stand-in for a host-authored custom plugin — captures `ctx.emit` so a test can fire a `request*` command the same way a real custom plugin's own button click would, with zero import of Autoplay itself. */
+class EmitterPlugin {
+  name = 'test-emitter';
+  emit!: PluginContext['emit'];
+  init(ctx: PluginContext): void {
+    this.emit = ctx.emit;
+  }
+}
+
 function makeGallery(options: Record<string, unknown> = {}) {
   const el = document.createElement('div');
   return new Gallery(el, { items, plugins: [Autoplay], preload: 0, ...options });
@@ -238,6 +247,50 @@ describe('Autoplay — button & basic timing', () => {
 
     expect(gallery.currentIndex).toBe(1);
     expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // still playing
+
+    gallery.destroy();
+  });
+
+  it('requestAutoplayPause (DESIGN.md §4.1 point 20) lets a custom plugin pause the slideshow without importing Autoplay', () => {
+    vi.useFakeTimers();
+    const emitter = new EmitterPlugin();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items, plugins: [Autoplay, emitter], preload: 0 });
+    gallery.open(0);
+    click(toggleButton());
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    emitter.emit('requestAutoplayPause', {});
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
+
+    gallery.destroy();
+  });
+
+  it('requestAutoplayPause is a no-op while already stopped', () => {
+    vi.useFakeTimers();
+    const emitter = new EmitterPlugin();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items, plugins: [Autoplay, emitter], preload: 0 });
+    gallery.open(0);
+
+    emitter.emit('requestAutoplayPause', {});
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
+
+    gallery.destroy();
+  });
+
+  it('requestAutoplayStart starts the slideshow, and is a no-op while already playing', () => {
+    vi.useFakeTimers();
+    const emitter = new EmitterPlugin();
+    const el = document.createElement('div');
+    const gallery = new Gallery(el, { items, plugins: [Autoplay, emitter], preload: 0 });
+    gallery.open(0);
+
+    emitter.emit('requestAutoplayStart', {});
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
+
+    emitter.emit('requestAutoplayStart', {}); // already playing — no-op, does not stop it
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
 
     gallery.destroy();
   });

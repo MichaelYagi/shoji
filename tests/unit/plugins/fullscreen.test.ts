@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../../src/core';
 import { Fullscreen } from '../../../src/plugins/fullscreen';
+import type { PluginContext } from '../../../src/core/plugin';
+
+/** A minimal stand-in for a host-authored custom plugin — captures `ctx.emit` so a test can fire a `request*` command the same way a real custom plugin's own button click would, with zero import of Fullscreen itself. */
+class EmitterPlugin {
+  name = 'test-emitter';
+  emit!: PluginContext['emit'];
+  init(ctx: PluginContext): void {
+    this.emit = ctx.emit;
+  }
+}
 
 let fullscreenElement: Element | null = null;
 
@@ -210,5 +220,23 @@ describe('Fullscreen — cleanup', () => {
     const gallery = makeGallery();
     expect(() => gallery.destroy()).not.toThrow();
     expect(document.exitFullscreen).not.toHaveBeenCalled();
+  });
+});
+
+describe('Fullscreen — requestFullscreenToggle (DESIGN.md §4.4), a generic surface for a custom plugin', () => {
+  it('mirrors the toolbar button exactly, both directions', () => {
+    const emitter = new EmitterPlugin();
+    const gallery = new Gallery(document.createElement('div'), { plugins: [Fullscreen, emitter] });
+    const button = toggleButton();
+
+    emitter.emit('requestFullscreenToggle', {});
+    expect(outer().requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+
+    emitter.emit('requestFullscreenToggle', {});
+    expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    gallery.destroy();
   });
 });

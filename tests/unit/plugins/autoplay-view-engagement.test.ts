@@ -4,6 +4,16 @@ import { Autoplay } from '../../../src/plugins/autoplay';
 import { Zoom } from '../../../src/plugins/zoom';
 import { RotateFlip } from '../../../src/plugins/rotateFlip';
 import type { GalleryItem } from '../../../src/core/types';
+import type { PluginContext } from '../../../src/core/plugin';
+
+/** A minimal stand-in for a host-authored custom plugin — captures `ctx.emit` so a test can fire a `request*` command the same way a real custom plugin's own button click would, with zero import of Autoplay/Zoom/RotateFlip. */
+class EmitterPlugin {
+  name = 'test-emitter';
+  emit!: PluginContext['emit'];
+  init(ctx: PluginContext): void {
+    this.emit = ctx.emit;
+  }
+}
 
 /**
  * DESIGN.md §4.1 — pause-on-zoom / pause-on-rotate-flip / pause-on-caption-
@@ -199,6 +209,27 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
     doubleTapAt(150, 150); // toggle straight back to neutral (reset(), single step)
     expect(isPlaying()).toBe(false); // still paused — no auto-resume
+
+    gallery.destroy();
+  });
+
+  it('requestAutoplayStart (DESIGN.md §4.1 point 20) gets the same manual-start re-check as the real Play button — a custom plugin starting the slideshow while already zoomed in immediately re-pauses too', async () => {
+    vi.useFakeTimers();
+    const emitter = new EmitterPlugin();
+    const gallery = new Gallery(document.createElement('div'), {
+      items,
+      plugins: [Autoplay, Zoom, RotateFlip, emitter],
+      preload: 0,
+      autoplay: { pauseOnZoom: true },
+    });
+    gallery.open(0);
+    await flush();
+
+    doubleTapAt(150, 150); // zoom in first, while not playing
+    expect(isPlaying()).toBe(false);
+
+    emitter.emit('requestAutoplayStart', {}); // custom plugin starts it while already zoomed in
+    expect(isPlaying()).toBe(false); // must immediately re-pause, not run unpaused
 
     gallery.destroy();
   });

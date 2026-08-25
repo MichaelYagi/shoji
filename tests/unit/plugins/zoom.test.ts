@@ -2,6 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Gallery } from '../../../src/core';
 import { Zoom } from '../../../src/plugins/zoom';
 import type { GalleryItem } from '../../../src/core/types';
+import type { PluginContext } from '../../../src/core/plugin';
+
+/** A minimal stand-in for a host-authored custom plugin — captures `ctx.emit` so a test can fire a `request*` command the same way a real custom plugin's own button click would, with zero import of Zoom itself. */
+class EmitterPlugin {
+  name = 'test-emitter';
+  emit!: PluginContext['emit'];
+  init(ctx: PluginContext): void {
+    this.emit = ctx.emit;
+  }
+}
 
 const DEFAULT_RECT: DOMRect = {
   top: 0,
@@ -204,6 +214,68 @@ describe('Zoom — buttons', () => {
     expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
 
     click(button('Actual size'));
+    expect(activeImg().style.transform).toBe('');
+    gallery.destroy();
+  });
+});
+
+describe('Zoom — requestZoom* commands (DESIGN.md §4.6), a generic surface for a custom plugin', () => {
+  function makeGalleryWithEmitter(): { gallery: Gallery; emitter: EmitterPlugin } {
+    const emitter = new EmitterPlugin();
+    const gallery = new Gallery(document.createElement('div'), {
+      items,
+      plugins: [Zoom, emitter],
+      preload: 0,
+    });
+    return { gallery, emitter };
+  }
+
+  it('requestZoomIn mirrors the toolbar button exactly', async () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    emitter.emit('requestZoomIn', {});
+
+    expect(activeImg().style.transform).toContain('scale3d(1.5, 1.5, 1)');
+    gallery.destroy();
+  });
+
+  it('requestZoomOut mirrors the toolbar button exactly', async () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    emitter.emit('requestZoomIn', {});
+    emitter.emit('requestZoomOut', {});
+
+    expect(activeImg().style.transform).toBe('');
+    gallery.destroy();
+  });
+
+  it('requestZoomActualSize mirrors the toolbar button exactly, both directions', async () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+    await flushSlideLoad();
+    Object.defineProperty(activeImg(), 'naturalWidth', { value: 600, configurable: true });
+
+    emitter.emit('requestZoomActualSize', {});
+    expect(activeImg().style.transform).toContain('scale3d(2, 2, 1)');
+
+    emitter.emit('requestZoomActualSize', {});
+    expect(activeImg().style.transform).toBe('');
+    gallery.destroy();
+  });
+
+  it('requestZoomReset returns straight to neutral from any zoom level', async () => {
+    const { gallery, emitter } = makeGalleryWithEmitter();
+    gallery.open(0);
+    await flushSlideLoad();
+
+    emitter.emit('requestZoomIn', {});
+    expect(activeImg().style.transform).toContain('scale3d(1.5, 1.5, 1)');
+
+    emitter.emit('requestZoomReset', {});
     expect(activeImg().style.transform).toBe('');
     gallery.destroy();
   });

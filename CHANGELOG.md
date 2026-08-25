@@ -5,6 +5,27 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.39] - 2026-08-25
+
+### Added
+
+- **A generic `request*` command surface across Autoplay, Zoom,
+  RotateFlip, and Fullscreen**, so a custom (host-authored) plugin's own
+  toolbar button can drive any of these four plugins without importing
+  them at all — no core changes needed, since `GalleryEvents` already
+  extends `Record<string, unknown>`.
+  - Autoplay: `requestAutoplayStart`, `requestAutoplayPause`
+  - Zoom: `requestZoomIn`, `requestZoomOut`, `requestZoomActualSize`,
+    `requestZoomReset`
+  - RotateFlip: `requestRotateLeft`, `requestRotateRight`,
+    `requestFlipHorizontal`, `requestFlipVertical`
+  - Fullscreen: `requestFullscreenToggle`
+
+  Each mirrors its real toolbar button exactly — same function, same
+  behavior, same edge-case handling (e.g. Autoplay's `requestAutoplayStart`
+  gets the same zoomed/rotated re-check the real Play button does). See
+  DESIGN.md §4.1 point 20, §4.4, §4.5, §4.6.
+
 ## [0.1.0-alpha.38] - 2026-08-25
 
 ### Added
