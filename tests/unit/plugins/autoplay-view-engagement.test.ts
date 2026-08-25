@@ -6,15 +6,15 @@ import { RotateFlip } from '../../../src/plugins/rotateFlip';
 import type { GalleryItem } from '../../../src/core/types';
 
 /**
- * DESIGN.md §4.1 — pause-on-zoom (default on) / pause-on-rotate-flip
- * (default off, `pauseOnRotateFlip: true`): a real UX gap, not a reported
- * bug, fixed alongside the rotate/zoom-under-rotation work above. Autoplay
- * only reacts to zoomChange/rotateFlipChange's event *shape* (`core/
- * types.ts`) — never imports either plugin directly — so these tests load
- * all three together, the same cross-plugin pattern
- * `layout-automeasure.test.ts` already established, and drive the
- * interaction through each plugin's own real, public toolbar buttons
- * rather than faking the event bus directly.
+ * DESIGN.md §4.1 — pause-on-zoom / pause-on-rotate-flip / pause-on-caption-
+ * expand, all default `true`: a real UX gap, not a reported bug, fixed
+ * alongside the rotate/zoom-under-rotation work above. Autoplay only
+ * reacts to zoomChange/rotateFlipChange's event *shape* (`core/types.ts`)
+ * — never imports either plugin directly — so these tests load all three
+ * together, the same cross-plugin pattern `layout-automeasure.test.ts`
+ * already established, and drive the interaction through each plugin's
+ * own real, public toolbar buttons rather than faking the event bus
+ * directly.
  *
  * Deliberately **stays paused** rather than auto-resuming once back at
  * neutral — a real bug, reported from real usage against an earlier,
@@ -119,10 +119,10 @@ function isToggleDisabled(): boolean {
   return toggleButton().getAttribute('aria-disabled') === 'true';
 }
 
-describe('Autoplay — pauseOnZoom (default off)', () => {
-  it('is a complete no-op by default, even while zoomed', async () => {
+describe('Autoplay — pauseOnZoom (default on)', () => {
+  it('pauseOnZoom: false is a complete no-op, even while zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -133,9 +133,9 @@ describe('Autoplay — pauseOnZoom (default off)', () => {
     gallery.destroy();
   });
 
-  it('pauseOnZoom: true pauses a playing slideshow on zoom-in', async () => {
+  it('pauses a playing slideshow on zoom-in by default, with no options passed at all', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery();
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -235,10 +235,10 @@ describe('Autoplay — pauseOnZoom (default off)', () => {
   });
 });
 
-describe('Autoplay — pauseOnRotateFlip (default off)', () => {
-  it('is a complete no-op by default, even while rotated', async () => {
+describe('Autoplay — pauseOnRotateFlip (default on)', () => {
+  it('pauseOnRotateFlip: false is a complete no-op, even while rotated', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -249,9 +249,9 @@ describe('Autoplay — pauseOnRotateFlip (default off)', () => {
     gallery.destroy();
   });
 
-  it('pauseOnRotateFlip: true pauses on rotate', async () => {
+  it('pauses on rotate by default, with no options passed at all', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery();
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -348,7 +348,7 @@ describe('Autoplay — pauseOnRotateFlip (default off)', () => {
  * is already closed. See `pauseOnCaptionExpand`'s own doc comment
  * (autoplay/index.ts).
  */
-describe('Autoplay — pauseOnCaptionExpand (default off)', () => {
+describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
   afterEach(() => {
     // Not vi.spyOn — jsdom's Range doesn't define this method at all, so
     // mockTruncated() below assigns it outright; the top-level afterEach's
@@ -383,10 +383,10 @@ describe('Autoplay — pauseOnCaptionExpand (default off)', () => {
     });
   }
 
-  it('is a complete no-op by default, even while the caption modal is open', async () => {
+  it('pauseOnCaptionExpand: false is a complete no-op, even while the caption modal is open', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption();
+    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -399,10 +399,10 @@ describe('Autoplay — pauseOnCaptionExpand (default off)', () => {
     gallery.destroy();
   });
 
-  it('pauseOnCaptionExpand: true pauses a playing slideshow when the caption modal opens', async () => {
+  it('pauses a playing slideshow when the caption modal opens, by default, with no options passed at all', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    const gallery = makeGalleryWithCaption();
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -538,9 +538,9 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
     gallery.destroy();
   });
 
-  it('never disables the button while zoomed by default (pauseOnZoom off)', async () => {
+  it('never disables the button while zoomed, with pauseOnZoom: false', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
     gallery.open(0);
     await flush();
 

@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-alpha.38] - 2026-08-25
+
+### Added
+
+- **`Autoplay`'s new `pauseOnManualNavigate` option** — pauses the
+  slideshow the moment the viewer navigates manually (arrows/buttons, a
+  completed swipe, a thumbnail click, or any other `goTo()` not caused by
+  Autoplay's own advance), instead of silently re-timing itself on
+  whatever slide they land on. Default **`true`**.
+
+### Changed
+
+- **`pauseOnZoom`, `pauseOnRotateFlip`, and `pauseOnCaptionExpand` now
+  default to `true`** (previously `false`/opt-in). Reaching for any view
+  control is a clear, direct engagement signal — a slideshow that keeps
+  advancing underneath that reads as broken, not helpful. Set any of them
+  to `false` to restore the previous always-keep-running behavior. See
+  DESIGN.md §4.1, points 17-19.
+
 ## [0.1.0-alpha.37] - 2026-08-24
 
 ### Fixed

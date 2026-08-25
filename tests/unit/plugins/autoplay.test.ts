@@ -192,9 +192,9 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
-  it('manual navigation mid-slideshow re-times from the newly active slide, not doubled up', () => {
+  it('with pauseOnManualNavigate: false, manual navigation mid-slideshow re-times from the newly active slide instead of pausing, and the old timer is not doubled up', () => {
     vi.useFakeTimers();
-    const gallery = makeGallery();
+    const gallery = makeGallery({ autoplay: { pauseOnManualNavigate: false } });
     gallery.open(0);
     click(toggleButton());
 
@@ -208,6 +208,36 @@ describe('Autoplay — button & basic timing', () => {
 
     vi.advanceTimersByTime(3000); // fresh 5000ms timer for index 1 completes
     expect(gallery.currentIndex).toBe(2);
+
+    gallery.destroy();
+  });
+
+  it('pauseOnManualNavigate defaults to true: manual navigation mid-slideshow pauses it instead of re-timing', () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+
+    vi.advanceTimersByTime(3000);
+    gallery.goTo(1); // manual jump partway through the countdown
+
+    expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow'); // stopped
+    vi.advanceTimersByTime(5000); // would have advanced again if still playing
+    expect(gallery.currentIndex).toBe(1); // stayed put
+
+    gallery.destroy();
+  });
+
+  it("pauseOnManualNavigate does not pause on autoplay's own advance() — only navigation the viewer causes", () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery();
+    gallery.open(0);
+    click(toggleButton());
+
+    vi.advanceTimersByTime(5000); // autoplay's own timer fires, index -> 1
+
+    expect(gallery.currentIndex).toBe(1);
+    expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow'); // still playing
 
     gallery.destroy();
   });
@@ -678,6 +708,7 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
       ],
       plugins: [Autoplay, fakeVideoProviderPlugin()],
       preload: 1, // >0 is what makes offset-relabeling (vs. a single always-offset-0 slot) possible at all
+      autoplay: { pauseOnManualNavigate: false }, // this test's own gallery.next() calls simulate reaching the slide, not a real viewer-initiated pause scenario
     });
     gallery.open(0);
     click(toggleButton());

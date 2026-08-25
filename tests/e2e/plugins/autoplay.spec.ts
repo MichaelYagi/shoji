@@ -65,6 +65,29 @@ test('pause stops the advance', async ({ page }) => {
   await expect(page.locator('.shoji-counter')).toHaveText(afterPause!);
 });
 
+/**
+ * DESIGN.md §4.1 point 19 — `pauseOnManualNavigate` (default true):
+ * navigating manually mid-slideshow pauses it instead of silently
+ * re-timing on the newly active slide. Real keyboard arrow press against a
+ * real running interval timer, not a synthetic event.
+ */
+test('pressing the right arrow key mid-slideshow pauses it instead of just re-timing on the new slide', async ({
+  page,
+}) => {
+  await openLightbox(page);
+  const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
+  await clickToolbarButton(page, playButton);
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
+
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.shoji-counter')).toHaveText('2 / 4');
+  await expect(page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]')).toHaveCount(1); // paused, not still playing
+
+  const afterManualNav = await page.locator('.shoji-counter').textContent();
+  await page.waitForTimeout(700); // several intervals' worth — must not have advanced on its own
+  await expect(page.locator('.shoji-counter')).toHaveText(afterManualNav!);
+});
+
 test('Space toggles play/pause', async ({ page }) => {
   await openLightbox(page);
   // Deliberately does NOT reveal the button first: while the overflow
@@ -207,8 +230,10 @@ test('zooming in pauses the slideshow, and it stays paused once zoomed back out 
 }) => {
   // Wide enough that no toolbar button collapses into the overflow popover
   // (DESIGN.md §3.1a, covered by its own tests elsewhere) — this test is
-  // only about the pause behavior itself. pauseOnZoom defaults off,
-  // opted in here via ?pauseOnZoom=1 (demo/pages/e2e-plugins.ts).
+  // only about the pause behavior itself. pauseOnZoom defaults true;
+  // ?pauseOnZoom=1 (demo/pages/e2e-plugins.ts) is redundant with the
+  // default now, kept only so this test stays explicit about what it's
+  // actually exercising rather than relying on an option it never sets.
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnZoom=1');
   await page.locator('#thumbs a[data-index="0"]').click();
@@ -231,8 +256,9 @@ test('zooming in pauses the slideshow, and it stays paused once zoomed back out 
 });
 
 /**
- * pauseOnRotateFlip defaults off (DESIGN.md §4.1) — opted in here via
- * ?pauseOnRotateFlip=1 (demo/pages/e2e-plugins.ts).
+ * pauseOnRotateFlip defaults true (DESIGN.md §4.1) — ?pauseOnRotateFlip=1
+ * (demo/pages/e2e-plugins.ts) is redundant with the default now, kept
+ * only for explicitness.
  *
  * Also deliberately **stays paused**, same reasoning as zoom above — but
  * unlike zoom, every one of the four rotate clicks pauses here, including
@@ -343,8 +369,9 @@ test('regression: the Play button visibly disables while resume is blocked (zoom
 });
 
 /**
- * DESIGN.md §2.3a/§4.1 — `pauseOnCaptionExpand` (default off, opted in via
- * ?pauseOnCaptionExpand=1). Unlike pauseOnZoom/pauseOnRotateFlip above,
+ * DESIGN.md §2.3a/§4.1 — `pauseOnCaptionExpand` (default true;
+ * ?pauseOnCaptionExpand=1 is redundant with the default now, kept only for
+ * explicitness). Unlike pauseOnZoom/pauseOnRotateFlip above,
  * there's no separate "Play button visibly disables while blocked" test and
  * no Space-bypass regression test for this one — the caption modal already
  * makes the Play button (and every other key/click behind it) physically

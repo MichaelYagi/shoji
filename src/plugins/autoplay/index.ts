@@ -49,12 +49,14 @@ export interface AutoplayOptions {
   showProgress?: boolean;
   /** Starts the slideshow automatically as soon as the gallery opens — every `open()`, not just the first — instead of waiting for the toolbar button/`Space`. Default `false`. */
   autoStart?: boolean;
-  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `false` — opt-in, same reasoning as `pauseOnRotateFlip` below. */
+  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `true` — a viewer actively examining a zoomed-in detail is a clear signal the slideshow shouldn't advance out from under them; set `false` to let it keep running regardless. */
   pauseOnZoom?: boolean;
-  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `false` — opt-in, requested directly: a host embedding a gallery shouldn't have its slideshow's pause behavior silently change just because a viewer happens to touch a zoom/rotate control, unless it asked for that. */
+  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `true`, same reasoning as `pauseOnZoom` above — a viewer reaching for a rotate/flip control is actively engaging with the current slide, not passively watching a slideshow; set `false` to let it keep running regardless. */
   pauseOnRotateFlip?: boolean;
-  /** Pauses the slideshow when the viewer expands a truncated caption to read the rest (core's own caption modal, DESIGN.md §2.3a) — stays paused until Play is pressed again, same as `pauseOnZoom`/`pauseOnRotateFlip`. No re-check on Play needed the way those two need one: the modal traps both pointer and keyboard input while open (core blocks every key, not just Escape), so Play is physically unreachable until the modal is already closed. Default `false` — same opt-in reasoning as the other two. */
+  /** Pauses the slideshow when the viewer expands a truncated caption to read the rest (core's own caption modal, DESIGN.md §2.3a) — stays paused until Play is pressed again, same as `pauseOnZoom`/`pauseOnRotateFlip`. No re-check on Play needed the way those two need one: the modal traps both pointer and keyboard input while open (core blocks every key, not just Escape), so Play is physically unreachable until the modal is already closed. Default `true`, same reasoning as the other two — expanding a caption to read the rest is a request for time, not an idle moment to advance past; set `false` to let it keep running regardless. */
   pauseOnCaptionExpand?: boolean;
+  /** Pauses the slideshow the moment the viewer navigates manually — arrow keys/buttons, a completed swipe, a thumbnail click, or any other `goTo()` not caused by Autoplay's own `advance()` — instead of silently re-timing itself on whatever slide they land on. Stays paused until Play is pressed again, same as the other `pauseOn*` options. Default `true`, same reasoning as `pauseOnZoom`/`pauseOnRotateFlip`/`pauseOnCaptionExpand` above — reaching for the navigation controls at all is a clear signal of active engagement, and a slideshow that keeps ticking underneath that reads as broken, not helpful. Set `false` to restore the original "manual nav just re-times the current slide" behavior. */
+  pauseOnManualNavigate?: boolean;
 }
 
 /**
@@ -68,16 +70,24 @@ export interface AutoplayOptions {
  */
 export const Autoplay: ShojiPlugin = {
   name: 'autoplay',
-  defaults: { interval: 5000, showProgress: true } satisfies AutoplayOptions,
+  defaults: {
+    interval: 5000,
+    showProgress: true,
+    pauseOnZoom: true,
+    pauseOnRotateFlip: true,
+    pauseOnCaptionExpand: true,
+    pauseOnManualNavigate: true,
+  } satisfies AutoplayOptions,
 
   init(ctx: PluginContext): () => void {
     const { gallery } = ctx;
     const interval = Number(ctx.options.interval ?? 5000);
     const showProgress = ctx.options.showProgress !== false;
     const autoStart = ctx.options.autoStart === true;
-    const pauseOnZoom = ctx.options.pauseOnZoom === true;
-    const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip === true;
-    const pauseOnCaptionExpand = ctx.options.pauseOnCaptionExpand === true;
+    const pauseOnZoom = ctx.options.pauseOnZoom !== false;
+    const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip !== false;
+    const pauseOnCaptionExpand = ctx.options.pauseOnCaptionExpand !== false;
+    const pauseOnManualNavigate = ctx.options.pauseOnManualNavigate !== false;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -94,6 +104,12 @@ export const Autoplay: ShojiPlugin = {
     // consulting these.
     let zoomedIn = false;
     let rotatedOrFlipped = false;
+    // Set for the exact duration of advance()'s own gallery.next() call —
+    // the afterSlide handler below fires synchronously inside it, so it can
+    // tell "this slide change is autoplay's own advance()" apart from any
+    // other navigation (arrows/buttons/swipe/goTo()) without needing the
+    // event itself to carry a source. See pauseOnManualNavigate above.
+    let isAdvancing = false;
 
     // A real bug, regression: this used to capture gallery.getActiveMedia()
     // once here and listen on that node directly, back when a pool slot's
@@ -334,7 +350,9 @@ export const Autoplay: ShojiPlugin = {
 
     function advance(): void {
       const before = gallery.currentIndex;
+      isAdvancing = true;
       gallery.next();
+      isAdvancing = false;
       // loop:false and next() was already at the last item — nothing left
       // to advance to; the 'afterSlide' handler below won't fire for a
       // no-op goTo(), so this is the only place that can catch it.
@@ -403,7 +421,8 @@ export const Autoplay: ShojiPlugin = {
      * zoomed into a detail on the current slide. Only reacts to
      * `zoomChange`'s event *shape* (`core/types.ts`) — never imports Zoom
      * directly, so this is a no-op with it not loaded, or with
-     * `pauseOnZoom: false` (events over inheritance, CLAUDE.md).
+     * `pauseOnZoom: false` set explicitly (events over inheritance,
+     * CLAUDE.md).
      *
      * Deliberately **stays paused** rather than auto-resuming once
      * un-zoomed back to neutral — the first design tried the opposite
@@ -427,8 +446,8 @@ export const Autoplay: ShojiPlugin = {
       else updateToggleAvailability(); // stop() above already refreshes this; covers zooming in while already paused, which stop() wouldn't touch
     });
     /**
-     * Same UX gap, RotateFlip's own equivalent — off by default (see
-     * `pauseOnRotateFlip`'s own doc comment). Pauses on *any*
+     * Same UX gap, RotateFlip's own equivalent (see `pauseOnRotateFlip`'s
+     * own doc comment). Pauses on *any*
      * `rotateFlipChange` event unconditionally, including one that lands
      * back on the original orientation — confirmed directly, reported from
      * real usage: rotate four times back to 0deg still reads as an active
@@ -488,7 +507,13 @@ export const Autoplay: ShojiPlugin = {
       zoomedIn = false;
       rotatedOrFlipped = false;
       updateToggleAvailability();
-      if (playing) enterSlide();
+      if (!playing) return;
+      // pauseOnManualNavigate (default true, see its own doc comment) —
+      // isAdvancing is only ever true for the exact duration of advance()'s
+      // own gallery.next() call above, so its absence here means something
+      // other than autoplay itself moved the slide.
+      if (pauseOnManualNavigate && !isAdvancing) stop();
+      else enterSlide();
     });
     // A provider video (§4-video) that was still mid-setup when enterSlide()
     // last ran — see awaitingProviderVideo there — becomes playable some
