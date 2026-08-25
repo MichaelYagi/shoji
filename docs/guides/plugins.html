@@ -314,7 +314,11 @@ requires: ['zoom', 'myOtherPlugin']</code></pre>
       </li>
       <li>
         <code>ctx.on(event, fn)</code> / <code>ctx.emit(event, detail)</code> — the same typed event
-        bus <code>gallery.on()</code> reads from.
+        bus <code>gallery.on()</code> reads from. Works in both directions: listen for another
+        plugin's state (<code>zoomChange</code> above), or command one to act —
+        <code>ctx.emit('requestZoomIn', {})</code> zooms in without importing Zoom at all. See the
+        <a href="./events.html#plugin-commands">Events guide's "Plugin commands" table</a> for the
+        full list.
       </li>
       <li>
         <code>ctx.ui.toolbar(slot, el)</code> — add a button/element to the <code>'left'</code>,

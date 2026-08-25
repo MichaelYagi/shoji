@@ -273,6 +273,69 @@ off(); // stop listening</code></pre>
       </tbody>
     </table>
 
+    <h2>Plugin commands</h2>
+    <p>
+      The opposite direction from everything above: instead of listening for a plugin's state
+      change, a custom plugin's own button can <em>command</em> one of these four to act —
+      <code>ctx.emit('requestZoomIn', {})</code> — without importing the target plugin at all. Each
+      one mirrors its real toolbar button exactly: same function, same edge-case handling. A no-op
+      if the target plugin isn't loaded.
+    </p>
+    <table class="nowrap-code">
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>Effect</th>
+          <th>Handled by</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>requestAutoplayStart</code></td>
+          <td>Starts the slideshow — a no-op while already playing.</td>
+          <td>Autoplay</td>
+        </tr>
+        <tr>
+          <td><code>requestAutoplayPause</code></td>
+          <td>Pauses the slideshow — a no-op while already stopped.</td>
+          <td>Autoplay</td>
+        </tr>
+        <tr>
+          <td><code>requestZoomIn</code> / <code>requestZoomOut</code></td>
+          <td>Same fixed step as the toolbar buttons/<kbd>w</kbd>/<kbd>s</kbd> shortcuts.</td>
+          <td>Zoom</td>
+        </tr>
+        <tr>
+          <td><code>requestZoomActualSize</code></td>
+          <td>Toggles between the image's native resolution and neutral, same as the button.</td>
+          <td>Zoom</td>
+        </tr>
+        <tr>
+          <td><code>requestZoomReset</code></td>
+          <td>
+            Returns straight to neutral from any zoom level — no toolbar-button equivalent of its
+            own (<code>requestZoomActualSize</code> only resets conditionally).
+          </td>
+          <td>Zoom</td>
+        </tr>
+        <tr>
+          <td><code>requestRotateLeft</code> / <code>requestRotateRight</code></td>
+          <td>Same 90° step as the toolbar buttons.</td>
+          <td>RotateFlip</td>
+        </tr>
+        <tr>
+          <td><code>requestFlipHorizontal</code> / <code>requestFlipVertical</code></td>
+          <td>Same toggle as the toolbar buttons.</td>
+          <td>RotateFlip</td>
+        </tr>
+        <tr>
+          <td><code>requestFullscreenToggle</code></td>
+          <td>Enters or exits fullscreen, same as the toolbar button.</td>
+          <td>Fullscreen</td>
+        </tr>
+      </tbody>
+    </table>
+
     <footer>Next: <a href="./settings.html">Settings</a>.</footer>
   </body>
 </html>
