@@ -70,6 +70,19 @@ test('pause stops the advance', async ({ page }) => {
  * navigating manually mid-slideshow pauses it instead of silently
  * re-timing on the newly active slide. Real keyboard arrow press against a
  * real running interval timer, not a synthetic event.
+ *
+ * A real bug found running this in CI on mobile-chrome, not in this test's
+ * own product-code target: `clickToolbarButton`'s popover doesn't
+ * auto-close after a click on one of its own buttons (its own doc comment)
+ * — with Autoplay's button collapsed there on a narrow viewport, the arrow
+ * key press right after landed while the popover was still open, and its
+ * own capture-phase keydown handler (`onToolbarOverflowKeydown`,
+ * `Gallery.ts`) swallows every key but Escape, so it never reached
+ * Gallery's own arrow-key navigation at all — confirmed directly via the
+ * failed run's own page snapshot, still showing '1 / 4' and the overflow
+ * caret focused. `closeToolbarOverflowIfOpen` (same helper the progress-bar
+ * test above already needs, for the same "an open popover changes what
+ * this test is actually exercising" reasoning) fixes it.
  */
 test('pressing the right arrow key mid-slideshow pauses it instead of just re-timing on the new slide', async ({
   page,
@@ -78,6 +91,7 @@ test('pressing the right arrow key mid-slideshow pauses it instead of just re-ti
   const playButton = page.locator('.shoji-toolbar-button[aria-label="Play slideshow"]');
   await clickToolbarButton(page, playButton);
   await expect(page.locator('.shoji-toolbar-button[aria-label="Pause slideshow"]')).toHaveCount(1);
+  await closeToolbarOverflowIfOpen(page);
 
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.shoji-counter')).toHaveText('2 / 4');
