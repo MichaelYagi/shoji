@@ -261,6 +261,28 @@ function copyDocsRuntimeAssets() {
   for (const file of ['shoji.min.js', 'shoji.min.css']) {
     copyFileSync(join(distDir, file), join(docsDist, file));
   }
+
+  // Also mirror the core+plugins standalone artifacts — docs/playground.html
+  // loads them dynamically (its "Core + plugins" bundle mode) the same way
+  // it loads the combined bundle above.
+  const docsDistCore = join(docsDist, 'core');
+  mkdirSync(docsDistCore, { recursive: true });
+  for (const file of ['shoji-core.min.js', 'shoji-core.min.css']) {
+    copyFileSync(join(distDir, 'core', file), join(docsDistCore, file));
+  }
+
+  const docsDistPlugins = join(docsDist, 'plugins');
+  mkdirSync(docsDistPlugins, { recursive: true });
+  for (const dirName of pluginDirNames()) {
+    copyFileSync(
+      join(distDir, 'plugins', `${dirName}.min.js`),
+      join(docsDistPlugins, `${dirName}.min.js`),
+    );
+    const cssPath = join(distDir, 'plugins', `${dirName}.min.css`);
+    if (existsSync(cssPath)) {
+      copyFileSync(cssPath, join(docsDistPlugins, `${dirName}.min.css`));
+    }
+  }
 }
 
 await buildSingleFile(false);

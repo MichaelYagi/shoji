@@ -12,7 +12,10 @@
     -->
     <link rel="stylesheet" href="./docs.css" />
     <script src="./docs.js" defer></script>
-    <link rel="stylesheet" href="dist/shoji.min.css" />
+    <!-- Shoji's own JS/CSS is no longer a static tag — the "Bundle" fieldset
+         below picks between the combined single-file build and the
+         core+plugins standalone build, and ensureBundle() (see the script at
+         the bottom) injects whichever one applies, dynamically. -->
     <title>Shoji Docs — Playground</title>
     <style>
       /* orientation: 'horizontal' below is the transpose of normal masonry —
@@ -117,6 +120,13 @@
         color: #666;
         margin: 0.25rem 0 0;
       }
+
+      /* Native <fieldset disabled> already disables its inputs; the opacity
+         here is just the visual cue that a plugin-specific fieldset doesn't
+         apply yet (Core + plugins mode, checkbox unticked). */
+      #controls fieldset:disabled {
+        opacity: 0.5;
+      }
     </style>
   </head>
   <body>
@@ -168,6 +178,29 @@ its own id) rather than a real function input.
     <div id="controls">
       <h2>Shoji options</h2>
       <form id="options-form">
+        <fieldset>
+          <legend>Bundle</legend>
+          <div class="row">
+            <label
+              ><input type="radio" name="bundleMode" value="combined" checked /> Combined
+              (shoji.min.js)</label
+            >
+            <label
+              ><input type="radio" name="bundleMode" value="core" /> Core + plugins
+              (shoji-core.min.js)</label
+            >
+          </div>
+          <p class="note">
+            Combined loads <code>dist/shoji.min.js</code>/<code>.css</code> — every official plugin
+            class exists regardless of which checkboxes below are ticked; the checkboxes just choose
+            what's passed into <code>plugins</code>. Core + plugins loads
+            <code>dist/core/shoji-core.min.js</code>/<code>.css</code> plus, for each ticked plugin
+            checkbox, that plugin's own <code>dist/plugins/{name}.min.js</code>/<code>.css</code> —
+            a plugin class genuinely doesn't exist here until its checkbox is ticked, so an unticked
+            plugin's own options fieldset below is disabled in this mode (nothing to configure yet).
+          </p>
+        </fieldset>
+
         <fieldset>
           <legend>Data source</legend>
           <div class="row">
@@ -261,7 +294,7 @@ its own id) rather than a real function input.
           </p>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="fieldset-zoom">
           <legend>Zoom options</legend>
           <div class="row">
             <label
@@ -278,7 +311,7 @@ its own id) rather than a real function input.
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="fieldset-autoplay">
           <legend>Autoplay options</legend>
           <div class="row">
             <label
@@ -307,7 +340,7 @@ its own id) rather than a real function input.
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="fieldset-activeThumbnail">
           <legend>ActiveThumbnail options</legend>
           <div class="row">
             <label
@@ -321,7 +354,7 @@ its own id) rather than a real function input.
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="fieldset-layout">
           <legend>Layout options</legend>
           <div class="row">
             <label
@@ -412,7 +445,6 @@ its own id) rather than a real function input.
       </form>
     </div>
 
-    <script src="dist/shoji.min.js"></script>
     <script>
       const TRANSITION_PRESETS = [
         'slide',
@@ -993,7 +1025,135 @@ its own id) rather than a real function input.
         }
       }
 
-      function buildGallery() {
+      // Two ways to bring Shoji in (see the Getting Started guide): the
+      // combined single-file build (dist/shoji.min.js, every official
+      // plugin class attached regardless of what's ticked below) vs. the
+      // core+plugins standalone build (dist/core/shoji-core.min.js alone,
+      // with each plugin's own dist/plugins/{name}.min.js loaded only once
+      // its checkbox is first ticked). Both are loaded dynamically here
+      // (never a static <script> tag) so the "Bundle" radio can switch
+      // between them live, same as every other control on this page.
+      //
+      // Plugin dir name -> Shoji.<Class> the same mechanical
+      // capitalize-first-letter transform scripts/build.mjs's own
+      // pluginClassName() uses; kept alongside the checkbox id it maps to
+      // so ensureBundle() and the plugins[] builder and the fieldset gating
+      // below all read from one table instead of three independent lists.
+      const PLUGIN_MODULES = [
+        {
+          checkboxId: 'plugin-fullscreen',
+          dir: 'fullscreen',
+          className: 'Fullscreen',
+          hasCss: false,
+        },
+        {
+          checkboxId: 'plugin-rotateFlip',
+          dir: 'rotateFlip',
+          className: 'RotateFlip',
+          hasCss: false,
+        },
+        { checkboxId: 'plugin-layout', dir: 'layout', className: 'Layout', hasCss: true },
+        {
+          checkboxId: 'plugin-activeThumbnail',
+          dir: 'activeThumbnail',
+          className: 'ActiveThumbnail',
+          hasCss: false,
+        },
+        { checkboxId: 'plugin-zoom', dir: 'zoom', className: 'Zoom', hasCss: true },
+        { checkboxId: 'plugin-video', dir: 'video', className: 'Video', hasCss: false },
+        { checkboxId: 'plugin-autoplay', dir: 'autoplay', className: 'Autoplay', hasCss: true },
+      ];
+
+      // Only the plugins with their own options fieldset on this page need
+      // gating — Fullscreen/RotateFlip/Video have no options form to
+      // disable.
+      const GATED_FIELDSETS = [
+        { fieldsetId: 'fieldset-zoom', checkboxId: 'plugin-zoom' },
+        { fieldsetId: 'fieldset-autoplay', checkboxId: 'plugin-autoplay' },
+        { fieldsetId: 'fieldset-activeThumbnail', checkboxId: 'plugin-activeThumbnail' },
+        { fieldsetId: 'fieldset-layout', checkboxId: 'plugin-layout' },
+      ];
+
+      function bundleMode() {
+        return document.querySelector('input[name="bundleMode"]:checked').value;
+      }
+
+      // Core + plugins mode is the only mode where a plugin's own options
+      // genuinely don't apply yet (its class isn't loaded until its
+      // checkbox is first ticked) — Combined mode always has every class
+      // available, so its fieldsets stay enabled regardless of the
+      // checkboxes, same as before this page had a "Bundle" choice at all.
+      function updateFieldsetGating() {
+        const core = bundleMode() === 'core';
+        for (const { fieldsetId, checkboxId } of GATED_FIELDSETS) {
+          $(fieldsetId).disabled = core && !checked(checkboxId);
+        }
+      }
+
+      function injectLink(href) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.dataset.shojiBundle = 'true';
+        document.head.appendChild(link);
+      }
+
+      function injectScript(src) {
+        return new Promise((resolvePromise, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.dataset.shojiBundle = 'true';
+          script.onload = () => resolvePromise();
+          script.onerror = () => reject(new Error(`Failed to load ${src}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      function clearBundleAssets() {
+        document.querySelectorAll('[data-shoji-bundle]').forEach((el) => el.remove());
+      }
+
+      // Tracks what's actually loaded into the page right now, so switching
+      // back and forth (or ticking more plugin checkboxes) only ever loads
+      // what's missing rather than re-injecting everything on every rebuild.
+      let loadedBundleMode = null;
+      const loadedPluginDirs = new Set();
+
+      async function ensureBundle(mode, enabledDirs) {
+        if (mode !== loadedBundleMode) {
+          // Switching bundles: shoji.min.js and shoji-core.min.js both
+          // register the *entire* `window.Shoji` global themselves (see
+          // scripts/build.mjs — core's UMD name is the plain 'Shoji', not a
+          // dotted extend target), so the old one has to go before the new
+          // one loads, or a stale plugin class could linger across a
+          // Combined -> Core switch.
+          clearBundleAssets();
+          loadedPluginDirs.clear();
+          if (mode === 'combined') {
+            injectLink('dist/shoji.min.css');
+            await injectScript('dist/shoji.min.js');
+          } else {
+            injectLink('dist/core/shoji-core.min.css');
+            await injectScript('dist/core/shoji-core.min.js');
+          }
+          loadedBundleMode = mode;
+        }
+        if (mode !== 'core') return;
+        for (const dir of enabledDirs) {
+          if (loadedPluginDirs.has(dir)) continue;
+          const module = PLUGIN_MODULES.find((m) => m.dir === dir);
+          if (module.hasCss) injectLink(`dist/plugins/${dir}.min.css`);
+          await injectScript(`dist/plugins/${dir}.min.js`);
+          loadedPluginDirs.add(dir);
+        }
+      }
+
+      async function buildGallery() {
+        updateFieldsetGating();
+        const mode = bundleMode();
+        const enabledDirs = PLUGIN_MODULES.filter((m) => checked(m.checkboxId)).map((m) => m.dir);
+        await ensureBundle(mode, enabledDirs);
+
         applyCssVars();
         if (gallery) {
           gallery.destroy();
@@ -1004,17 +1164,15 @@ its own id) rather than a real function input.
 
         const dataSource = document.querySelector('input[name="dataSource"]:checked').value;
 
-        const plugins = [];
-        if (checked('plugin-fullscreen')) plugins.push(Shoji.Fullscreen);
-        if (checked('plugin-rotateFlip')) plugins.push(Shoji.RotateFlip);
+        // Shoji.<Class> for each ticked official plugin — by the time we
+        // get here ensureBundle() has already loaded every one of them,
+        // in both bundle modes.
+        const plugins = PLUGIN_MODULES.filter((m) => checked(m.checkboxId)).map(
+          (m) => Shoji[m.className],
+        );
         if (checked('plugin-myPlugin')) plugins.push(MyPlugin);
         if (checked('plugin-themePicker')) plugins.push(ThemePicker);
         if (checked('plugin-customVideoControls')) plugins.push(CustomVideoControls);
-        if (checked('plugin-layout')) plugins.push(Shoji.Layout);
-        if (checked('plugin-activeThumbnail')) plugins.push(Shoji.ActiveThumbnail);
-        if (checked('plugin-zoom')) plugins.push(Shoji.Zoom);
-        if (checked('plugin-video')) plugins.push(Shoji.Video);
-        if (checked('plugin-autoplay')) plugins.push(Shoji.Autoplay);
 
         const gestures = {};
         const lockThreshold = numOrUndefined('opt-lockThreshold');
