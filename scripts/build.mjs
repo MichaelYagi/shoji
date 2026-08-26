@@ -25,14 +25,22 @@ const distDir = join(root, 'dist');
 
 rmSync(distDir, { recursive: true, force: true });
 
+/** Every `src/plugins/*` directory with a real `index.ts` — the one place both `findPluginEntries()` (ESM) and the standalone per-plugin UMD builds below discover the plugin roster from, so a new plugin picks up build support in both places automatically. */
+function pluginDirNames() {
+  const pluginsDir = join(root, 'src/plugins');
+  if (!existsSync(pluginsDir)) return [];
+  return readdirSync(pluginsDir, { withFileTypes: true })
+    .filter(
+      (dirent) => dirent.isDirectory() && existsSync(join(pluginsDir, dirent.name, 'index.ts')),
+    )
+    .map((dirent) => dirent.name);
+}
+
 function findPluginEntries() {
   const pluginsDir = join(root, 'src/plugins');
-  if (!existsSync(pluginsDir)) return {};
   const entries = {};
-  for (const dirent of readdirSync(pluginsDir, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) continue;
-    const entry = join(pluginsDir, dirent.name, 'index.ts');
-    if (existsSync(entry)) entries[`plugins/${dirent.name}/index`] = entry;
+  for (const name of pluginDirNames()) {
+    entries[`plugins/${name}/index`] = join(pluginsDir, name, 'index.ts');
   }
   return entries;
 }
@@ -64,6 +72,128 @@ async function buildSingleFile(minify) {
           // Vite's default CSS asset name doesn't vary with fileName(), so
           // the minified pass would silently overwrite the unminified one
           // (both land on "shoji.css") without pinning this explicitly.
+          assetFileNames: () => cssName,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * `dist/core/shoji-core.(min.)js` + `.css` — Gallery alone, no plugin
+ * statics attached, plus `dist/plugins/{name}.(min.)js` + `.css`, one per
+ * official plugin below — a third distribution option alongside the
+ * combined single-file bundle above and the tree-shakable ESM entries
+ * below: a `<script>`-tag consumer who wants to pick exactly which
+ * plugins ship, without adopting a bundler for it. Not real files under
+ * `src/` (this build-only concern doesn't belong in the public source
+ * tree) — see the `writeTmpEntry()` doc comment below for where each
+ * entry actually lives instead.
+ *
+ * Each plugin build attaches itself onto the *already-loaded* `Shoji`
+ * global via Rollup's dotted UMD `name` (`Shoji.Autoplay`) plus
+ * `extend: true` — the same "one global" mechanism `src/index.ts`'s own
+ * `Object.assign(Gallery, { Autoplay, ... })` uses for the combined
+ * bundle, just attached one script tag at a time instead of all at once.
+ * Load order matters: `shoji-core.js` must run before any plugin script,
+ * same as `<script>` tag order always has to for any two scripts where
+ * one extends what the other defines.
+ *
+ * Each entry is a tiny real file, not a virtual module — `build.lib.entry`
+ * resolves its string as a file path itself, before Rollup's own plugin
+ * pipeline (a virtual-module `resolveId`/`load` plugin, tried first and
+ * genuinely working for `rollupOptions.input`, still failed here with
+ * "Could not resolve entry module") ever gets a chance to intercept it.
+ * Written into `dist/entries-tmp/` — already-gitignored (`dist/` as a
+ * whole), and wiped by this same script's own `rmSync(distDir, ...)` at
+ * the top on the *next* run even if this run's own cleanup, below, never
+ * gets to — then deleted for real once every build below has read it.
+ */
+const tmpEntriesDir = join(distDir, 'entries-tmp');
+
+function writeTmpEntry(fileName, code) {
+  mkdirSync(tmpEntriesDir, { recursive: true });
+  const path = join(tmpEntriesDir, fileName);
+  writeFileSync(path, code, 'utf-8');
+  return path;
+}
+
+async function buildCoreStandalone(minify) {
+  const cssName = minify ? 'shoji-core.min.css' : 'shoji-core.css';
+  const entry = writeTmpEntry(
+    'shoji-core-standalone.ts',
+    `export { Gallery as default } from ${JSON.stringify(resolve(root, 'src/core'))};\n` +
+      `import ${JSON.stringify(resolve(root, 'src/styles/shoji.css'))};\n`,
+  );
+  await build({
+    root,
+    configFile: false,
+    build: {
+      outDir: 'dist/core',
+      emptyOutDir: false,
+      cssCodeSplit: false,
+      minify: minify ? 'esbuild' : false,
+      cssMinify: minify,
+      sourcemap: true,
+      lib: {
+        entry,
+        name: 'Shoji',
+        formats: ['umd'],
+        fileName: () => (minify ? 'shoji-core.min.js' : 'shoji-core.js'),
+      },
+      rollupOptions: {
+        output: {
+          exports: 'default',
+          extend: true,
+          assetFileNames: () => cssName,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * `dirName` → exported class name is a mechanical capitalize-first-letter
+ * transform (`autoplay` → `Autoplay`, `rotateFlip` → `RotateFlip`,
+ * `activeThumbnail` → `ActiveThumbnail`) — true for all seven official
+ * plugins today, matching `src/index.ts`'s own import names exactly. Not
+ * hardcoded as a lookup table, same "new plugins pick up build support
+ * automatically" reasoning `findPluginEntries()` below already has;
+ * revisit only if a future plugin's folder name genuinely doesn't follow
+ * this convention.
+ */
+function pluginClassName(dirName) {
+  return dirName.charAt(0).toUpperCase() + dirName.slice(1);
+}
+
+async function buildPluginStandalone(dirName, minify) {
+  const className = pluginClassName(dirName);
+  const cssName = minify ? `${dirName}.min.css` : `${dirName}.css`;
+  const importPath = resolve(root, `src/plugins/${dirName}/index.ts`);
+  const entry = writeTmpEntry(
+    `plugin-standalone-${dirName}.ts`,
+    `export { ${className} as default } from ${JSON.stringify(importPath)};\n`,
+  );
+  await build({
+    root,
+    configFile: false,
+    build: {
+      outDir: 'dist/plugins',
+      emptyOutDir: false,
+      cssCodeSplit: false,
+      minify: minify ? 'esbuild' : false,
+      cssMinify: minify,
+      sourcemap: true,
+      lib: {
+        entry,
+        name: `Shoji.${className}`,
+        formats: ['umd'],
+        fileName: () => (minify ? `${dirName}.min.js` : `${dirName}.js`),
+      },
+      rollupOptions: {
+        output: {
+          exports: 'default',
+          extend: true,
           assetFileNames: () => cssName,
         },
       },
@@ -135,6 +265,13 @@ function copyDocsRuntimeAssets() {
 
 await buildSingleFile(false);
 await buildSingleFile(true);
+await buildCoreStandalone(false);
+await buildCoreStandalone(true);
+for (const dirName of pluginDirNames()) {
+  await buildPluginStandalone(dirName, false);
+  await buildPluginStandalone(dirName, true);
+}
+rmSync(tmpEntriesDir, { recursive: true, force: true });
 await buildEsm();
 copyDocsRuntimeAssets();
 stampDocsVersion();
@@ -144,6 +281,8 @@ console.log(
     'Build complete:',
     '  dist/shoji.js, dist/shoji.min.js',
     '  dist/shoji.css, dist/shoji.min.css',
+    '  dist/core/shoji-core.(min.)js + .css',
+    '  dist/plugins/{name}.(min.)js + .css',
     '  dist/esm/** (+ .d.ts)',
     '  docs/dist/shoji.min.js, docs/dist/shoji.min.css (for docs/examples/)',
     '  docs/docs.js (DOCS_VERSION stamped)',

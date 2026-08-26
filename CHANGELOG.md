@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.3] - 2026-08-26
+
+### Added
+
+- **A third distribution option, alongside the combined single-file
+  bundle and the tree-shakable ESM entries: `dist/core/shoji-core.(min.)js`
+  + `.css` (Gallery alone, no plugin statics — ~63 kB/~17 kB gzip
+  minified) and `dist/plugins/{name}.(min.)js` + `.css`, one per official
+  plugin.** For a `<script>`-tag consumer who wants to pick exactly which
+  plugins ship — Zoom and Autoplay but not the other five, say — without
+  adopting a bundler just to trim them. Each plugin file attaches itself
+  onto the already-loaded `Shoji` global (`Shoji.Autoplay`, etc.), the
+  same "one global" mechanism the combined bundle uses, just one script
+  tag at a time; `shoji-core.js` must load first. See the Getting Started
+  guide's new "Core + individual plugin files" section, and DESIGN.md
+  §10.
+
 ## [0.1.0-beta.2] - 2026-08-26
 
 ### Fixed

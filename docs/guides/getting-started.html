@@ -28,7 +28,7 @@
     <h1>Getting started</h1>
 
     <h2>Install</h2>
-    <p>Two ways to bring Shoji in, both produced by the same <code>npm run build</code>:</p>
+    <p>Three ways to bring Shoji in, all produced by the same <code>npm run build</code>:</p>
 
     <h3>Single file (no build step)</h3>
     <p>
@@ -45,6 +45,29 @@
       The UMD build exposes exactly one global: <code>Shoji</code>. It's the constructor itself (not
       a namespace object), and official plugins hang off it as static properties —
       <code>Shoji.Zoom</code>, <code>Shoji.Layout</code>, etc.
+    </p>
+
+    <h3>Core + individual plugin files (no build step, pick exactly what you want)</h3>
+    <p>
+      Same zero-build-step story as the single file above, but split apart — for when you want, say,
+      Zoom and Autoplay but not the other five official plugins, without adopting a bundler just to
+      trim them.
+    </p>
+    <pre><code>&lt;link rel="stylesheet" href="core/shoji-core.min.css" /&gt;
+&lt;link rel="stylesheet" href="plugins/zoom.min.css" /&gt;
+&lt;script src="core/shoji-core.min.js"&gt;&lt;/script&gt;
+&lt;script src="plugins/zoom.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  new Shoji('#gallery', { plugins: [Shoji.Zoom] });
+&lt;/script&gt;</code></pre>
+    <p>
+      <code>core/shoji-core.min.js</code> must load before any <code>plugins/*.min.js</code> file —
+      each plugin script attaches itself onto the <code>Shoji</code> global the core script just
+      created (<code>Shoji.Zoom</code>, same as the combined bundle above), not the other way
+      around. Plugin script tags themselves can be in any order relative to each other, and CSS
+      order doesn't matter at all. Some plugins (<code>ActiveThumbnail</code>,
+      <code>Fullscreen</code>) have no CSS of their own — no <code>&lt;link&gt;</code> tag needed
+      for those.
     </p>
 
     <h3>npm / ESM</h3>
