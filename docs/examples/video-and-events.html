@@ -98,7 +98,7 @@
           // actually embeds — unlike the html5 item above, no placeholder
           // file needed.
           id: 'v2',
-          src: 'https://youtu.be/dQw4w9WgXcQ',
+          src: 'https://www.youtube.com/watch?v=BB49x_uMlGA',
           video: true,
           poster: svgDataUri('YouTube', '#c0392b'),
           width: 800,
@@ -110,7 +110,7 @@
           // resolves to { provider: 'vimeo', id }. "Short Short: Home", by
           // The Animation Workshop.
           id: 'v3',
-          src: 'https://vimeo.com/167254041',
+          src: 'https://vimeo.com/112787180',
           video: true,
           poster: svgDataUri('Vimeo', '#1ab7ea'),
           width: 800,
@@ -231,7 +231,7 @@
       // descriptor from src (youtube or vimeo if the host matches, html5
       // otherwise). No provider, no id to type by hand.
       id: 'v2',
-      src: 'https://youtu.be/dQw4w9WgXcQ',
+      src: 'https://www.youtube.com/watch?v=BB49x_uMlGA',
       video: true,
       poster: 'yt-poster.jpg',
       width: 1600,
@@ -240,7 +240,7 @@
     },
     {
       id: 'v3',
-      src: 'https://vimeo.com/167254041',
+      src: 'https://vimeo.com/112787180',
       video: true,
       poster: 'vimeo-poster.jpg',
       width: 1600,
@@ -266,8 +266,8 @@ document.querySelectorAll('#gallery > a').forEach((el, i) => {
       just spelled out — and this form also works in selector mode via
       <code>data-shoji-video</code> alone:
     </p>
-    <pre><code>{ id: 'v2', src: 'https://youtu.be/dQw4w9WgXcQ', video: { provider: 'youtube' } }
-// → resolved to { provider: 'youtube', id: 'dQw4w9WgXcQ' } automatically, same as video: true above</code></pre>
+    <pre><code>{ id: 'v2', src: 'https://www.youtube.com/watch?v=BB49x_uMlGA', video: { provider: 'youtube' } }
+// → resolved to { provider: 'youtube', id: 'BB49x_uMlGA' } automatically, same as video: true above</code></pre>
     <p>Every core lifecycle event, logged as it fires:</p>
     <pre><code>[
   'beforeOpen', 'open', 'afterOpen',
