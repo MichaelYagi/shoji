@@ -1,5 +1,5 @@
 // Stamped automatically by scripts/build.mjs — do not edit by hand.
-const DOCS_VERSION = 'v0.1.0-beta.1';
+const DOCS_VERSION = 'v0.1.0-beta.2';
 
 (function stampVersion() {
   let footer = document.querySelector('body > footer');

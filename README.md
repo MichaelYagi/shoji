@@ -1,11 +1,11 @@
 # Shoji
 
 [![CI](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml)
-[![npm (alpha)](https://img.shields.io/npm/v/%40michaelyagi%2Fshoji/alpha.svg)](https://www.npmjs.com/package/@michaelyagi/shoji)
+[![npm (beta)](https://img.shields.io/npm/v/%40michaelyagi%2Fshoji/beta.svg)](https://www.npmjs.com/package/@michaelyagi/shoji)
 
 A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<script>`/`<link>` tags, or install from npm — everything beyond the minimal lightbox, including every official plugin, is opt-in.
 
-> **Status: alpha.** The API is still settling — expect breaking changes between `0.x` releases.
+> **Status: beta.** The API is still settling — expect breaking changes between `0.x` releases.
 
 ## Features
 
@@ -28,7 +28,7 @@ A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<scrip
 ```
 
 ```bash
-npm install @michaelyagi/shoji@alpha
+npm install @michaelyagi/shoji@beta
 ```
 
 ```js

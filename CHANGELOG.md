@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.2] - 2026-08-26
+
+### Fixed
+
+- **README's npm badge and install instructions still pointed at the
+  `alpha` dist-tag** — a leftover from before the beta series started;
+  the badge would have kept showing `0.1.0-alpha.39` forever regardless
+  of what `latest`/`beta` point to. Now reads `beta`, matching `npm
+install @michaelyagi/shoji@beta`.
+
 ## [0.1.0-beta.1] - 2026-08-26
 
 First beta release — the alpha series is done; from here, `npm install
