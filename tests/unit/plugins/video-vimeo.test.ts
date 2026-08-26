@@ -34,6 +34,8 @@ function makeVimeoPlayerMock() {
     pause: ReturnType<typeof vi.fn>;
     setMuted: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    getVideoWidth: ReturnType<typeof vi.fn>;
+    getVideoHeight: ReturnType<typeof vi.fn>;
     resolveReady: () => void;
     trigger: (
       event: 'play' | 'pause' | 'ended' | 'error',
@@ -47,6 +49,13 @@ function makeVimeoPlayerMock() {
     pause = vi.fn(() => Promise.resolve());
     setMuted = vi.fn((muted: boolean) => Promise.resolve(muted));
     destroy = vi.fn(() => Promise.resolve());
+    // 0 by default — falsy, so the `if (width && height)` guard in
+    // vimeo.ts's ready() handler skips writing --shoji-provider-video-aspect
+    // at all, keeping every existing test below inert to this. Tests
+    // covering the correction itself override these via the instance
+    // directly (see `instances[...].getVideoWidth = ...`).
+    getVideoWidth = vi.fn(() => Promise.resolve(0));
+    getVideoHeight = vi.fn(() => Promise.resolve(0));
     private handlers: Record<string, Array<(arg: { name: string; message: string }) => void>> = {};
     private readyResolve!: () => void;
     private readyPromise = new Promise<void>((resolve) => {
@@ -306,7 +315,68 @@ describe('renderVimeo — API already loaded (window.Vimeo.Player present)', () 
     expect(onReady).not.toHaveBeenCalled();
 
     instances[0]!.resolveReady();
+    // A few extra ticks — the getVideoWidth()/getVideoHeight() aspect-ratio
+    // correction (vimeo.ts's ready() handler) chains Promise.all().then()
+    // .catch().then(() => onReady()) after ready() itself resolves, each a
+    // real microtask hop even on the all-synthetic-resolved-promises path
+    // these fakes use.
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("a real bug, reported from real usage: corrects --shoji-provider-video-aspect from the player's own real dimensions once ready, so a wrong (or absent) item.width/item.height can't leave Shoji's outer box a different shape than what Vimeo's own player actually renders — exposing its cross-origin iframe's default white background in the gap", async () => {
+    const { Vimeo, instances } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    const container = document.createElement('div');
+    const onReady = vi.fn();
+    // vimeoItem declares no width/height at all — the real dimensions must
+    // come entirely from the player's own getVideoWidth()/getVideoHeight(),
+    // not merely "not contradict" a declared value.
+    renderVimeo(container, vimeoItem, onReady, new AbortController().signal, vi.fn());
+    await Promise.resolve();
+
+    // A real 2.4:1 cinematic-widescreen shape — not 16:9 — the exact class
+    // of video that exposed this bug.
+    instances[0]!.getVideoWidth = vi.fn(() => Promise.resolve(1280));
+    instances[0]!.getVideoHeight = vi.fn(() => Promise.resolve(534));
+    instances[0]!.resolveReady();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.style.getPropertyValue('--shoji-provider-video-aspect')).toBe(
+      'calc(1280 / 534)',
+    );
+    expect(onReady).toHaveBeenCalledTimes(1); // still fires — the correction never blocks it
+  });
+
+  it('a rejected (or zero) getVideoWidth()/getVideoHeight() leaves --shoji-provider-video-aspect untouched and still calls onReady — real dimensions unavailable is not a hang', async () => {
+    const { Vimeo, instances } = makeVimeoPlayerMock();
+    window.Vimeo = Vimeo;
+    const renderVimeo = await freshRenderVimeo();
+
+    const container = document.createElement('div');
+    const onReady = vi.fn();
+    renderVimeo(container, vimeoItem, onReady, new AbortController().signal, vi.fn());
+    await Promise.resolve();
+
+    instances[0]!.getVideoWidth = vi.fn(() => Promise.reject(new Error('unavailable')));
+    instances[0]!.resolveReady();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.style.getPropertyValue('--shoji-provider-video-aspect')).toBe('');
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
@@ -541,6 +611,11 @@ describe('renderVimeo — cold start (API not yet loaded)', () => {
     scripts[0]!.dispatchEvent(new Event('load'));
     await Promise.resolve();
     instances[0]!.resolveReady();
+    // A few extra ticks — see the sibling test above's own comment on why.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
 
     expect(onReady).toHaveBeenCalledTimes(1);

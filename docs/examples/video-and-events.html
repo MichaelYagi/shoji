@@ -112,9 +112,11 @@
           id: 'v3',
           src: 'https://vimeo.com/112787180',
           video: true,
-          poster: svgDataUri('Vimeo', '#1ab7ea'),
-          width: 800,
-          height: 600,
+          // 1280x534 (~2.4:1, cinematic widescreen, not 16:9) — this
+          // video's own real dimensions.
+          poster: svgDataUri('Vimeo', '#1ab7ea', 1280, 534),
+          width: 1280,
+          height: 534,
           caption: 'Vimeo via video: true — id inferred from src',
         },
       ];
@@ -243,8 +245,8 @@
       src: 'https://vimeo.com/112787180',
       video: true,
       poster: 'vimeo-poster.jpg',
-      width: 1600,
-      height: 1200,
+      width: 1280,
+      height: 534,
       caption: 'Vimeo via video: true',
     },
   ],

@@ -559,7 +559,11 @@ its own id) rather than a real function input.
           caption: 'Sunset 24',
           metadata_id: '997',
           src: 'https://vimeo.com/112787180',
-          poster: posterUri('Vimeo video', 3),
+          // 1280x534 (~2.4:1, cinematic widescreen, not 16:9) — this
+          // video's own real dimensions.
+          poster: posterUri('Vimeo video', 3, 1280, 534),
+          width: 1280,
+          height: 534,
           video: true,
         },
       ];

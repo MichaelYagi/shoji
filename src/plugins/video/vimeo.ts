@@ -15,6 +15,9 @@ interface VimeoPlayer {
   setMuted(muted: boolean): Promise<boolean>;
   ready(): Promise<void>;
   destroy(): Promise<void>;
+  /** The video's own real native pixel dimensions — used to correct `--shoji-provider-video-aspect` (see the `player.ready()` handler below) if a host's declared `item.width`/`item.height` doesn't match. */
+  getVideoWidth(): Promise<number>;
+  getVideoHeight(): Promise<number>;
   on(event: 'play' | 'pause' | 'ended', callback: () => void): void;
   on(event: 'error', callback: (error: VimeoErrorEvent) => void): void;
 }
@@ -265,7 +268,35 @@ export const renderVimeo: VideoProviderRenderer = (container, item, onReady, sig
 
     player.ready().then(() => {
       wirePlayableContract(container, player);
-      onReady();
+      // A real bug, reported from real usage: a host's declared
+      // `item.width`/`item.height` (what `--shoji-provider-video-aspect`,
+      // shoji.css, is normally set from — SlideManager.ts's `applyAspect()`)
+      // doesn't always match the video's own real shape — confirmed
+      // directly against a real 2.4:1 cinematic-widescreen video declared
+      // as a plain 4:3 item. Vimeo's own player fits *itself* to the real
+      // shape regardless of what box it's given, so a mismatch here leaves
+      // Shoji's outer box a different aspect ratio than what Vimeo actually
+      // renders inside it — exposing the iframe's own default white
+      // background (not overridable from here, that content is
+      // cross-origin) in the gap, instead of a clean, uniform letterbox.
+      // Corrected here, before `onReady()` reveals the container, using the
+      // one thing that can't be wrong: the player's own real dimensions.
+      // Setting this directly on `container` (`.shoji-slide-provider-video`)
+      // overrides the inherited value from `applyAspect()`'s own
+      // `.shoji-slide-media` — no coordination with SlideManager needed.
+      // Swallowed on rejection: a declared item.width/height (if any) is a
+      // fine fallback, and this must never block onReady().
+      Promise.all([player.getVideoWidth(), player.getVideoHeight()])
+        .then(([width, height]) => {
+          if (width && height) {
+            container.style.setProperty(
+              '--shoji-provider-video-aspect',
+              `calc(${width} / ${height})`,
+            );
+          }
+        })
+        .catch(() => {})
+        .then(() => onReady());
     });
 
     signal.addEventListener(

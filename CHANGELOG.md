@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.1] - 2026-08-26
+
+First beta release — the alpha series is done; from here, `npm install
+@michaelyagi/shoji@beta` tracks the newest beta build (`latest` now points
+here too).
+
+### Fixed
+
+- **A Vimeo item whose declared `width`/`height` didn't match the video's
+  real shape could show a white gap where Shoji's theme background should
+  be** — Vimeo's own player fits itself to the video's real aspect ratio
+  regardless of the box it's given, so a mismatch left Shoji's outer box a
+  different shape than what Vimeo actually rendered inside it, exposing
+  the (cross-origin, unreachable) iframe's default white background in
+  the resulting gap. `vimeo.ts` now also queries the player's own
+  `getVideoWidth()`/`getVideoHeight()` once ready and self-corrects,
+  regardless of what `item.width`/`item.height` claims. YouTube is
+  unaffected by this specific bug and isn't changed. See DESIGN.md §4.3.
+
 ## [0.1.0-alpha.39] - 2026-08-25
 
 ### Added
