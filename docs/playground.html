@@ -351,6 +351,10 @@ its own id) rather than a real function input.
               ><input type="checkbox" id="opt-activeThumbnail-scrollIntoView" checked />
               scrollIntoView</label
             >
+            <label><input type="checkbox" id="opt-activeThumbnail-highlight" /> highlight</label>
+            <label
+              >borderColor <input type="text" id="opt-activeThumbnail-borderColor" value="blue"
+            /></label>
           </div>
         </fieldset>
 
@@ -1057,7 +1061,7 @@ its own id) rather than a real function input.
           checkboxId: 'plugin-activeThumbnail',
           dir: 'activeThumbnail',
           className: 'ActiveThumbnail',
-          hasCss: false,
+          hasCss: true,
         },
         { checkboxId: 'plugin-zoom', dir: 'zoom', className: 'Zoom', hasCss: true },
         { checkboxId: 'plugin-video', dir: 'video', className: 'Video', hasCss: false },
@@ -1214,6 +1218,8 @@ its own id) rather than a real function input.
           activeThumbnail: {
             activeClass: $('opt-activeThumbnail-activeClass').value || 'shoji-thumb-active',
             scrollIntoView: checked('opt-activeThumbnail-scrollIntoView'),
+            highlight: checked('opt-activeThumbnail-highlight'),
+            borderColor: $('opt-activeThumbnail-borderColor').value || 'blue',
           },
           'my-plugin': {
             greeting: 'hello there',

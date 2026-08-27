@@ -145,6 +145,26 @@ describe('Gallery — page scroll lock', () => {
     gallery.destroy();
     document.body.style.overflow = '';
   });
+
+  it('markIntentionalScroll() (public, delegates to bodyScrollLock) skips the restore-scroll-position-on-close behavior, same as calling the module function directly — added specifically so a plugin never has to import bodyScrollLock itself: in the standalone core+plugins distribution (dist/core/ + dist/plugins/{name}.js as separate bundles, DESIGN.md §10), a plugin importing that module directly gets its own disconnected copy of its state, invisible to the real lock this method reaches through the shared Gallery instance', () => {
+    // jsdom doesn't implement window.scrollTo (no-ops, never actually moves
+    // scrollY) — same mocking approach tests/unit/bodyScrollLock.test.ts
+    // already uses: define scrollX/Y directly and assert on the scrollTo
+    // call itself, not on a real position change.
+    Object.defineProperty(window, 'scrollY', { value: 500, configurable: true });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const gallery = new Gallery(document.createElement('div'));
+
+    gallery.open(); // captures scrollY=500 as the position close() would otherwise restore to
+    Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true }); // a plugin's own intentional scroll while open
+    gallery.markIntentionalScroll();
+    gallery.close();
+
+    expect(scrollTo).not.toHaveBeenCalled(); // no restore-to-500 call at all
+    gallery.destroy();
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    vi.restoreAllMocks();
+  });
 });
 
 describe('Gallery — openOnInit', () => {

@@ -1,0 +1,47 @@
+/**
+ * Opt-in only (`highlight: true`) — targets a fixed, non-configurable class
+ * the plugin adds alongside the host-renameable `activeClass`, since a CSS
+ * file can't target a selector whose name is only known at runtime.
+ *
+ * A real `border`, not `outline` or `box-shadow` — two real bugs, both
+ * reported from real usage and both confirmed by an actual screenshot, not
+ * just computed-style inspection (which reported both as "working" the
+ * whole time, since the values genuinely were applied — just never
+ * visible):
+ *
+ * 1. `outline` draws *outside* the element's own box, which a tightly
+ *    packed layout grid (a small `gutter`) has no room for — the
+ *    neighboring tile, painted after it in plain DOM stacking order,
+ *    visually covers most or all of it.
+ * 2. `box-shadow` (even `inset`) paints as part of the element's own
+ *    background layer, *underneath* its children in normal paint order —
+ *    the tile's own `<img>`, filling 100% of the box with no padding,
+ *    completely covered it.
+ *
+ * `border` has neither problem: it reserves real layout space (via
+ * `box-sizing: border-box` below, so it intrudes into the existing box
+ * instead of growing past Layout's precisely-computed tile dimensions),
+ * so a percentage-sized child image is laid out to fit *inside* it rather
+ * than painting over it, and it never extends past the box into a
+ * neighbor's territory the way `outline` does.
+ *
+ * A third real bug, also confirmed by an actual screenshot: with no
+ * Layout tile (plain DOM/selector-mode markup, the host's own `<a>` at its
+ * default `display: inline`), the border only wrapped a thin sliver at
+ * roughly text-line height instead of the whole image — a well-known CSS
+ * quirk, not a sizing bug: a non-replaced *inline* element's top/bottom
+ * border is painted at the inline box's own line-height, which a large
+ * inline child image doesn't expand, even though the image itself renders
+ * at full size right next to it. `display: inline-block` (or `block`)
+ * fixes this by giving the element a real content-box height that does
+ * include its child's size. Safe on Layout's own tiles too, which already
+ * set their own `display` (layout.css) — CSS *blockifies* both grid items
+ * and absolutely-positioned elements regardless of their own declared
+ * `display` value (masonry/justified tiles are `position: absolute`, grid
+ * tiles are grid items), so this never actually overrides that there.
+ */
+.shoji-thumb-active--highlight {
+  display: inline-block;
+  box-sizing: border-box;
+  border: 2px solid var(--shoji-active-thumbnail-border-color, blue);
+}

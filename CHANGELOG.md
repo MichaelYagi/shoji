@@ -5,6 +5,54 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.4] - 2026-08-26
+
+### Added
+
+- **`ActiveThumbnail`'s `highlight`/`borderColor` options.** Opt-in
+  (`highlight`, default `false`) default visual styling for the active
+  thumbnail — previously the plugin only ever toggled a class
+  (`activeClass`), leaving 100% of the look to the host, which meant a
+  host with no thumbnail grid of its own to style had no way to actually
+  see it working at all. `borderColor` (default `'blue'`) sets a real
+  `border` around the active element via
+  `--shoji-active-thumbnail-border-color`.
+
+### Fixed
+
+- **`ActiveThumbnail`'s active class (and `highlight` styling) is no
+  longer cleared on `close()`.** The whole point of a visible "you were
+  just looking at this one" marker is seeing it once the lightbox and its
+  backdrop are out of the way — clearing it the instant the lightbox
+  closed meant it could never actually be seen. It now persists until a
+  genuinely different slide becomes active; only a real `destroy()`
+  removes it.
+- **`scrollIntoView` no longer silently fails to move the page when
+  navigation and `close()` happen close together** (the normal case at
+  ordinary clicking speed). The flush for a still-pending scroll now runs
+  on `beforeClose` instead of `close` — before the core's own scroll-lock
+  restore decision, not after — so it can no longer lose the race and get
+  wrongly overridden.
+- **`ActiveThumbnail`'s scroll-lock coordination now works correctly when
+  loaded via the Core + plugins standalone distribution** (`dist/core/` +
+  `dist/plugins/{name}.js` as separate script tags). It previously
+  imported an internal core module directly, which — bundled separately
+  from core in that distribution mode — silently became a disconnected
+  copy of that module's state, no-op-ing the fix above specifically in
+  that mode. Fixed via a new public `Gallery.markIntentionalScroll()`
+  method, reached through the single shared `Gallery` instance instead.
+- **`ActiveThumbnail`'s default highlight now uses a real `border`
+  instead of `outline` or `box-shadow`**, after both were found to be
+  effectively invisible in real use: `outline` draws outside the
+  element's own box, which a tightly-gutter'd Layout grid has no room
+  for; `box-shadow` (even `inset`) paints underneath child content, so a
+  tile's own full-bleed `<img>` completely covered it. A real `border`
+  has neither problem. Also now `display: inline-block` — a
+  `display: inline` host anchor (plain DOM/selector-mode markup with no
+  Layout) only drew the border at text-line height, not around a large
+  child image's real size, a well-known CSS quirk for non-replaced
+  inline elements.
+
 ## [0.1.0-beta.3] - 2026-08-26
 
 ### Added

@@ -1,4 +1,8 @@
-import { lockBodyScroll, unlockBodyScroll } from './bodyScrollLock';
+import {
+  lockBodyScroll,
+  unlockBodyScroll,
+  markIntentionalScroll as markIntentionalScrollInternal,
+} from './bodyScrollLock';
 import { EventBus, type Unsubscribe } from './EventBus';
 import { buildLightboxDom, type LightboxDom } from './dom';
 import { FocusTrap } from './FocusTrap';
@@ -1148,6 +1152,11 @@ export class Gallery {
       if (marked) return marked;
     }
     return this.scannedElements[index] ?? null;
+  }
+
+  /** Lets a plugin's background-page `scrollIntoView()` survive `close()`'s scroll restore, routed through this shared instance rather than importing `bodyScrollLock` directly — required for the standalone core+plugins distribution, where a direct import would get its own disconnected module copy (DESIGN.md §4.2/§10). Same reasoning `getOriginElement`/`getActiveMedia` were made public for. */
+  markIntentionalScroll(): void {
+    markIntentionalScrollInternal();
   }
 
   private scheduleAutoHide(): void {

@@ -59,15 +59,16 @@ describe('ActiveThumbnail plugin', () => {
     gallery.destroy();
   });
 
-  it('clears the active class on close(), and re-applies it on the next open()', () => {
+  it('persists the active class after close() — the whole point is seeing which thumbnail you were just looking at once the lightbox (and its backdrop) is out of the way — and moves it once a different slide becomes active on the next open()', () => {
     const { gallery, thumbs } = makeSelectorGallery();
     gallery.open(1);
     expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(true);
 
     gallery.close();
-    expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(false);
+    expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(true);
 
     gallery.open(2);
+    expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(false);
     expect(thumbs[2]!.classList.contains('shoji-thumb-active')).toBe(true);
     gallery.destroy();
   });
@@ -119,7 +120,7 @@ describe('ActiveThumbnail plugin', () => {
     vi.useRealTimers();
   });
 
-  it('close() cancels a still-pending debounced scroll — nothing fires after close for a navigation that happened just before it', () => {
+  it('close() flushes a still-pending debounced scroll immediately, synchronously, instead of dropping it or letting the timer run out after close — regression: an earlier version dropped it outright, so a navigation immediately followed by close (routine at normal clicking speed) silently never scrolled to where the viewer actually ended up', () => {
     vi.useFakeTimers();
     const { gallery, thumbs } = makeSelectorGallery();
     gallery.open(1);
@@ -130,9 +131,38 @@ describe('ActiveThumbnail plugin', () => {
     gallery.goTo(2, { animate: false });
     const spy2 = vi.spyOn(thumbs[2]!, 'scrollIntoView');
     gallery.close();
-    vi.advanceTimersByTime(200);
 
-    expect(spy2).not.toHaveBeenCalled();
+    // Synchronous, not "eventually" — close() itself must run it, not the
+    // timer firing naturally some tens of ms later (that's the *other*
+    // failure mode this guards against: the page visibly scrolling on its
+    // own after the lightbox is already gone).
+    expect(spy2).toHaveBeenCalledTimes(1);
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('close() does not scroll a second time if the pending scroll had already fired naturally before close', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery();
+    gallery.open(1);
+    vi.advanceTimersByTime(80);
+    const spy = vi.spyOn(thumbs[1]!, 'scrollIntoView');
+
+    gallery.close();
+    expect(spy).not.toHaveBeenCalled();
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('close() does not scroll at all when scrollIntoView: false, even with a navigation immediately beforehand', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { scrollIntoView: false } });
+    gallery.open(1);
+    gallery.goTo(2, { animate: false });
+    const spy = vi.spyOn(thumbs[2]!, 'scrollIntoView');
+    gallery.close();
+
+    expect(spy).not.toHaveBeenCalled();
     gallery.destroy();
     vi.useRealTimers();
   });
@@ -171,6 +201,51 @@ describe('ActiveThumbnail plugin', () => {
 
     gallery.destroy();
     expect(thumbs[1]!.classList.contains('shoji-thumb-active')).toBe(false);
+  });
+
+  it('highlight: false (the default) never adds the styled class or the border-color var', () => {
+    const { gallery, thumbs } = makeSelectorGallery();
+    gallery.open(0);
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(false);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('');
+    gallery.destroy();
+  });
+
+  it('highlight: true adds a fixed styled class and sets --shoji-active-thumbnail-border-color, defaulting to blue', () => {
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
+    gallery.open(0);
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(true);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+    gallery.destroy();
+  });
+
+  it('highlight: true with a custom borderColor sets the var to that color', () => {
+    const { gallery, thumbs } = makeSelectorGallery({
+      activeThumbnail: { highlight: true, borderColor: 'red' },
+    });
+    gallery.open(0);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('red');
+    gallery.destroy();
+  });
+
+  it('highlight: true moves the styled class along with activeClass as the slide changes', () => {
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
+    gallery.open(0);
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(true);
+
+    gallery.next();
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(false);
+    expect(thumbs[1]!.classList.contains('shoji-thumb-active--highlight')).toBe(true);
+    gallery.destroy();
+  });
+
+  it('highlight: true persists the styled class after close() (same reasoning as activeClass — it needs to be visible once the backdrop is gone), and destroy() still removes it for real', () => {
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
+    gallery.open(0);
+    gallery.close();
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(true);
+    gallery.destroy();
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(false);
   });
 
   it('does nothing (no crash) when no origin element exists for the index', () => {

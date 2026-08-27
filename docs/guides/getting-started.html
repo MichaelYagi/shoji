@@ -65,9 +65,11 @@
       each plugin script attaches itself onto the <code>Shoji</code> global the core script just
       created (<code>Shoji.Zoom</code>, same as the combined bundle above), not the other way
       around. Plugin script tags themselves can be in any order relative to each other, and CSS
-      order doesn't matter at all. Some plugins (<code>ActiveThumbnail</code>,
-      <code>Fullscreen</code>) have no CSS of their own — no <code>&lt;link&gt;</code> tag needed
-      for those.
+      order doesn't matter at all. Some plugins (<code>RotateFlip</code>, <code>Fullscreen</code>,
+      <code>Video</code>) have no CSS of their own — no <code>&lt;link&gt;</code> tag needed for
+      those. <code>ActiveThumbnail</code> ships CSS only for its opt-in
+      <code>highlight</code> option (see the Plugins guide) — the <code>&lt;link&gt;</code> tag is
+      only needed if you use it.
     </p>
 
     <h3>npm / ESM</h3>
