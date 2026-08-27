@@ -33,7 +33,6 @@
         --shoji-layout-heading-title-font-weight: 500;
         --shoji-layout-heading-subtitle-font-size: 0.5em;
         --shoji-layout-heading-subtitle-color: #444;
-        visibility: hidden;
         /* A real bug, confirmed directly: every live rebuild below
            (buildGallery(), on any field's own change/input event) clears
            this element via innerHTML = '' and reconstructs an entirely new
@@ -54,6 +53,20 @@
            element rather than the whole page since only this container is
            ever torn down and rebuilt this way. */
         overflow-anchor: none;
+      }
+
+      /* Scoped to a JS-toggled class (buildGallery(), keyed off the Layout
+         checkbox), not applied unconditionally — a real bug, reported from
+         real usage: with the Layout plugin unchecked, nothing ever adds
+         `.shoji-layout` below, so an unconditional `visibility: hidden`
+         here left the gallery permanently invisible with Layout off,
+         regardless of data-source mode. This hide-until-ready guard only
+         ever meant anything for Layout mode in the first place (masking
+         the moment before its own positioning pass runs), so it's now only
+         *possible* to end up hidden when Layout is actually enabled and
+         expected to reveal it. */
+      #gallery.layout-enabled {
+        visibility: hidden;
       }
 
       #gallery.shoji-layout {
@@ -355,6 +368,14 @@ its own id) rather than a real function input.
             <label
               >borderColor <input type="text" id="opt-activeThumbnail-borderColor" value="blue"
             /></label>
+            <label
+              >highlightDuration (ms, blank = persist)
+              <input
+                type="number"
+                id="opt-activeThumbnail-highlightDuration"
+                placeholder="none"
+                min="0"
+            /></label>
           </div>
         </fieldset>
 
@@ -631,7 +652,17 @@ its own id) rather than a real function input.
 
             if (item.video) {
               if (item.poster) attrs.push(`data-shoji-poster="${escapeAttr(item.poster)}"`);
-              return `<a data-shoji-video="${escapeAttr(item.src)}" ${attrs.join(' ')}></a>`;
+              // A real gap, reported from real usage: without a visible
+              // <img> child here (unlike the photo branch below), a video
+              // anchor in DOM mode has zero size — nothing on the page to
+              // click, and nothing for ActiveThumbnail's highlight to
+              // visibly wrap, even though the class itself applies
+              // correctly. data-shoji-poster alone only feeds the *slide's*
+              // own poster inside the lightbox; the anchor's own child <img>
+              // is what represents the thumbnail on the page itself, same
+              // as any real host's markup would need.
+              const posterImg = item.poster ? `<img src="${escapeAttr(item.poster)}">` : '';
+              return `<a data-shoji-video="${escapeAttr(item.src)}" ${attrs.join(' ')}>${posterImg}</a>`;
             }
             if (item.thumb) attrs.push(`data-shoji-thumb="${escapeAttr(item.thumb)}"`);
             return `<a href="${escapeAttr(item.src)}" ${attrs.join(' ')}><img src="${escapeAttr(item.thumb || item.src)}"></a>`;
@@ -1165,6 +1196,10 @@ its own id) rather than a real function input.
         }
         const el = document.getElementById('gallery');
         el.innerHTML = '';
+        // Gates the CSS hide-until-`.shoji-layout` guard above — meaningless
+        // (and actively harmful, per that rule's own comment) when Layout
+        // itself isn't even running.
+        el.classList.toggle('layout-enabled', checked('plugin-layout'));
 
         const dataSource = document.querySelector('input[name="dataSource"]:checked').value;
 
@@ -1177,6 +1212,8 @@ its own id) rather than a real function input.
         if (checked('plugin-myPlugin')) plugins.push(MyPlugin);
         if (checked('plugin-themePicker')) plugins.push(ThemePicker);
         if (checked('plugin-customVideoControls')) plugins.push(CustomVideoControls);
+
+        const highlightDuration = numOrUndefined('opt-activeThumbnail-highlightDuration');
 
         const gestures = {};
         const lockThreshold = numOrUndefined('opt-lockThreshold');
@@ -1227,6 +1264,8 @@ its own id) rather than a real function input.
           },
         };
         if (Object.keys(gestures).length > 0) options.gestures = gestures;
+        if (highlightDuration !== undefined)
+          options.activeThumbnail.highlightDuration = highlightDuration;
 
         const layout = {
           type: $('opt-layout-type').value,
