@@ -14,7 +14,7 @@ A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<scrip
 - **Plugin system** — zoom (pinch/pan/wheel), fullscreen, rotate/flip, autoplay/slideshow, active-thumbnail sync, YouTube video embeds, and a grid/masonry/justified layout engine, each independently opt-in.
 - **Accessibility is not a plugin** — keyboard nav, focus trapping, ARIA roles, and screen-reader announcements live in core.
 - **Themeable via CSS custom properties** — no hardcoded colors/sizes in JS.
-- **Single-file distribution** — `dist/shoji.js` + `dist/shoji.css` (core + every official plugin, self-registering) for zero-setup `<script>` tag use, plus tree-shakable per-plugin ESM entries for bundler users.
+- **Three distributions** — single-file (`dist/shoji.js` + `dist/shoji.css`, core + every plugin, self-registering) for zero-setup `<script>` tag use; core + individual plugin files (`dist/core/shoji-core.(min.)js` + `dist/plugins/{name}.(min.)js`) for `<script>`-tag consumers who want to pick exactly which plugins ship; and tree-shakable per-plugin ESM entries for bundler users.
 - Size-budgeted and CI-enforced: core ≤ 21 kB, each plugin ≤ 8 kB, full bundle ≤ 90 kB (all min+gzip).
 
 ## Install
