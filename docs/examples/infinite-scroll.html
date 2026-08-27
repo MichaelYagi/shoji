@@ -233,7 +233,21 @@
         // exactly on the boundary line during a fast scroll.
         const BUFFER_ROWS = 1;
         const PREFETCH_ROWS = 6; // fetch more once within this many rows of an edge
-        const SEED_ROWS = 30; // seeded rows on each side of SEED — "start full"
+        const SEED_ROWS = 10; // seeded rows on each side of SEED — "start full"
+        // A real mobile bug: a phantom container tall enough (tested:
+        // 7200px/60 rows already did it) destabilizes a mobile browser's
+        // own viewport-sizing heuristic for the *whole page* — confirmed
+        // directly, it broke every dialog on the page, not just this
+        // gallery's, and reproduced even with a completely uninvolved
+        // origin element. Same root cause DESIGN.md already documents for
+        // rotate/flip's mobile-viewport-widening bug: the heuristic reacts
+        // to real page geometry that deep-tree overflow:hidden doesn't
+        // stop. The fix there was locking document.documentElement's
+        // overflow; here, since the tall element is standing page layout
+        // rather than transient paint, the actual fix is not letting the
+        // phantom grow that tall at all — cap the loaded range and evict
+        // the far side once a load would exceed it.
+        const MAX_LOADED_ROWS = 24;
         // 0 is just an arbitrary origin on an unbounded number line, not a
         // beginning — the negative numbers on screen are what make that
         // legible, not the choice of seed value itself.
@@ -348,6 +362,54 @@
           scrollBox.scrollTop = beforeScrollTop + rows * ROW_H;
         }
 
+        // Mirror of growUpwardBy, for evicting the far (opposite) side once
+        // the loaded range exceeds MAX_LOADED_ROWS — see that constant's
+        // own comment for why this cap exists at all. Trimming from the
+        // top moves the origin the opposite direction growUpwardBy does,
+        // so mounted tiles/scrollTop shift by the same delta, sign-flipped.
+        function shrinkFromTop(rows) {
+          const beforeScrollTop = scrollBox.scrollTop;
+          minLoadedRow += rows;
+          setPhantomHeight();
+          for (const [n, el] of mounted) el.style.top = `${tileTop(n)}px`;
+          scrollBox.scrollTop = beforeScrollTop - rows * ROW_H;
+        }
+
+        // Trimming from the bottom doesn't move the origin, so nothing
+        // needs repositioning — same reasoning as why appending at the
+        // bottom (loadNewer) never touches scrollTop either.
+        function shrinkFromBottom(rows) {
+          maxLoadedRow -= rows;
+          setPhantomHeight();
+        }
+
+        function deleteRowRange(fromRow, toRow) {
+          for (let row = fromRow; row <= toRow; row++) {
+            for (let col = 0; col < COLUMNS; col++) {
+              const n = SEED + row * COLUMNS + col;
+              itemsById.delete(n);
+              unmountTile(n); // shouldn't be mounted this far from the viewport, but safe either way
+            }
+          }
+        }
+
+        function enforceMaxLoadedRows() {
+          const totalRows = maxLoadedRow - minLoadedRow + 1;
+          const excess = totalRows - MAX_LOADED_ROWS;
+          if (excess <= 0) return;
+          // Evict from whichever side is farther from the edge that was
+          // just extended, i.e. the side furthest from current activity.
+          if (loadingTop) {
+            deleteRowRange(maxLoadedRow - excess + 1, maxLoadedRow);
+            bottomCursor = SEED + (maxLoadedRow - excess + 1) * COLUMNS - 1;
+            shrinkFromBottom(excess);
+          } else {
+            deleteRowRange(minLoadedRow, minLoadedRow + excess - 1);
+            topCursor = SEED + (minLoadedRow + excess) * COLUMNS;
+            shrinkFromTop(excess);
+          }
+        }
+
         async function loadOlder() {
           if (loadingTop) return;
           loadingTop = true;
@@ -362,6 +424,7 @@
           }
           topCursor = start;
           growUpwardBy(rowColOf(end).row - rowColOf(start).row + 1);
+          enforceMaxLoadedRows();
           gallery.updateSlides(sortedItems());
           renderWindow();
           refreshStatus();
@@ -378,6 +441,7 @@
           bottomCursor = end;
           maxLoadedRow = rowColOf(bottomCursor).row;
           setPhantomHeight();
+          enforceMaxLoadedRows();
           // Append: nothing above the loaded range's top moves, so no
           // scroll compensation is needed — same as the forward-only demo.
           gallery.updateSlides(sortedItems());

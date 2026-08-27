@@ -14,7 +14,7 @@
   {
     "name": "Core (ESM entry)",
     "path": "dist/esm/core/index.js",
-    "limit": "39.6 KB",
+    "limit": "40 KB",
     "gzip": true
   },
   {

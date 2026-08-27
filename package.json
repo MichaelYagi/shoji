@@ -1,6 +1,6 @@
 {
   "name": "@michaelyagi/shoji",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "description": "Zero-dependency TypeScript lightbox/gallery library.",
   "type": "module",
   "license": "MIT",

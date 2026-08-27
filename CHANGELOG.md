@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.7] - 2026-08-27
+
+### Fixed
+
+- **The lightbox photo could land off-center on a mobile browser, a large
+  gap on one side and none on the other.** Only reproducible after
+  scrolling far enough down a genuinely long page to collapse the mobile
+  browser's own dynamic toolbar (hiding the URL bar) — `.shoji-outer`'s
+  painted size stopped tracking the actual visible viewport once that
+  happened, even though `window.innerHeight` correctly reported the new,
+  larger value. Fixed by explicitly sizing `.shoji-outer` from
+  `window.visualViewport.height` (the API that reflects the true visible
+  area, distinct from the layout viewport `innerHeight` reads) and
+  re-syncing on every `visualViewport` resize while the dialog is open.
+
 ## [0.1.0-beta.6] - 2026-08-27
 
 ### Fixed

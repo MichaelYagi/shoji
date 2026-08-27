@@ -331,6 +331,19 @@ export class Gallery {
     this.controlsHiddenAtGestureStart = this.autoHidden;
   };
 
+  /**
+   * A real mobile bug (DESIGN.md §2.6a): after scrolling far enough to
+   * collapse a mobile browser's own URL bar, `window.innerHeight` grows
+   * but `.shoji-outer`'s painted size didn't follow, off-centering the
+   * photo. `visualViewport.height` reflects the true visible area;
+   * `window`'s `resize` is the fallback where it's unsupported.
+   */
+  private readonly syncViewportHeight = (): void => {
+    if (!this.dom) return;
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    this.dom.outer.style.height = `${height}px`;
+  };
+
   private readonly onKeydown = (event: KeyboardEvent): void => {
     // A focused <video>'s native controls own arrow/space/home/end for
     // seeking, volume, and play/pause — don't let slide navigation hijack
@@ -1683,6 +1696,10 @@ export class Gallery {
         : undefined,
     );
     this.dom!.outer.classList.add('shoji-open');
+    this.syncViewportHeight();
+    if (window.visualViewport)
+      window.visualViewport.addEventListener('resize', this.syncViewportHeight);
+    else window.addEventListener('resize', this.syncViewportHeight);
     document.addEventListener('keydown', this.onKeydown);
     this.focusTrap.activate(this.dom!.dialog);
     this.scheduleAutoHide();
@@ -1989,8 +2006,12 @@ export class Gallery {
     this.opened = false;
     unlockBodyScroll();
     document.removeEventListener('keydown', this.onKeydown);
+    if (window.visualViewport)
+      window.visualViewport.removeEventListener('resize', this.syncViewportHeight);
+    else window.removeEventListener('resize', this.syncViewportHeight);
     this.focusTrap.deactivate();
     this.dom?.outer.classList.remove('shoji-open');
+    if (this.dom) this.dom.outer.style.height = '';
     // Cleared, not left at '0' — a fresh open() must start fully opaque
     // again, not still faded out from the last close.
     if (this.dom) this.dom.backdrop.style.opacity = '';
