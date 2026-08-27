@@ -224,9 +224,37 @@
       // ---------------------------------------------------------------
       (function bidirectional() {
         const COLUMNS = 4;
-        const TILE_W = 150;
-        const TILE_H = 112;
         const GAP = 8;
+        // A real bug, reported from a real phone: a fixed 150px-per-column
+        // (600px total) width is wider than a narrow phone screen, which
+        // made the *whole page* scroll horizontally — never acceptable
+        // (project rule) — and is the far more likely explanation for the
+        // off-center/short-dialog symptoms that were chased (and
+        // misdiagnosed as a viewport-height bug in Gallery.ts core, since
+        // reverted) than a mobile toolbar quirk: DESIGN.md's own
+        // rotate/flip bug already documents a mobile browser widening its
+        // layout viewport in response to horizontal overflow elsewhere on
+        // the page, which would throw off the dialog's own
+        // viewport-relative sizing calculations. Computed once from the
+        // available width instead of a fixed constant — never wider than
+        // the real viewport, whatever device it's opened on. Height keeps
+        // the original tile's aspect ratio instead of also being fixed.
+        //
+        // Measured from #scroll-bidi's own clientWidth/padding, not
+        // document.documentElement's — a first attempt subtracted a
+        // guessed, hardcoded margin allowance instead, which left the box
+        // 2px wider than the real viewport (clientWidth already includes
+        // this element's own padding; the guessed number didn't account
+        // for it correctly) — still real, if far smaller, horizontal
+        // overflow than the bug this was meant to fix in the first place.
+        const ASPECT = 112 / 150;
+        const scrollBox = document.querySelector('#scroll-bidi');
+        const scrollBoxStyle = getComputedStyle(scrollBox);
+        const horizontalPadding =
+          parseFloat(scrollBoxStyle.paddingLeft) + parseFloat(scrollBoxStyle.paddingRight);
+        const availableWidth = scrollBox.clientWidth - horizontalPadding;
+        const TILE_W = Math.max(80, Math.min(150, Math.floor(availableWidth / COLUMNS)));
+        const TILE_H = Math.round(TILE_W * ASPECT);
         const ROW_H = TILE_H + GAP;
         // Small on purpose — "only exists in the viewport" is the whole
         // point of this demo. 1, not 0, only to avoid a hard pop-in
@@ -234,19 +262,11 @@
         const BUFFER_ROWS = 1;
         const PREFETCH_ROWS = 6; // fetch more once within this many rows of an edge
         const SEED_ROWS = 10; // seeded rows on each side of SEED — "start full"
-        // A real mobile bug: a phantom container tall enough (tested:
-        // 7200px/60 rows already did it) destabilizes a mobile browser's
-        // own viewport-sizing heuristic for the *whole page* — confirmed
-        // directly, it broke every dialog on the page, not just this
-        // gallery's, and reproduced even with a completely uninvolved
-        // origin element. Same root cause DESIGN.md already documents for
-        // rotate/flip's mobile-viewport-widening bug: the heuristic reacts
-        // to real page geometry that deep-tree overflow:hidden doesn't
-        // stop. The fix there was locking document.documentElement's
-        // overflow; here, since the tall element is standing page layout
-        // rather than transient paint, the actual fix is not letting the
-        // phantom grow that tall at all — cap the loaded range and evict
-        // the far side once a load would exceed it.
+        // A tall phantom container is still worth capping regardless —
+        // real virtualization shouldn't let its own tracked range grow
+        // unbounded — even though the horizontal-overflow bug above turned
+        // out to be the more likely explanation for the mobile symptoms
+        // this was originally added to chase down.
         const MAX_LOADED_ROWS = 24;
         // 0 is just an arbitrary origin on an unbounded number line, not a
         // beginning — the negative numbers on screen are what make that
@@ -262,13 +282,12 @@
         let loadingBottom = false;
         const mounted = new Map(); // n -> element, currently real DOM
 
-        const scrollBox = document.querySelector('#scroll-bidi');
         const grid = document.querySelector('#gallery-bidi'); // the "phantom" — sized to loaded content
         const status = document.querySelector('#status-bidi');
 
-        // Fixed columns means a fixed content width — fit the box to it
-        // instead of stretching to the page width and leaving the rest as
-        // dead space.
+        // Fit the box to the grid's actual (now viewport-safe) content
+        // width instead of stretching to the page width and leaving the
+        // rest as dead space.
         scrollBox.style.width = `${COLUMNS * TILE_W}px`;
 
         const gallery = new Shoji(grid, { items: [], counter: false });

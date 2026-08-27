@@ -5,6 +5,24 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.9] - 2026-08-27
+
+### Fixed
+
+- **beta.7 and beta.8 were both chasing the wrong bug — this was never a
+  Shoji core issue.** Both releases' `.shoji-outer` viewport-sizing
+  changes are fully reverted (`Gallery.ts`'s `syncViewportHeight()`
+  removed; `shoji.css` back to plain `inset: 0`), and the size budget
+  reverted with them (40 kB → 39.6 kB). The actual cause, reported
+  directly on real hardware: `docs/examples/infinite-scroll.html`'s
+  bidirectional virtual-list grid set a fixed 600px width, wider than a
+  narrow phone screen — making the whole page scroll horizontally, which
+  in turn made a mobile browser widen its own layout viewport (the same
+  documented mechanism as an existing rotate/flip bug), throwing off the
+  lightbox's centering as a side effect on that one page only. Fixed
+  entirely in the example: tile width is now computed from the grid's own
+  measured available width, never wider than the real viewport.
+
 ## [0.1.0-beta.8] - 2026-08-27
 
 ### Fixed

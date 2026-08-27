@@ -149,19 +149,6 @@
   display: none;
   position: fixed;
   inset: 0;
-  /* DESIGN.md §2.6a's fifth real bug: inset:0 alone doesn't stay in sync
-     with a mobile browser's dynamic toolbar (URL bar) collapsing after
-     scroll on some real devices — window.innerHeight grows but the
-     painted box didn't follow, off-centering the photo. A JS-measured
-     visualViewport.height fix worked in emulation but made it *worse* on
-     real hardware (a stale snapshot read before the toolbar's collapse
-     had settled, then applied as an inline height that clobbered this
-     rule and left the dialog short of the real viewport, exposing page
-     content below it). 100dvh is browser-native and continuously live —
-     no JS snapshot to go stale — the correct fix for this whole bug
-     class. Unsupported browsers (all real targets support it) simply
-     keep the plain inset:0 behavior, no worse than before this fix. */
-  height: 100dvh;
   z-index: var(--shoji-z-base);
 }
 
