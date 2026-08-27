@@ -1285,7 +1285,8 @@ width`/`item.height` now only ever reflect what the host explicitly
 - Zoom plugin: evenly-spaced horizontal lines could appear across a zoomed
   photo at certain zoom levels on real GPU hardware — a known Chromium
   rendering quirk (GPU raster-tile seams) with 2D `scale()` transforms on
-  large scaled content, also independently observed in lightGalleryJS. Now
+  large scaled content, also independently observed in other lightbox
+  implementations. Now
   uses `translate3d`/`scale3d` instead, the standard mitigation for this
   class of bug. A milder version of the same artifact on the toolbar's own
   buttons (a sibling of the zoomed image) is addressed by giving the

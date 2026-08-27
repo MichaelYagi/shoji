@@ -90,13 +90,13 @@
         return new Promise((resolve) => setTimeout(() => resolve(items), SIMULATED_LATENCY));
       }
 
-      // Ported from a real shashin class (Accessed) that drove lightGallery's
-      // dynamic mode from an infinitely-scrolling, paginated grid:
+      // Ported from a real shashin class (Accessed) that drove the reference
+      // library's dynamic mode from an infinitely-scrolling, paginated grid:
       //  - .refresh(list) -> gallery.updateSlides(this.items)
       //  - the hand-maintained running index (lastLgIndex) is gone entirely —
       //    updateSlides() diffs by id, no manual bookkeeping needed
-      //  - shashin.lg / getLightGallery() (hand-rolled instance registry) is
-      //    gone — `this.gallery` is just a plain field
+      //  - shashin.lg / its old instance-getter method (hand-rolled instance
+      //    registry) is gone — `this.gallery` is just a plain field
       //  - the reinit()-at-EOL call is dropped; nothing suggested Shoji needs
       //    an equivalent
       //  - lgMetadataDetail/lgVideoThumbnail (shashin's own plugins, never

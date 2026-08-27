@@ -39,8 +39,8 @@ function fetchPage(page: number): Promise<GalleryItem[]> {
 }
 
 /**
- * Ported from a real shashin class (`Accessed`) that drove lightGallery's
- * dynamic mode from an infinitely-scrolling, paginated grid. What changed
+ * Ported from a real shashin class (`Accessed`) that drove the reference
+ * library's dynamic mode from an infinitely-scrolling, paginated grid. What changed
  * in the port, and why, per the design discussion this is based on:
  *
  * - `.refresh(mediaContentList)` → `gallery.updateSlides(this.items)`.
@@ -48,8 +48,9 @@ function fetchPage(page: number): Promise<GalleryItem[]> {
  *   about DOM order needing to match array order for next/prev to work)
  *   is gone entirely — `updateSlides()` diffs by `id`, so nothing needs
  *   manual index bookkeeping.
- * - `shashin.lg` / `getLightGallery()` (a hand-rolled instance registry)
- *   is gone — `this.gallery` is just a class field, same as `this.page`.
+ * - `shashin.lg` / its old instance-getter method (a hand-rolled instance
+ *   registry) is gone — `this.gallery` is just a class field, same as
+ *   `this.page`.
  * - The `reinit()`-at-EOL call is dropped; nothing here suggested Shoji
  *   needs an equivalent, and it wasn't demonstrably necessary in testing.
  * - `lgMetadataDetail`/`lgVideoThumbnail` (shashin's own custom plugins,
