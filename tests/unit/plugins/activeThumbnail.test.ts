@@ -248,6 +248,82 @@ describe('ActiveThumbnail plugin', () => {
     expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(false);
   });
 
+  it('highlightDuration: undefined (the default) never fades the border color, however long after close()', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
+    gallery.open(0);
+    gallery.close();
+    vi.advanceTimersByTime(60_000);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('highlightDuration fades the border color to transparent that many ms after close() — counted from close, not from whenever the slide became active, since the highlight is hidden behind the backdrop until then', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery({
+      activeThumbnail: { highlight: true, highlightDuration: 5000 },
+    });
+    gallery.open(0);
+    vi.advanceTimersByTime(4000); // time passes *while open* — must not count
+    gallery.close();
+
+    vi.advanceTimersByTime(4999);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+
+    vi.advanceTimersByTime(1);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe(
+      'transparent',
+    );
+    // The highlight class itself, and activeClass, are untouched by the fade
+    // — only the color changes.
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active--highlight')).toBe(true);
+    expect(thumbs[0]!.classList.contains('shoji-thumb-active')).toBe(true);
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('highlightDuration: a pending fade is cancelled by reopening, and a fresh close() restarts the full countdown rather than continuing a stale one', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery({
+      activeThumbnail: { highlight: true, highlightDuration: 5000 },
+    });
+    gallery.open(0);
+    gallery.close();
+    vi.advanceTimersByTime(4000); // most of the way through the countdown
+
+    gallery.open(0); // re-reveal — cancels the pending fade, resets the color
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+    gallery.close();
+
+    vi.advanceTimersByTime(4999); // old countdown would have fired by now
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+
+    vi.advanceTimersByTime(1); // but the fresh one (from the second close) fires right on time
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe(
+      'transparent',
+    );
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
+  it('highlightDuration: navigating to a different slide before the fade fires cancels it, and the new slide starts fully visible (not transparent)', () => {
+    vi.useFakeTimers();
+    const { gallery, thumbs } = makeSelectorGallery({
+      activeThumbnail: { highlight: true, highlightDuration: 5000 },
+    });
+    gallery.open(0);
+    gallery.close();
+    vi.advanceTimersByTime(4000);
+
+    gallery.open(1); // a different index — cancels thumb 0's pending fade
+    vi.advanceTimersByTime(2000); // old countdown (started at close()) would have fired by now
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+    expect(thumbs[1]!.style.getPropertyValue('--shoji-active-thumbnail-border-color')).toBe('blue');
+    gallery.destroy();
+    vi.useRealTimers();
+  });
+
   it('does nothing (no crash) when no origin element exists for the index', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);

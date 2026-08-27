@@ -28,7 +28,9 @@ test('the origin thumbnail gets the active class on open and it moves on navigat
   await expect(thumb0).not.toHaveClass(/shoji-thumb-active/);
 });
 
-test('active class clears on close', async ({ page }) => {
+test('active class persists after close — the point of a visible marker is seeing it once the lightbox is out of the way, so it no longer clears on close (only a genuinely different slide becoming active moves it)', async ({
+  page,
+}) => {
   await page.goto('/pages/e2e-plugins.html');
   const thumb0 = page.locator('#thumbs a[data-shoji-id="photo-0"]');
 
@@ -36,7 +38,7 @@ test('active class clears on close', async ({ page }) => {
   await expect(thumb0).toHaveClass(/shoji-thumb-active/);
 
   await page.locator('.shoji-close').click();
-  await expect(thumb0).not.toHaveClass(/shoji-thumb-active/);
+  await expect(thumb0).toHaveClass(/shoji-thumb-active/);
 });
 
 test('reopening at a different index highlights that thumbnail, not the previous one', async ({

@@ -3,45 +3,97 @@
  * the plugin adds alongside the host-renameable `activeClass`, since a CSS
  * file can't target a selector whose name is only known at runtime.
  *
- * A real `border`, not `outline` or `box-shadow` — two real bugs, both
- * reported from real usage and both confirmed by an actual screenshot, not
- * just computed-style inspection (which reported both as "working" the
- * whole time, since the values genuinely were applied — just never
- * visible):
+ * Landed on `outline` with a *negative* `outline-offset`, after three other
+ * approaches each failed differently — all confirmed by an actual
+ * screenshot, not just computed-style inspection (which reported every one
+ * of them as "working" the whole time, since the values genuinely were
+ * applied — just never visible, or visible in the wrong place):
  *
- * 1. `outline` draws *outside* the element's own box, which a tightly
- *    packed layout grid (a small `gutter`) has no room for — the
- *    neighboring tile, painted after it in plain DOM stacking order,
- *    visually covers most or all of it.
+ * 1. Plain `outline` (positive/default offset) draws *outside* the
+ *    element's own box — a tightly packed Layout grid (a small `gutter`)
+ *    has no room for that, so the neighboring tile, painted after it in
+ *    plain DOM stacking order, visually covered most or all of it.
  * 2. `box-shadow` (even `inset`) paints as part of the element's own
  *    background layer, *underneath* its children in normal paint order —
- *    the tile's own `<img>`, filling 100% of the box with no padding,
+ *    a tile's own `<img>`, filling 100% of the box with no padding,
  *    completely covered it.
+ * 3. A real `border` avoids both of those (it reserves real layout space,
+ *    so children lay out inside it rather than over it, and never draws
+ *    past the box the way plain `outline` does) — but for a DOM/selector-
+ *    mode host anchor with no Layout tile (no JS-provided fixed size,
+ *    just `display: inline-block` sizing to its content), *adding* a
+ *    border grows the anchor's own auto-computed box past the image's
+ *    real edges. With zero gap between stacked host anchors (plain
+ *    markup, one image after another), that extra few pixels lands
+ *    inside the *next* image's own space instead of staying contained —
+ *    reported directly as "border is still not contained in the image,
+ *    some sides are external."
  *
- * `border` has neither problem: it reserves real layout space (via
- * `box-sizing: border-box` below, so it intrudes into the existing box
- * instead of growing past Layout's precisely-computed tile dimensions),
- * so a percentage-sized child image is laid out to fit *inside* it rather
- * than painting over it, and it never extends past the box into a
- * neighbor's territory the way `outline` does.
- *
- * A third real bug, also confirmed by an actual screenshot: with no
- * Layout tile (plain DOM/selector-mode markup, the host's own `<a>` at its
- * default `display: inline`), the border only wrapped a thin sliver at
- * roughly text-line height instead of the whole image — a well-known CSS
- * quirk, not a sizing bug: a non-replaced *inline* element's top/bottom
- * border is painted at the inline box's own line-height, which a large
- * inline child image doesn't expand, even though the image itself renders
- * at full size right next to it. `display: inline-block` (or `block`)
- * fixes this by giving the element a real content-box height that does
- * include its child's size. Safe on Layout's own tiles too, which already
- * set their own `display` (layout.css) — CSS *blockifies* both grid items
- * and absolutely-positioned elements regardless of their own declared
- * `display` value (masonry/justified tiles are `position: absolute`, grid
- * tiles are grid items), so this never actually overrides that there.
+ * `outline` with a negative offset has none of these problems: like any
+ * `outline`, it never participates in the box model at all (confirmed
+ * directly — an outlined element's own `getBoundingClientRect()` is
+ * identical with or without one), so it can never grow an auto-sized
+ * anchor past its content the way `border` does; a negative offset pulls
+ * it inward from the border edge, *inside* the box, so it can't spill
+ * outside into a neighbor either; and — confirmed directly with a real
+ * full-bleed child image, not assumed from the box-shadow finding above —
+ * outline still paints above the element's own content, not behind it.
  */
 .shoji-thumb-active--highlight {
   display: inline-block;
-  box-sizing: border-box;
-  border: 2px solid var(--shoji-active-thumbnail-border-color, blue);
+  outline: 2px solid var(--shoji-active-thumbnail-border-color, blue);
+  outline-offset: -2px;
+  /* Only matters for the opt-in `highlightDuration` fade (index.ts sets
+     the color to `transparent` when it elapses) — reusing core's own
+     general-purpose transition-duration var rather than a new one, per
+     CLAUDE.md's no-hardcoded-timings rule. Harmless the rest of the time:
+     the color is set once per navigation, not animated toward on
+     ordinary use. */
+  transition: outline-color var(--shoji-duration, 300ms) ease;
+}
+
+/**
+ * Registers the custom property with a real `<color>` type — without this,
+ * the `transition` above doesn't actually animate when the value changes
+ * via `--shoji-active-thumbnail-border-color` (index.ts's `highlightDuration`
+ * fade): an unregistered custom property is just a cascade token
+ * substitution to the browser, not something it knows how to interpolate,
+ * so the transitionable property consuming it still jumps instantly
+ * instead of easing — a real bug, reported from real usage as "it should
+ * fade, not so sudden." Broadly supported in evergreen browsers; a browser
+ * without `@property` support just falls back to the instant cut, same as
+ * before this existed — acceptable progressive enhancement, not a
+ * functional break.
+ */
+@property --shoji-active-thumbnail-border-color {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: blue;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shoji-thumb-active--highlight {
+    transition: none;
+  }
+}
+
+/**
+ * A real bug, also confirmed by an actual screenshot: giving the anchor a
+ * real content-box height (`display: inline-block` above — a plain
+ * `display: inline` anchor otherwise only gets a text-line-height box,
+ * which a large inline child image doesn't expand even though the image
+ * itself renders at full size right next to it) then left a visible gap
+ * between the image's own bottom edge and the anchor's. `<img>` is
+ * `vertical-align: baseline` by default, which — inside the inline-level
+ * container `inline-block` creates — reserves a few pixels below for a
+ * text line's descender, the classic "phantom gap under an inline image"
+ * quirk. `display: block` on the image itself removes it from that inline
+ * formatting context entirely, closing the gap without having to change
+ * the anchor's own `display` (kept `inline-block`, not `block`,
+ * specifically so a host's own inline-flowing thumbnail grid doesn't
+ * reflow every time the highlight moves to a different tile). A no-op on
+ * Layout's own tiles, which already set this identically (layout.css).
+ */
+.shoji-thumb-active--highlight img {
+  display: block;
 }

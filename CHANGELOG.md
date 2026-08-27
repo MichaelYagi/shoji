@@ -5,6 +5,44 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.5] - 2026-08-26
+
+### Added
+
+- **`ActiveThumbnail`'s `highlightDuration` option.** Opt-in auto-fade for
+  the `highlight` styling, in milliseconds, counted from `close()` (when
+  it actually becomes visible) rather than from whenever the slide became
+  active. Default `undefined` — persists indefinitely, same as before.
+  Fades `--shoji-active-thumbnail-border-color` to `transparent` via a
+  CSS transition; reopening or navigating before it fires cancels it and
+  resets to full color.
+
+### Fixed
+
+- **`ActiveThumbnail`'s `highlight` styling no longer bleeds into a
+  neighboring image.** The `border` used since beta.4 reserves real
+  layout space — correct for Layout's own fixed-size tiles, but for a
+  plain DOM/selector-mode host anchor (no fixed size, sized to its
+  content) it grows the anchor past the image's real edges. With zero
+  gap between stacked host anchors, that extra space landed inside the
+  _next_ image instead of staying contained. Switched to `outline` with
+  a _negative_ `outline-offset` — unlike `border`, `outline` never
+  affects an element's own box size, so it can't grow past a neighbor;
+  unlike a plain (positive-offset) `outline`, pulling it inward keeps it
+  from spilling outside the box the way that already-rejected approach
+  did.
+- **The `highlightDuration` fade now actually animates instead of
+  cutting instantly.** CSS transitions don't animate a value driven by
+  an _unregistered_ custom property change — the browser treats it as
+  an instant substitution, not something to interpolate, even though the
+  consuming property is itself transitionable. Fixed by registering
+  `--shoji-active-thumbnail-border-color` with `@property` as a real
+  `<color>`.
+- **`tests/e2e/plugins/activeThumbnail.spec.ts` updated** to match
+  beta.4's persist-after-close behavior — it still asserted the old
+  clear-on-close behavior, which beta.4 shipped without updating it,
+  breaking CI.
+
 ## [0.1.0-beta.4] - 2026-08-26
 
 ### Added

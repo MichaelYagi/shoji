@@ -10,6 +10,8 @@ export interface ActiveThumbnailOptions {
   highlight?: boolean;
   /** Only visible when `highlight: true`. Sets `--shoji-active-thumbnail-border-color` on the active element. Default `'blue'`. */
   borderColor?: string;
+  /** Only meaningful when `highlight: true`. Milliseconds after `close()` (i.e. after the highlight actually becomes visible, not from when the slide became active) to fade it out. Default `undefined` — persists indefinitely, moving only when a different slide becomes active. Does not touch `activeClass`, only the built-in `highlight` styling. */
+  highlightDuration?: number;
 }
 
 function prefersReducedMotion(): boolean {
@@ -52,6 +54,8 @@ export const ActiveThumbnail: ShojiPlugin = {
     const scrollIntoView = ctx.options.scrollIntoView !== false;
     const highlight = ctx.options.highlight === true;
     const borderColor = String(ctx.options.borderColor ?? 'blue');
+    const highlightDuration =
+      typeof ctx.options.highlightDuration === 'number' ? ctx.options.highlightDuration : null;
     const HIGHLIGHT_CLASS = 'shoji-thumb-active--highlight';
 
     let current: HTMLElement | null = null;
@@ -71,6 +75,7 @@ export const ActiveThumbnail: ShojiPlugin = {
     // on every rebuilt tile regardless.
     let currentIndex: number | null = null;
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    let fadeTimer: ReturnType<typeof setTimeout> | null = null;
 
     function cancelPendingScroll(): void {
       if (scrollTimer !== null) {
@@ -79,8 +84,17 @@ export const ActiveThumbnail: ShojiPlugin = {
       }
     }
 
+    /** Cancels a still-pending `highlightDuration` fade — called whenever the highlight moves or is re-applied (`applyClass`), so a stale countdown from a previous close never fires against a since-changed or since-reopened element. */
+    function cancelFade(): void {
+      if (fadeTimer !== null) {
+        clearTimeout(fadeTimer);
+        fadeTimer = null;
+      }
+    }
+
     /** Resolves and marks the origin element for `index` — no scrolling, so a DOM rebuild that didn't actually change which slide is active (`onLayoutRender` below) doesn't also re-trigger a scroll nothing about real navigation caused. */
     function applyClass(index: number): HTMLElement | null {
+      cancelFade();
       const el = gallery.getOriginElement(index);
       if (current && current !== el) {
         current.classList.remove(activeClass);
@@ -90,6 +104,10 @@ export const ActiveThumbnail: ShojiPlugin = {
         el.classList.add(activeClass);
         if (highlight) {
           el.classList.add(HIGHLIGHT_CLASS);
+          // Always the real color, not whatever a previous highlightDuration
+          // fade may have left it at (transparent) — covers both a genuinely
+          // new active element and this same element being re-marked (e.g.
+          // reopening at the same index) after having already faded once.
           el.style.setProperty('--shoji-active-thumbnail-border-color', borderColor);
         }
       }
@@ -180,11 +198,24 @@ export const ActiveThumbnail: ShojiPlugin = {
       const pending = scrollTimer !== null ? current : null;
       cancelPendingScroll();
       if (pending && scrollIntoView) performScroll(pending);
+
+      // highlightDuration counts from here, not from whenever the slide
+      // became active — the highlight is hidden behind the backdrop until
+      // now, so a countdown that started earlier (while still open) would
+      // burn down time nobody could actually see it for.
+      if (highlight && highlightDuration !== null && current) {
+        const el = current;
+        fadeTimer = setTimeout(() => {
+          fadeTimer = null;
+          el.style.setProperty('--shoji-active-thumbnail-border-color', 'transparent');
+        }, highlightDuration);
+      }
     }
 
     /** Real teardown, run only when the plugin itself is going away (`destroy()`) — unlike `onClose()`, this does remove the highlight, since there's no plugin left afterward to manage or move it. */
     function teardown(): void {
       cancelPendingScroll();
+      cancelFade();
       current?.classList.remove(activeClass);
       if (highlight) current?.classList.remove(HIGHLIGHT_CLASS);
       current = null;
