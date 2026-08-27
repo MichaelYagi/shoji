@@ -187,13 +187,41 @@ function transformBetween(from: Box, to: Box): string {
   return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scale}, ${scale}, 1)`;
 }
 
+/**
+ * `origin`'s effective visual box, not necessarily its own
+ * `getBoundingClientRect()`. In selector/DOM-markup mode without Layout,
+ * `origin` is typically a plain `<a>` wrapping a `<img>` — an inline element
+ * by default, whose own box is sized to a text-line-height sliver (its
+ * `font-size`/`line-height`), not the image it visually contains, even
+ * though the image itself paints at full size. A real bug: the zoom
+ * open/close transform used that sliver directly as the FLIP target,
+ * landing the animation at a tiny, essentially-random offset instead of the
+ * real thumbnail's visible position and size. Layout tiles aren't affected
+ * (`display: block`, sized to match their child image exactly) — preferring
+ * the child's rect there returns the same box either way.
+ *
+ * `querySelector('img')`, not `firstElementChild` — matches `scan.ts`'s own
+ * `scanImage()` convention for locating a thumbnail inside arbitrary host
+ * markup, where the `<img>` isn't necessarily the first child (a badge or
+ * caption element placed before it in the DOM would otherwise get measured
+ * instead, no more correct than the wrapper's own sliver).
+ */
+function effectiveOriginBox(origin: HTMLElement): Box {
+  const img = origin.querySelector('img');
+  if (img) {
+    const rect = img.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) return rect;
+  }
+  return origin.getBoundingClientRect();
+}
+
 function computeTransform(
   origin: HTMLElement,
   target: HTMLElement,
   aspectRatio?: number,
   naturalSize?: { width: number; height: number },
 ): string | null {
-  const originRect = origin.getBoundingClientRect();
+  const originRect = effectiveOriginBox(origin);
   const targetRect = effectiveTargetBox(target, aspectRatio, naturalSize);
   if (
     targetRect.width === 0 ||

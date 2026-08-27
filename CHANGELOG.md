@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.6] - 2026-08-27
+
+### Fixed
+
+- **The zoom open/close transition landed at the wrong size and position
+  when the clicked thumbnail was a plain DOM/selector-mode `<a>` (no
+  Layout plugin).** `computeTransform()` measured `origin` (the clicked
+  anchor) via its own `getBoundingClientRect()` — but a plain inline
+  `<a>` wrapping a large `<img>` sizes to a text-line-height sliver, not
+  the image it visually contains, even though the image itself paints at
+  full size. The transform's target box, `effectiveTargetBox()`, already
+  had the fix for this exact quirk on the *other* side of the animation
+  (preferring a real-sized child element's rect over the container's
+  own); `origin`'s measurement never got the same treatment. Fixed by
+  adding `effectiveOriginBox()`, mirroring that same child-preference
+  logic for `origin`. Layout tiles are unaffected (`display: block`,
+  sized to match their child image already) — the fix returns the same
+  box there either way.
+
 ## [0.1.0-beta.5] - 2026-08-26
 
 ### Added

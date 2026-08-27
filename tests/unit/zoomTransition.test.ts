@@ -124,6 +124,83 @@ describe('zoomTransition', () => {
       expect(finalWidth).toBeCloseTo(originRect.width, 0);
     });
 
+    it("regression: prefers origin's own child image rect over origin's degenerate own box — a plain inline <a> wrapping an <img> sizes to a text-line-height sliver, not the image, so the transform used to land at a tiny, essentially-random offset instead of the real thumbnail (only reproducible without Layout, whose tiles are display:block and don't hit this)", () => {
+      mockRect(origin, { top: 350, left: 16, width: 240, height: 19 }); // the degenerate <a> sliver
+      const img = document.createElement('img');
+      origin.append(img);
+      mockRect(img, { top: 45, left: 16, width: 240, height: 320 }); // the real, visible thumbnail
+      mockRect(target, { top: 0, left: 0, width: 1400, height: 1170 });
+
+      let firstTransform = '';
+      const styleProto = Object.getPrototypeOf(target.style) as CSSStyleDeclaration;
+      const transformDesc = Object.getOwnPropertyDescriptor(styleProto, 'transform')!;
+      Object.defineProperty(target.style, 'transform', {
+        configurable: true,
+        get() {
+          return transformDesc.get!.call(target.style);
+        },
+        set(v: string) {
+          if (!firstTransform && v && v !== 'none') firstTransform = v;
+          transformDesc.set!.call(target.style, v);
+        },
+      });
+
+      zoomIn({ origin, target });
+
+      const match = firstTransform.match(
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, tx, ty, s] = match!.map(Number);
+      const targetCenterX = 1400 / 2 + tx!;
+      const targetCenterY = 1170 / 2 + ty!;
+
+      // Lands on the real image's center/size (16+120, 45+160), not the
+      // wrapper <a>'s (16+120, 350+9.5).
+      expect(targetCenterX).toBeCloseTo(16 + 120, 0);
+      expect(targetCenterY).toBeCloseTo(45 + 160, 0);
+      expect(1400 * s!).toBeCloseTo(240, 0);
+    });
+
+    it("regression: finds the <img> via querySelector, not firstElementChild — a caption/badge element placed before the <img> in the host's own markup must not be measured instead", () => {
+      mockRect(origin, { top: 350, left: 16, width: 240, height: 19 }); // the degenerate <a> sliver
+      const badge = document.createElement('span');
+      mockRect(badge, { top: 350, left: 16, width: 30, height: 12 }); // a small "NEW" badge, first child
+      const img = document.createElement('img');
+      origin.append(badge, img);
+      mockRect(img, { top: 45, left: 16, width: 240, height: 320 }); // the real, visible thumbnail
+      mockRect(target, { top: 0, left: 0, width: 1400, height: 1170 });
+
+      let firstTransform = '';
+      const styleProto = Object.getPrototypeOf(target.style) as CSSStyleDeclaration;
+      const transformDesc = Object.getOwnPropertyDescriptor(styleProto, 'transform')!;
+      Object.defineProperty(target.style, 'transform', {
+        configurable: true,
+        get() {
+          return transformDesc.get!.call(target.style);
+        },
+        set(v: string) {
+          if (!firstTransform && v && v !== 'none') firstTransform = v;
+          transformDesc.set!.call(target.style, v);
+        },
+      });
+
+      zoomIn({ origin, target });
+
+      const match = firstTransform.match(
+        /translate3d\(([-\d.]+)px, ([-\d.]+)px, 0\) scale3d\(([-\d.]+), [-\d.]+, 1\)/,
+      );
+      expect(match).not.toBeNull();
+      const [, tx, ty, s] = match!.map(Number);
+      const targetCenterX = 1400 / 2 + tx!;
+      const targetCenterY = 1170 / 2 + ty!;
+
+      // Lands on the <img>'s center/size, not the badge's or the wrapper's.
+      expect(targetCenterX).toBeCloseTo(16 + 120, 0);
+      expect(targetCenterY).toBeCloseTo(45 + 160, 0);
+      expect(1400 * s!).toBeCloseTo(240, 0);
+    });
+
     it("regression: never distorts the image's aspect ratio, even when origin and target are shaped very differently", () => {
       // The actual bug this whole fix addresses: independently scaling x
       // and y to force an exact rect match on both axes visibly
