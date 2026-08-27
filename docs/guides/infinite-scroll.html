@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Docs — Infinite scroll</title>
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./getting-started.html">Getting started</a>
+      <a href="./plugins.html">Plugins</a>
+      <a href="./layout.html">Layout plugin</a>
+      <a href="./transitions.html">Transitions</a>
+      <a href="./methods.html">Methods</a>
+      <a href="./events.html">Events</a>
+      <a href="./settings.html">Settings</a>
+      <a href="./theming.html">Theming</a>
+      <a href="./infinite-scroll.html" aria-current="page">Infinite scroll</a>
+      <a href="../architecture/index.html">Architecture</a>
+      <a href="../examples/index.html">Examples</a>
+      <a href="../playground.html">Playground</a>
+      <a href="../api/index.html">API reference</a>
+    </nav>
+
+    <h1>Infinite scroll</h1>
+    <p>
+      Shoji has no dedicated infinite-scroll plugin, and isn't going to grow one — its actual
+      footprint in a scrolling gallery is small: one method (<code>updateSlides()</code>), one
+      lookup convention for opening the right slide (<code>data-shoji-id</code>), and a plugin
+      choice. Everything else — the sentinel/scroll-position logic that decides when to fetch more,
+      how the on-page grid renders or virtualizes its tiles, any scroll-anchoring math — is plain
+      host code Shoji never sees or participates in. The
+      <a href="../examples/infinite-scroll.html">Infinite scroll example</a> has that code in full;
+      this guide is about the handful of places Shoji itself is actually touched.
+    </p>
+
+    <h2><code>updateSlides()</code>: the only thing Shoji needs to know</h2>
+    <p>
+      Every time the host's own list of loaded items changes — a new page appended, an older page
+      prepended, or nothing at all if a scroll tick only changed which tiles are currently rendered
+      — call <code>gallery.updateSlides(items)</code> with the full, current, correctly-ordered
+      array. That's the entire contract. Shoji diffs the new array against what it already knew by
+      <code>id</code> (see the <a href="./methods.html">Methods</a> guide), so it doesn't matter
+      whether items were added at the start, the end, or both — there's no separate "append" vs.
+      "prepend" API to call.
+    </p>
+    <p>
+      One real bug this surfaces if missed: the bidirectional example keeps its loaded items in a
+      <code>Map</code>, and <code>Map</code> iteration order is insertion order, not numeric order —
+      loading an older page inserts <em>smaller</em> ids that still land last in that order. Handing
+      Shoji that raw, unsorted iteration order would make next/prev inside the lightbox jump around
+      instead of following the visual grid. Every <code>updateSlides()</code> call sorts first,
+      exactly once, right before handing the array over.
+    </p>
+
+    <h2>Opening a slide: <code>data-shoji-id</code>, not a captured index</h2>
+    <p>
+      A thumbnail's click handler shouldn't close over the index it happened to render at — by the
+      time it's clicked, <code>updateSlides()</code> may have grown or reordered the array
+      underneath it. Both demos instead store the item's <code>id</code> on the element (<code
+        >a.dataset.shojiId = item.id</code
+      >) and re-resolve the index fresh, at click time, from whatever the current array actually is:
+    </p>
+    <pre><code>function openById(id) {
+  const index = sortedItems().findIndex((i) => i.id === id);
+  if (index !== -1) gallery.open(index);
+}</code></pre>
+    <p>
+      This is also why Shoji's own origin lookup (<code>Gallery.getOriginElement()</code>) checks
+      for a <code>data-shoji-id</code>-marked element <em>first</em>, before falling back to a
+      selector-mode scan — dynamic mode has no scanned DOM to fall back to at all, so the marker is
+      the only way Shoji can find the on-page thumbnail a given slide opened from (for the
+      zoom-from-thumbnail transition, and anywhere else it needs that element).
+    </p>
+
+    <h2>Plugin choice: <code>ActiveThumbnail</code> only where nothing gets unmounted</h2>
+    <p>
+      Forward-only enables it — tiles are only ever appended, never removed, so there's no way the
+      plugin ends up tracking an element that's since vanished. Bidirectional deliberately leaves it
+      off: its on-page grid is virtualized (see the example), meaning the exact tile
+      <code>ActiveThumbnail</code> would be highlighting can be unmounted the moment it scrolls
+      outside the rendered window — a real interaction worth avoiding by not combining them, rather
+      than adding recovery logic for it.
+    </p>
+
+    <blockquote>
+      If you build a virtualized grid like the bidirectional example's, it only stays compatible
+      with Shoji's <a href="./layout.html">Layout plugin</a> in <code>grid</code> mode (uniform tile
+      sizes) — not masonry or justified, which size rows from each photo's real aspect ratio, so
+      there's no fixed row height for a virtual list's position math to rely on.
+    </blockquote>
+
+    <p>
+      See the <a href="../examples/infinite-scroll.html">Infinite scroll example</a> for the actual
+      scroll-position and DOM-virtualization code — the sentinel/<code>IntersectionObserver</code>
+      pattern for forward-only, and the fixed-row virtual list for bidirectional. None of it is
+      Shoji-specific; it's ordinary host code that happens to call <code>updateSlides()</code> and
+      <code>open()</code> at the right moments.
+    </p>
+  </body>
+</html>

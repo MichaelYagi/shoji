@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoji Example — Infinite scroll</title>
+    <!-- See docs/examples/index.html — run `npm run build` first. -->
+    <link rel="stylesheet" href="../dist/shoji.min.css" />
+    <link rel="stylesheet" href="../docs.css" />
+    <script src="../docs.js" defer></script>
+    <style>
+      .scroll-box {
+        height: 22rem;
+        overflow-y: auto;
+        border: 1px solid #8885;
+        border-radius: 6px;
+        padding: 0 0.75rem;
+        /* The whole point: this demo relies entirely on the manual
+           measure/insert/compensate block in loadOlder() below, not on the
+           browser's own native scroll anchoring — see the guide's "Why
+           overflow-anchor: none" section for why that's a deliberate
+           choice, not an oversight. */
+        overflow-anchor: none;
+      }
+      .sentinel {
+        text-align: center;
+        padding: 0.75rem 0;
+        font-size: 0.85em;
+        opacity: 0.7;
+      }
+      /* Page-local override, not touched in the shared docs.css: gives
+         every forward-only tile a fixed box regardless of image-load
+         state, so nothing shifts while a photo decodes. */
+      .thumb-grid a {
+        aspect-ratio: 4 / 3;
+        display: block;
+        background: #8882;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      /* The bidirectional demo's virtual list: #gallery-bidi is sized to
+         exactly (loaded rows × row height) by JS and never holds more
+         children than the visible window + buffer — every tile inside it
+         is absolutely positioned at its computed row/column offset. */
+      #gallery-bidi {
+        position: relative;
+      }
+      .virt-tile {
+        position: absolute;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #8882;
+        cursor: pointer;
+      }
+      .virt-tile img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shoji</h1>
+    <nav class="docs-nav">
+      <a href="../index.html">Overview</a>
+      <a href="./index.html">Examples</a>
+    </nav>
+
+    <h1>Infinite scroll</h1>
+    <p>
+      Shoji has no dedicated infinite-scroll plugin — its entire integration surface for both demos
+      below is <code>gallery.updateSlides()</code>, a <code>data-shoji-id</code> marker on each
+      thumbnail, and a plugin choice. Everything else on this page — fetching, rendering, scroll
+      position, virtualization — is plain host code Shoji never sees. See the
+      <a href="../guides/infinite-scroll.html">Infinite scroll guide</a> for what those three
+      touchpoints do and why.
+    </p>
+
+    <h2>Forward-only (append)</h2>
+    <p>
+      Each new page is appended to the item array and handed to <code>updateSlides()</code>.
+      <code>ActiveThumbnail</code> is enabled here — tiles are only ever appended, never removed, so
+      there's no risk of it tracking a thumbnail that's since disappeared.
+    </p>
+    <div class="scroll-box" id="scroll-forward" style="overflow-anchor: auto">
+      <div id="gallery-forward" class="thumb-grid"></div>
+      <p class="sentinel" id="sentinel-forward">Loading…</p>
+    </div>
+    <p class="status-line" id="status-forward">Loading first page…</p>
+
+    <h2>Bidirectional (append + prepend)</h2>
+    <p>
+      A virtualized grid (see the guide for what that means) rebuilds the full item array from its
+      own loaded-item map and hands it to <code>updateSlides()</code> every time that map grows.
+      <code>ActiveThumbnail</code> is deliberately left off — this grid can unmount the exact tile
+      it would be highlighting the moment that tile scrolls outside the rendered window.
+    </p>
+    <div class="scroll-box" id="scroll-bidi">
+      <div id="gallery-bidi"></div>
+    </div>
+    <p class="status-line" id="status-bidi">Loading…</p>
+
+    <script src="../dist/shoji.min.js"></script>
+    <script>
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      // Deterministic but effectively unbounded hue — no palette to cycle
+      // through and repeat. The golden-angle increment spreads consecutive
+      // seeds around the color wheel instead of clustering them, the same
+      // trick used to distribute points evenly (phyllotaxis).
+      function hueFor(seed) {
+        return (seed * 137.508) % 360;
+      }
+
+      // Forward-only keeps a visible number — there's no reason a
+      // never-ending stream can't also be labeled, the counter just never
+      // hits a ceiling.
+      function labeledColorDataUri(n) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="hsl(${hueFor(n)}, 65%, 45%)"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">Photo ${n}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      // Bidirectional labels with a *signed* number instead of a plain
+      // ascending count — unlike "Photo 1, 2, 3…", "-32"/"0"/"+47" doesn't
+      // read as a position in a bounded catalog. Seeing both signs on
+      // screen is itself the demonstration that this extends indefinitely
+      // in both directions from an arbitrary zero point, not from a
+      // beginning.
+      function signLabel(n) {
+        return n === 0 ? '0' : n > 0 ? `+${n}` : `${n}`;
+      }
+      function signedColorDataUri(n) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="hsl(${hueFor(n)}, 65%, 45%)"/><text x="400" y="300" font-size="140" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${signLabel(n)}</text></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      }
+
+      // ---------------------------------------------------------------
+      // Forward-only: append pages as the bottom sentinel comes into view.
+      // Nothing above the insertion point ever moves, so there's nothing
+      // to compensate for.
+      // ---------------------------------------------------------------
+      (function forwardOnly() {
+        const PAGE_SIZE = 6;
+        let items = [];
+        let cursor = 0; // ever-increasing; never resets, never bounded
+
+        function renderThumb(item, onClick) {
+          const a = document.createElement('a');
+          a.href = '#';
+          a.dataset.shojiId = item.id;
+          a.innerHTML = `<img src="${item.thumb}" alt="">`;
+          a.addEventListener('click', (event) => {
+            event.preventDefault();
+            onClick(item.id);
+          });
+          return a;
+        }
+
+        let loading = false;
+
+        const scrollBox = document.querySelector('#scroll-forward');
+        const grid = document.querySelector('#gallery-forward');
+        const sentinel = document.querySelector('#sentinel-forward');
+        const status = document.querySelector('#status-forward');
+
+        const gallery = new Shoji(grid, {
+          items: [],
+          counter: false,
+          plugins: [Shoji.ActiveThumbnail],
+        });
+
+        function fetchPage() {
+          const page = [];
+          for (let i = 0; i < PAGE_SIZE; i++) {
+            cursor++;
+            page.push({
+              id: `fwd-${cursor}`,
+              src: labeledColorDataUri(cursor),
+              thumb: labeledColorDataUri(cursor),
+            });
+          }
+          return delay(400).then(() => page);
+        }
+
+        function openById(id) {
+          const index = items.findIndex((i) => i.id === id);
+          if (index !== -1) gallery.open(index);
+        }
+
+        async function loadNext() {
+          if (loading) return;
+          loading = true;
+          const newItems = await fetchPage();
+          items = [...items, ...newItems];
+          gallery.updateSlides(items);
+          for (const item of newItems) grid.appendChild(renderThumb(item, openById));
+          status.textContent = `Loaded ${items.length} item(s). Never runs out.`;
+          loading = false;
+          // Re-observing (not just observing) forces a fresh visibility
+          // check even if the sentinel never left the viewport — an
+          // IntersectionObserver only fires on state *changes*, so a
+          // sentinel that's still on-screen after a short first page would
+          // otherwise never trigger a second load.
+          observer.unobserve(sentinel);
+          observer.observe(sentinel);
+        }
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            if (entries[0]?.isIntersecting) void loadNext();
+          },
+          { root: scrollBox },
+        );
+        observer.observe(sentinel);
+      })();
+
+      // ---------------------------------------------------------------
+      // Bidirectional: a real virtual list, driven entirely by scroll
+      // position, not IntersectionObserver. Columns and row height are
+      // fixed constants (not measured/responsive) to keep the row/column
+      // math exact and simple for a demo — see the guide for the full
+      // reasoning behind each piece below.
+      // ---------------------------------------------------------------
+      (function bidirectional() {
+        const COLUMNS = 4;
+        const TILE_W = 150;
+        const TILE_H = 112;
+        const GAP = 8;
+        const ROW_H = TILE_H + GAP;
+        // Small on purpose — "only exists in the viewport" is the whole
+        // point of this demo. 1, not 0, only to avoid a hard pop-in
+        // exactly on the boundary line during a fast scroll.
+        const BUFFER_ROWS = 1;
+        const PREFETCH_ROWS = 6; // fetch more once within this many rows of an edge
+        const SEED_ROWS = 30; // seeded rows on each side of SEED — "start full"
+        // 0 is just an arbitrary origin on an unbounded number line, not a
+        // beginning — the negative numbers on screen are what make that
+        // legible, not the choice of seed value itself.
+        const SEED = 0;
+
+        const itemsById = new Map();
+        let topCursor; // lowest n currently *loaded* (fetched, not necessarily rendered)
+        let bottomCursor; // highest n currently loaded
+        let minLoadedRow; // row index of topCursor — the phantom's own coordinate origin
+        let maxLoadedRow;
+        let loadingTop = false;
+        let loadingBottom = false;
+        const mounted = new Map(); // n -> element, currently real DOM
+
+        const scrollBox = document.querySelector('#scroll-bidi');
+        const grid = document.querySelector('#gallery-bidi'); // the "phantom" — sized to loaded content
+        const status = document.querySelector('#status-bidi');
+
+        // Fixed columns means a fixed content width — fit the box to it
+        // instead of stretching to the page width and leaving the rest as
+        // dead space.
+        scrollBox.style.width = `${COLUMNS * TILE_W}px`;
+
+        const gallery = new Shoji(grid, { items: [], counter: false });
+
+        function makeItem(n) {
+          return { id: `bidi-${n}`, src: signedColorDataUri(n), thumb: signedColorDataUri(n) };
+        }
+
+        function rowColOf(n) {
+          const offset = n - SEED;
+          const row = Math.floor(offset / COLUMNS);
+          const col = ((offset % COLUMNS) + COLUMNS) % COLUMNS;
+          return { row, col };
+        }
+
+        function idNum(id) {
+          return Number(id.slice('bidi-'.length));
+        }
+
+        // Map iteration order is insertion order, not numeric order —
+        // loadOlder() inserts *smaller* n values that still land last in
+        // that order. Every updateSlides() call and every open()-by-id
+        // lookup goes through this same sort, so the array Shoji actually
+        // holds and the index computed against it always agree.
+        function sortedItems() {
+          return [...itemsById.values()].sort((a, b) => idNum(a.id) - idNum(b.id));
+        }
+
+        function openById(id) {
+          const index = sortedItems().findIndex((i) => i.id === id);
+          if (index !== -1) gallery.open(index);
+        }
+
+        function refreshStatus() {
+          status.textContent = `${itemsById.size} item(s) loaded so far — no start, no end, either direction. ${mounted.size} currently rendered.`;
+        }
+
+        function setPhantomHeight() {
+          const totalRows = maxLoadedRow - minLoadedRow + 1;
+          grid.style.height = `${totalRows * ROW_H}px`;
+        }
+
+        function tileTop(n) {
+          return (rowColOf(n).row - minLoadedRow) * ROW_H;
+        }
+
+        function mountTile(n) {
+          if (mounted.has(n)) return;
+          const item = itemsById.get(n);
+          if (!item) return;
+          const { col } = rowColOf(n);
+          const a = document.createElement('a');
+          a.href = '#';
+          a.className = 'virt-tile';
+          a.dataset.shojiId = item.id;
+          a.style.top = `${tileTop(n)}px`;
+          a.style.left = `${col * TILE_W}px`;
+          a.style.width = `${TILE_W - GAP}px`;
+          a.style.height = `${TILE_H}px`;
+          a.innerHTML = `<img src="${item.thumb}" alt="">`;
+          a.addEventListener('click', (event) => {
+            event.preventDefault();
+            openById(item.id);
+          });
+          grid.appendChild(a);
+          mounted.set(n, a);
+        }
+
+        function unmountTile(n) {
+          const el = mounted.get(n);
+          if (!el) return;
+          el.remove();
+          mounted.delete(n);
+        }
+
+        // The only place window recalculation touches scrollTop: loading
+        // genuinely new older content extends minLoadedRow downward, which
+        // grows the phantom's height *above* everything currently
+        // rendered. Every already-mounted tile's top offset is relative to
+        // minLoadedRow (tileTop() above), so it must be recomputed, and
+        // scrollTop must grow by the exact same delta in the same tick —
+        // otherwise the content already on screen would visibly jump down
+        // by that height. Ordinary scrolling through already-loaded rows
+        // never calls this — renderWindow() below only mounts/unmounts,
+        // it never changes minLoadedRow — so it never touches scrollTop.
+        function growUpwardBy(rows) {
+          const beforeScrollTop = scrollBox.scrollTop;
+          minLoadedRow -= rows;
+          setPhantomHeight();
+          for (const [n, el] of mounted) el.style.top = `${tileTop(n)}px`;
+          scrollBox.scrollTop = beforeScrollTop + rows * ROW_H;
+        }
+
+        async function loadOlder() {
+          if (loadingTop) return;
+          loadingTop = true;
+          await delay(300);
+          const end = topCursor - 1;
+          const start = end - COLUMNS * PREFETCH_ROWS + 1;
+          const newItems = [];
+          for (let n = start; n <= end; n++) {
+            const item = makeItem(n);
+            itemsById.set(n, item);
+            newItems.push(item);
+          }
+          topCursor = start;
+          growUpwardBy(rowColOf(end).row - rowColOf(start).row + 1);
+          gallery.updateSlides(sortedItems());
+          renderWindow();
+          refreshStatus();
+          loadingTop = false;
+        }
+
+        async function loadNewer() {
+          if (loadingBottom) return;
+          loadingBottom = true;
+          await delay(300);
+          const start = bottomCursor + 1;
+          const end = start + COLUMNS * PREFETCH_ROWS - 1;
+          for (let n = start; n <= end; n++) itemsById.set(n, makeItem(n));
+          bottomCursor = end;
+          maxLoadedRow = rowColOf(bottomCursor).row;
+          setPhantomHeight();
+          // Append: nothing above the loaded range's top moves, so no
+          // scroll compensation is needed — same as the forward-only demo.
+          gallery.updateSlides(sortedItems());
+          renderWindow();
+          refreshStatus();
+          loadingBottom = false;
+        }
+
+        function renderWindow() {
+          const scrollTop = scrollBox.scrollTop;
+          const viewportH = scrollBox.clientHeight;
+          const firstVisibleRow = minLoadedRow + Math.floor(scrollTop / ROW_H);
+          const lastVisibleRow = minLoadedRow + Math.floor((scrollTop + viewportH) / ROW_H);
+          const first = Math.max(minLoadedRow, firstVisibleRow - BUFFER_ROWS);
+          const last = Math.min(maxLoadedRow, lastVisibleRow + BUFFER_ROWS);
+
+          for (const n of [...mounted.keys()]) {
+            const { row } = rowColOf(n);
+            if (row < first || row > last) unmountTile(n);
+          }
+          for (let row = first; row <= last; row++) {
+            for (let col = 0; col < COLUMNS; col++) {
+              const n = SEED + row * COLUMNS + col;
+              if (n < topCursor || n > bottomCursor) continue;
+              mountTile(n);
+            }
+          }
+
+          // Prefetch once the rendered window is within PREFETCH_ROWS of
+          // either edge of the *loaded* (not just rendered) range — well
+          // before the viewport itself would ever reach an unloaded row.
+          if (!loadingTop && first - minLoadedRow < PREFETCH_ROWS) void loadOlder();
+          if (!loadingBottom && maxLoadedRow - last < PREFETCH_ROWS) void loadNewer();
+
+          refreshStatus();
+        }
+
+        function seed() {
+          topCursor = SEED - SEED_ROWS * COLUMNS;
+          bottomCursor = SEED + SEED_ROWS * COLUMNS - 1;
+          minLoadedRow = rowColOf(topCursor).row;
+          maxLoadedRow = rowColOf(bottomCursor).row;
+          for (let n = topCursor; n <= bottomCursor; n++) itemsById.set(n, makeItem(n));
+          setPhantomHeight();
+          gallery.updateSlides(sortedItems());
+          // Land in the middle of the seeded range, not at either edge —
+          // "start with a full gallery," not a list with a visible
+          // beginning.
+          scrollBox.scrollTop = (grid.clientHeight - scrollBox.clientHeight) / 2;
+          renderWindow();
+        }
+
+        seed();
+
+        let scheduled = false;
+        scrollBox.addEventListener(
+          'scroll',
+          () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+              scheduled = false;
+              renderWindow();
+            });
+          },
+          { passive: true },
+        );
+      })();
+    </script>
+
+    <h2>Code: the Shoji integration</h2>
+    <p>Forward-only — enable the plugin, then append and <code>updateSlides()</code>:</p>
+    <pre><code>const gallery = new Shoji(grid, { items: [], plugins: [Shoji.ActiveThumbnail] });
+
+async function loadNextPage() {
+  const newItems = await fetchNextPage();
+  items = [...items, ...newItems];
+  gallery.updateSlides(items);
+  for (const item of newItems) grid.appendChild(renderThumb(item)); // sets a.dataset.shojiId
+}</code></pre>
+    <p>
+      Bidirectional's <code>updateSlides()</code> call is identical in kind, just sourced from a
+      <code>Map</code> instead of a plain array — sorted before every call, since <code>Map</code>
+      iteration order is insertion order, not numeric order, and an older page's ids are always
+      smaller but still inserted last:
+    </p>
+    <pre><code>function sortedItems() {
+  return [...itemsById.values()].sort((a, b) => idNum(a.id) - idNum(b.id));
+}
+gallery.updateSlides(sortedItems()); // called after every load, in both directions</code></pre>
+    <p>
+      Click-to-open, identical in both demos — resolved fresh from the id, never a captured index:
+    </p>
+    <pre><code>function openById(id) {
+  const index = sortedItems().findIndex((i) => i.id === id);
+  if (index !== -1) gallery.open(index);
+}</code></pre>
+    <p>
+      Everything else on this page — the sentinel/<code>IntersectionObserver</code> pattern, the
+      fixed-row virtual list, the scroll-position math — is in the script above, and covered
+      conceptually in the <a href="../guides/infinite-scroll.html">guide</a>. None of it touches
+      Shoji.
+    </p>
+  </body>
+</html>
