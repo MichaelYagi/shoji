@@ -352,7 +352,22 @@
         let maxLoadedRow;
         let loadingTop = false;
         let loadingBottom = false;
-        const mounted = new Map(); // n -> element, currently real DOM
+        // A real bug, reported on Safari specifically: scrolling visibly
+        // "blinked" as tiles entered/left the window. assignTile()/
+        // releaseTile() used to create/destroy a real <a>+<img> on every
+        // scroll tick — a brand-new <img> has to decode from scratch even
+        // for a src the browser's already fetched, and WebKit in
+        // particular shows a more visible transitional blank state for
+        // that than Chromium/Firefox do; its compositor is also less
+        // efficient at invalidating just the small region that changed
+        // when several sibling position:absolute elements are added/
+        // removed in the same frame, so it tends toward a wider repaint
+        // than necessary. Fixed by pooling: elements are created once and
+        // reused indefinitely — scrolling only ever changes an existing,
+        // already-painted element's src/position, never the DOM tree
+        // shape itself once the pool has grown to its steady-state size.
+        const assigned = new Map(); // n -> pool entry, elements currently showing that item
+        const free = []; // idle pool entries — already in the DOM, hidden, ready to reuse
 
         const grid = document.querySelector('#gallery-bidi'); // the "phantom" — sized to loaded content
         const status = document.querySelector('#status-bidi');
@@ -394,7 +409,7 @@
         }
 
         function refreshStatus() {
-          status.textContent = `${itemsById.size} item(s) loaded so far — no start, no end, either direction. ${mounted.size} currently rendered.`;
+          status.textContent = `${itemsById.size} item(s) loaded so far — no start, no end, either direction. ${assigned.size} currently rendered.`;
         }
 
         function setPhantomHeight() {
@@ -406,33 +421,55 @@
           return (rowColOf(n).row - minLoadedRow) * ROW_H;
         }
 
-        function mountTile(n) {
-          if (mounted.has(n)) return;
-          const item = itemsById.get(n);
-          if (!item) return;
-          const { col } = rowColOf(n);
-          const a = document.createElement('a');
-          a.href = '#';
-          a.className = 'virt-tile';
-          a.dataset.shojiId = item.id;
-          a.style.top = `${tileTop(n)}px`;
-          a.style.left = `${col * TILE_W}px`;
-          a.style.width = `${TILE_W - GAP}px`;
-          a.style.height = `${TILE_H}px`;
-          a.innerHTML = `<img src="${item.thumb}" alt="">`;
-          a.addEventListener('click', (event) => {
+        // Creates a new pool entry exactly once per element the demo ever
+        // needs simultaneously — after the pool reaches that steady-state
+        // size, assignTile() only ever reuses one of these, never creates
+        // another. Width/height are set once here and never touched again
+        // (TILE_W/TILE_H are fixed for the whole session); only top/left/
+        // src/id change per assignment.
+        function createPoolEntry() {
+          const el = document.createElement('a');
+          el.href = '#';
+          el.className = 'virt-tile';
+          el.style.width = `${TILE_W - GAP}px`;
+          el.style.height = `${TILE_H}px`;
+          const img = document.createElement('img');
+          img.alt = '';
+          el.appendChild(img);
+          const entry = { el, img, n: null };
+          // Reads entry.n at click time, not a captured n — this same
+          // element gets reassigned to different items over its lifetime,
+          // so the closure must see whichever item it currently shows.
+          el.addEventListener('click', (event) => {
             event.preventDefault();
-            openById(item.id);
+            if (entry.n !== null) openById(`bidi-${entry.n}`);
           });
-          grid.appendChild(a);
-          mounted.set(n, a);
+          grid.appendChild(el);
+          return entry;
         }
 
-        function unmountTile(n) {
-          const el = mounted.get(n);
-          if (!el) return;
-          el.remove();
-          mounted.delete(n);
+        function assignTile(n) {
+          if (assigned.has(n)) return;
+          const item = itemsById.get(n);
+          if (!item) return;
+          const entry = free.pop() || createPoolEntry();
+          entry.n = n;
+          entry.el.dataset.shojiId = item.id;
+          entry.el.style.display = '';
+          entry.img.src = item.thumb;
+          const { col } = rowColOf(n);
+          entry.el.style.top = `${tileTop(n)}px`;
+          entry.el.style.left = `${col * TILE_W}px`;
+          assigned.set(n, entry);
+        }
+
+        function releaseTile(n) {
+          const entry = assigned.get(n);
+          if (!entry) return;
+          assigned.delete(n);
+          entry.n = null;
+          entry.el.style.display = 'none';
+          free.push(entry);
         }
 
         // The only place window recalculation touches scrollTop: loading
@@ -449,7 +486,7 @@
           const beforeScrollTop = scrollBox.scrollTop;
           minLoadedRow -= rows;
           setPhantomHeight();
-          for (const [n, el] of mounted) el.style.top = `${tileTop(n)}px`;
+          for (const [n, entry] of assigned) entry.el.style.top = `${tileTop(n)}px`;
           scrollBox.scrollTop = beforeScrollTop + rows * ROW_H;
         }
 
@@ -462,7 +499,7 @@
           const beforeScrollTop = scrollBox.scrollTop;
           minLoadedRow += rows;
           setPhantomHeight();
-          for (const [n, el] of mounted) el.style.top = `${tileTop(n)}px`;
+          for (const [n, entry] of assigned) entry.el.style.top = `${tileTop(n)}px`;
           scrollBox.scrollTop = beforeScrollTop - rows * ROW_H;
         }
 
@@ -479,7 +516,7 @@
             for (let col = 0; col < COLUMNS; col++) {
               const n = SEED + row * COLUMNS + col;
               itemsById.delete(n);
-              unmountTile(n); // shouldn't be mounted this far from the viewport, but safe either way
+              releaseTile(n); // shouldn't be assigned this far from the viewport, but safe either way
             }
           }
         }
@@ -549,15 +586,15 @@
           const first = Math.max(minLoadedRow, firstVisibleRow - BUFFER_ROWS);
           const last = Math.min(maxLoadedRow, lastVisibleRow + BUFFER_ROWS);
 
-          for (const n of [...mounted.keys()]) {
+          for (const n of [...assigned.keys()]) {
             const { row } = rowColOf(n);
-            if (row < first || row > last) unmountTile(n);
+            if (row < first || row > last) releaseTile(n);
           }
           for (let row = first; row <= last; row++) {
             for (let col = 0; col < COLUMNS; col++) {
               const n = SEED + row * COLUMNS + col;
               if (n < topCursor || n > bottomCursor) continue;
-              mountTile(n);
+              assignTile(n);
             }
           }
 
