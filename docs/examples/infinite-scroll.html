@@ -9,6 +9,30 @@
     <link rel="stylesheet" href="../docs.css" />
     <script src="../docs.js" defer></script>
     <style>
+      .demo-tabs {
+        display: flex;
+        gap: 0.5rem;
+        border-bottom: 1px solid #8885;
+        margin: 1.5rem 0 0;
+      }
+      .demo-tabs button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 0.6rem 0.25rem;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .demo-tabs button[aria-selected='true'] {
+        border-bottom-color: currentColor;
+        opacity: 1;
+        font-weight: 600;
+      }
+      .tab-panel {
+        padding-top: 1rem;
+      }
       .scroll-box {
         height: 22rem;
         overflow-y: auto;
@@ -77,29 +101,52 @@
       touchpoints do and why.
     </p>
 
-    <h2>Forward-only (append)</h2>
-    <p>
-      Each new page is appended to the item array and handed to <code>updateSlides()</code>.
-      <code>ActiveThumbnail</code> is enabled here — tiles are only ever appended, never removed, so
-      there's no risk of it tracking a thumbnail that's since disappeared.
-    </p>
-    <div class="scroll-box" id="scroll-forward" style="overflow-anchor: auto">
-      <div id="gallery-forward" class="thumb-grid"></div>
-      <p class="sentinel" id="sentinel-forward">Loading…</p>
+    <div class="demo-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        aria-selected="true"
+        aria-controls="tab-forward"
+        id="tabbtn-forward"
+      >
+        Forward-only (append)
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected="false"
+        aria-controls="tab-bidi"
+        id="tabbtn-bidi"
+      >
+        Bidirectional (append + prepend)
+      </button>
     </div>
-    <p class="status-line" id="status-forward">Loading first page…</p>
 
-    <h2>Bidirectional (append + prepend)</h2>
-    <p>
-      A virtualized grid (see the guide for what that means) rebuilds the full item array from its
-      own loaded-item map and hands it to <code>updateSlides()</code> every time that map grows.
-      <code>ActiveThumbnail</code> is deliberately left off — this grid can unmount the exact tile
-      it would be highlighting the moment that tile scrolls outside the rendered window.
-    </p>
-    <div class="scroll-box" id="scroll-bidi">
-      <div id="gallery-bidi"></div>
+    <div class="tab-panel" id="tab-forward" role="tabpanel" aria-labelledby="tabbtn-forward">
+      <p>
+        Each new page is appended to the item array and handed to <code>updateSlides()</code>.
+        <code>ActiveThumbnail</code> is enabled here — tiles are only ever appended, never removed,
+        so there's no risk of it tracking a thumbnail that's since disappeared.
+      </p>
+      <div class="scroll-box" id="scroll-forward" style="overflow-anchor: auto">
+        <div id="gallery-forward" class="thumb-grid"></div>
+        <p class="sentinel" id="sentinel-forward">Loading…</p>
+      </div>
+      <p class="status-line" id="status-forward">Loading first page…</p>
     </div>
-    <p class="status-line" id="status-bidi">Loading…</p>
+
+    <div class="tab-panel" id="tab-bidi" role="tabpanel" aria-labelledby="tabbtn-bidi" hidden>
+      <p>
+        A virtualized grid (see the guide for what that means) rebuilds the full item array from its
+        own loaded-item map and hands it to <code>updateSlides()</code> every time that map grows.
+        <code>ActiveThumbnail</code> is deliberately left off — this grid can unmount the exact tile
+        it would be highlighting the moment that tile scrolls outside the rendered window.
+      </p>
+      <div class="scroll-box" id="scroll-bidi">
+        <div id="gallery-bidi"></div>
+      </div>
+      <p class="status-line" id="status-bidi">Loading…</p>
+    </div>
 
     <script src="../dist/shoji.min.js"></script>
     <script>
@@ -221,9 +268,15 @@
       // fixed constants (not measured/responsive) to keep the row/column
       // math exact and simple for a demo — see the guide for the full
       // reasoning behind each piece below.
+      //
+      // Deferred (not an IIFE run at load) — its tab starts hidden, and
+      // tile width is computed from #scroll-bidi's own clientWidth
+      // (mobile-overflow fix, above). A hidden element's clientWidth is 0,
+      // which would silently reintroduce that exact bug the moment tabs
+      // were added. Called once, the first time this tab is actually
+      // shown, when the container has real layout to measure.
       // ---------------------------------------------------------------
-      (function bidirectional() {
-        const COLUMNS = 4;
+      function initBidirectional() {
         const GAP = 8;
         // A real bug, reported from a real phone: a fixed 150px-per-column
         // (600px total) width is wider than a narrow phone screen, which
@@ -235,10 +288,17 @@
         // rotate/flip bug already documents a mobile browser widening its
         // layout viewport in response to horizontal overflow elsewhere on
         // the page, which would throw off the dialog's own
-        // viewport-relative sizing calculations. Computed once from the
-        // available width instead of a fixed constant — never wider than
-        // the real viewport, whatever device it's opened on. Height keeps
-        // the original tile's aspect ratio instead of also being fixed.
+        // viewport-relative sizing calculations.
+        //
+        // Both COLUMNS and TILE_W are now computed together from the
+        // available width — more columns *and* bigger tiles as the screen
+        // widens, rather than a fixed column count with only the tile size
+        // varying. TILE_W = floor(availableWidth / COLUMNS) keeps the
+        // exact same safety property the mobile fix depends on:
+        // COLUMNS × TILE_W can never exceed availableWidth, by
+        // construction, for *any* COLUMNS this picks — the invariant that
+        // actually prevents horizontal overflow, independent of the
+        // specific column/size targets below.
         //
         // Measured from #scroll-bidi's own clientWidth/padding, not
         // document.documentElement's — a first attempt subtracted a
@@ -248,12 +308,24 @@
         // for it correctly) — still real, if far smaller, horizontal
         // overflow than the bug this was meant to fix in the first place.
         const ASPECT = 112 / 150;
+        const MIN_TILE_W = 150; // the original fixed design's own tile size, now a floor/target
+        const MAX_TILE_W = 220; // a ceiling so tiles don't get absurdly large on an ultrawide screen
         const scrollBox = document.querySelector('#scroll-bidi');
         const scrollBoxStyle = getComputedStyle(scrollBox);
         const horizontalPadding =
           parseFloat(scrollBoxStyle.paddingLeft) + parseFloat(scrollBoxStyle.paddingRight);
         const availableWidth = scrollBox.clientWidth - horizontalPadding;
-        const TILE_W = Math.max(80, Math.min(150, Math.floor(availableWidth / COLUMNS)));
+        // As many columns as fit at MIN_TILE_W each (never fewer than 2,
+        // even on a very narrow screen), then let each tile grow to fill
+        // whatever's left over from that division.
+        let COLUMNS = Math.max(2, Math.floor(availableWidth / MIN_TILE_W));
+        let TILE_W = Math.floor(availableWidth / COLUMNS);
+        if (TILE_W > MAX_TILE_W) {
+          // Enough room that tiles would exceed the cap — add columns
+          // instead of letting them grow further.
+          COLUMNS = Math.max(COLUMNS, Math.ceil(availableWidth / MAX_TILE_W));
+          TILE_W = Math.floor(availableWidth / COLUMNS);
+        }
         const TILE_H = Math.round(TILE_W * ASPECT);
         const ROW_H = TILE_H + GAP;
         // Small on purpose — "only exists in the viewport" is the whole
@@ -528,6 +600,36 @@
           },
           { passive: true },
         );
+      }
+
+      // ---------------------------------------------------------------
+      // Tabs: only one demo visible at a time. Forward-only's own
+      // IntersectionObserver-based loading is unaffected by starting on a
+      // hidden-vs-visible tab (a hidden target simply reports
+      // not-intersecting until shown, then resumes normally) — it's
+      // already running above. Bidirectional is the one that needs
+      // deferred, first-activation-only init; see initBidirectional()'s
+      // own comment for why.
+      // ---------------------------------------------------------------
+      (function tabs() {
+        const tabButtons = [...document.querySelectorAll('.demo-tabs button')];
+        let bidiInitialized = false;
+
+        function activate(button) {
+          for (const btn of tabButtons) {
+            const selected = btn === button;
+            btn.setAttribute('aria-selected', String(selected));
+            document.getElementById(btn.getAttribute('aria-controls')).hidden = !selected;
+          }
+          if (button.id === 'tabbtn-bidi' && !bidiInitialized) {
+            bidiInitialized = true;
+            initBidirectional();
+          }
+        }
+
+        for (const btn of tabButtons) {
+          btn.addEventListener('click', () => activate(btn));
+        }
       })();
     </script>
 
