@@ -119,13 +119,19 @@
           <td><code>Shoji.ActiveThumbnail</code> / <code>activeThumbnail</code></td>
           <td>
             Keeps a host's own thumbnail grid in sync with whichever slide is open — toggles a
-            class, scrolls it into view. No default styling shipped for the class itself; you write
-            the CSS:
+            class, scrolls it into view, and (unlike a plain "clear on close") leaves the class in
+            place after the lightbox closes: the point of a visible marker is seeing it once the
+            backdrop is out of the way, so only a genuinely different slide becoming active (or
+            <code>destroy()</code>) moves or removes it. No default styling shipped for
+            <code>activeClass</code> itself — write your own CSS:
             <pre><code>.shoji-thumb-active img {
   outline: 3px solid #4da3ff;
-  outline-offset: 2px;
+  outline-offset: -2px;
 }</code></pre>
-            Live in the
+            (a <em>negative</em> offset, not positive — pulling the outline inward keeps it from
+            spilling into a neighboring tile in a tightly-gutter'd grid, the same real bug
+            <code>highlight</code>'s own built-in styling below hit and fixed) — or opt into
+            <code>highlight: true</code> instead of writing any CSS at all. Live in the
             <a href="../examples/autoplay-and-active-thumbnail.html"
               >Autoplay + ActiveThumbnail example</a
             >. Also needs a <code>data-shoji-id</code> match per item outside selector mode — see
@@ -134,7 +140,10 @@
           </td>
           <td>
             <code>activeClass</code> (<code>'shoji-thumb-active'</code>),
-            <code>scrollIntoView</code> (true)
+            <code>scrollIntoView</code> (true), <code>highlight</code> (false — opt-in outline
+            styling), <code>borderColor</code> (<code>'blue'</code>, only visible with
+            <code>highlight: true</code>), <code>highlightDuration</code> (ms, unset — opt-in
+            auto-fade of the <code>highlight</code> styling, counted from <code>close()</code>)
           </td>
         </tr>
         <tr>

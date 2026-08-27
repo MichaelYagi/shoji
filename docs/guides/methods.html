@@ -218,6 +218,21 @@
           </td>
         </tr>
         <tr>
+          <td><code>gallery.markIntentionalScroll()</code></td>
+          <td>
+            Tells the page-scroll lock not to restore the pre-open scroll position on
+            <code>close()</code> — for a plugin (like <code>ActiveThumbnail</code>) that
+            deliberately scrolls the host page while the lightbox is open. Exposed as a method
+            rather than left as something a plugin imports from a core module directly, since the
+            core+plugins standalone distribution (see
+            <a href="./getting-started.html">Getting started</a>) bundles each plugin file
+            separately from core — a direct import would silently get its own disconnected copy of
+            that internal state in that distribution mode. Going through the shared
+            <code>Gallery</code> instance always reaches the real one, regardless of which
+            distribution shape loaded it.
+          </td>
+        </tr>
+        <tr>
           <td><code>gallery.getActivePlugins()</code></td>
           <td>
             Names of plugins that actually initialized on this instance — deduplicated, excluding

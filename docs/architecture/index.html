@@ -353,8 +353,8 @@
 
     <h2>Distribution shape</h2>
     <p>
-      The same source compiles to two different consumption shapes, and both always ship together —
-      neither is allowed to lag behind the other:
+      The same source compiles to three different consumption shapes, and all three always ship
+      together — none is allowed to lag behind the others:
     </p>
     <ul>
       <li>
@@ -364,6 +364,20 @@
         properties (<code>Shoji.Zoom</code>) via
         <code>Object.assign(Gallery, { Zoom, Fullscreen, ... })</code> — this is what a plain
         <code>&lt;script&gt;</code> tag gets, and what the demo/docs site itself loads.
+      </li>
+      <li>
+        <strong>Core + individual plugin files</strong> (<code>dist/core/shoji-core.js</code> +
+        <code>.css</code>, and one <code>dist/plugins/{name}.js</code> + <code>.css</code> pair per
+        official plugin) — for a <code>&lt;script&gt;</code>-tag host that wants to pick exactly
+        which plugins ship without adopting a bundler. Each of these is its own separately-bundled
+        UMD file; a plugin file attaches itself onto the already-loaded <code>Shoji</code> global
+        via a dotted name (<code>Shoji.Zoom</code>) and Rollup's <code>extend: true</code>, the same
+        mechanism as the single-file build's own attachment, just one script tag at a time. Because
+        each file is a genuinely separate bundle, a plugin can never rely on sharing module-level
+        state with core by importing an internal core module directly — it has to go through the
+        <code>Gallery</code> instance itself (<code>ctx.gallery</code>), which is the one thing
+        guaranteed to be the same object regardless of which distribution shape loaded it. See
+        <a href="../guides/getting-started.html">Getting Started</a> for the integration snippet.
       </li>
       <li>
         <strong>Tree-shakable ESM</strong> — <code>src/core/index.ts</code> plus a separate entry

@@ -410,6 +410,16 @@
       of doing the same thing.
     </p>
 
+    <h2>ActiveThumbnail plugin properties</h2>
+    <p>
+      <code>--shoji-active-thumbnail-border-color</code> drives the opt-in
+      <code>highlight: true</code> styling (see <a href="./plugins.html">Plugins</a>) — set
+      per-element by the plugin from its <code>borderColor</code> JS option (default
+      <code>'blue'</code>), and again to <code>transparent</code> if <code>highlightDuration</code>
+      fades it out. Overridable with plain CSS like any other custom property; irrelevant when
+      <code>highlight</code> is left at its default (<code>false</code>) — nothing reads it then.
+    </p>
+
     <h2>Icons</h2>
     <p>
       Inline SVG sprites, <code>stroke: currentColor</code> — they inherit

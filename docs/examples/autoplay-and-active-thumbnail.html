@@ -14,7 +14,7 @@
          what "active" looks like. */
       .shoji-thumb-active img {
         outline: 3px solid #4da3ff;
-        outline-offset: 2px;
+        outline-offset: -2px;
       }
       /* A horizontally-scrolling strip, not a wrapping grid, so
          ActiveThumbnail's scrollIntoView (on by default) has somewhere
@@ -158,15 +158,20 @@
 &lt;a data-shoji-video="https://www.youtube.com/watch?v=BB49x_uMlGA" data-shoji-width="800" data-shoji-height="600"&gt;
   &lt;img src="yt-poster.jpg" alt="YouTube video" /&gt;
 &lt;/a&gt;</code></pre>
-    <pre><code>/* Shoji only toggles the class — you decide what "active" looks like. */
+    <pre><code>/* Shoji only toggles the class — you decide what "active" looks like.
+   Negative outline-offset, not positive — pulls it inward so it can't
+   spill into a neighboring thumbnail in a tighter grid than this one. */
 .shoji-thumb-active img {
   outline: 3px solid #4da3ff;
-  outline-offset: 2px;
+  outline-offset: -2px;
 }</code></pre>
     <p>
       <code>ActiveThumbnail</code> also takes an <code>activeClass</code> option (default
       <code>'shoji-thumb-active'</code>) and a <code>scrollIntoView</code> option (default
-      <code>true</code>) if you'd rather turn the auto-scroll off and keep just the highlight.
+      <code>true</code>) if you'd rather turn the auto-scroll off and keep just the highlight — or
+      skip writing CSS entirely with its own opt-in <code>highlight: true</code>/
+      <code>borderColor</code>/<code>highlightDuration</code> options (see
+      <a href="../guides/plugins.html">Plugins</a>).
     </p>
   </body>
 </html>
