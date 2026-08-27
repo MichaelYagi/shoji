@@ -3,11 +3,9 @@
 [![CI](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelYagi/shoji/actions/workflows/ci.yml)
 [![npm (beta)](https://img.shields.io/npm/v/%40michaelyagi%2Fshoji/beta.svg)](https://www.npmjs.com/package/@michaelyagi/shoji)
 
-A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<script>`/`<link>` tags, or install from npm — everything beyond the minimal lightbox, including every official plugin, is opt-in.
-
-> **Status: beta.** The API is still settling — expect breaking changes between `0.x` releases.
-
 > **AI-authored.** 100% of the code was written by Claude (Anthropic); I shaped the architecture, scope, and every decision, and did all the testing.
+
+A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<script>`/`<link>` tags, or install from npm — everything beyond the minimal lightbox, including every official plugin, is opt-in.
 
 ## Features
 
