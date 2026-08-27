@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.8] - 2026-08-27
+
+### Fixed
+
+- **beta.7's fix for the off-center mobile lightbox photo (below) made
+  things worse on real hardware**, reported directly from a real device:
+  the dialog stopped covering the full screen at all, exposing the page's
+  own content underneath it. The JS-based fix read
+  `window.visualViewport.height` once, synchronously, on open — on a real
+  device, that read could land before the browser's toolbar-collapse
+  animation had actually settled, capturing a too-small value that,
+  applied as an inline `height` alongside `.shoji-outer`'s existing
+  `inset: 0`, over-constrained the box and pinned its bottom edge short of
+  the real viewport. Fixed by removing the JS mechanism entirely and using
+  `height: 100dvh` in CSS instead — continuously live-updated by the
+  browser itself, with no JS snapshot to go stale.
+
 ## [0.1.0-beta.7] - 2026-08-27
 
 ### Fixed
