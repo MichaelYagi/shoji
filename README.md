@@ -7,6 +7,8 @@ A zero-dependency, plugin-first TypeScript lightbox/gallery. Drop in two `<scrip
 
 > **Status: beta.** The API is still settling — expect breaking changes between `0.x` releases.
 
+> **AI-authored.** 100% of the code was written by Claude (Anthropic); I shaped the architecture, scope, and every decision, and did all the testing.
+
 ## Features
 
 - **Zero runtime dependencies**, TypeScript strict mode throughout.
