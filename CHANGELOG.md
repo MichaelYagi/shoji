@@ -16,7 +16,7 @@ still include breaking changes).
   `<a>` wrapping a large `<img>` sizes to a text-line-height sliver, not
   the image it visually contains, even though the image itself paints at
   full size. The transform's target box, `effectiveTargetBox()`, already
-  had the fix for this exact quirk on the *other* side of the animation
+  had the fix for this exact quirk on the _other_ side of the animation
   (preferring a real-sized child element's rect over the container's
   own); `origin`'s measurement never got the same treatment. Fixed by
   adding `effectiveOriginBox()`, mirroring that same child-preference
