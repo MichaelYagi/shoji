@@ -87,9 +87,12 @@ th {
    A single horizontally-scrolling strip is the same fix at every width —
    desktop and mobile share this one rule, no separate breakpoint/JS
    needed. `scroll-padding-inline` keeps a link from landing flush against
-   the edge when scrolled/focused into view; the mask fades each edge as a
-   "there's more this way" cue that costs nothing when unsupported (the
-   row's still fully scrollable either way, just without the hint). */
+   the edge when scrolled/focused into view.
+   A `mask-image` edge fade used to hint "there's more this way" — removed
+   (reported directly): it was a static gradient applied regardless of
+   actual scroll position, so it dimmed the first/last item even at the
+   ends where there was nothing further to scroll to, reading as a bug
+   rather than a hint. */
 .docs-nav {
   display: flex;
   gap: 0.5rem;
@@ -101,7 +104,6 @@ th {
   scrollbar-width: thin;
   margin-bottom: 1.5rem;
   padding-bottom: 0.5rem;
-  mask-image: linear-gradient(to right, transparent, black 1.5rem, black 98%, transparent);
 }
 
 .docs-nav a {
