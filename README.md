@@ -38,6 +38,25 @@ import '@michaelyagi/shoji/style.css';
 new Shoji('#gallery', { plugins: [Shoji.Zoom] });
 ```
 
+## CDN
+
+Skip npm and load the built files straight from [jsDelivr](https://www.jsdelivr.net/), which mirrors every npm release automatically:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@michaelyagi/shoji/dist/shoji.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/@michaelyagi/shoji/dist/shoji.min.js"></script>
+```
+
+- **Full bundle** (core + every plugin) — `dist/shoji.min.js` / `dist/shoji.min.css`, or unminified: `dist/shoji.js` / `dist/shoji.css`.
+- **Core alone** — `dist/core/shoji-core.min.js` + `dist/core/shoji-core.min.css`.
+- **Individual plugins**, loaded alongside core — `dist/plugins/<name>.min.js`, e.g. `zoom.min.js`, `layout.min.js`. Not every plugin ships CSS: `activeThumbnail`, `autoplay`, `layout`, and `zoom` do; `fullscreen`, `rotateFlip`, and `video` don't need any.
+
+No version in the URL resolves to the latest release. To pin an exact one instead, add `@<version>` right after the package name — see [npmjs.com/package/@michaelyagi/shoji?activeTab=code](https://www.npmjs.com/package/@michaelyagi/shoji?activeTab=code) for what that currently is:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@michaelyagi/shoji@0.1.0-beta.9/dist/shoji.min.js"></script>
+```
+
 ## Quickstart
 
 ```html
