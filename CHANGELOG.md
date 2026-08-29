@@ -14,7 +14,7 @@ still include breaking changes).
   there — `latest` on npmjs.com went stale until someone noticed and
   promoted it by hand. The job now runs `npm dist-tag add ... latest`
   right after publishing, skipped only when the version already published
-  *as* `latest` directly.
+  _as_ `latest` directly.
 - **README's "Releasing" steps corrected.** `package.json`'s `version`
   field is a bare semver string with no `v` prefix; only the git tag gets
   one (`git tag v<version>`). The two were previously conflated.
