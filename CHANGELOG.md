@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.12] - 2026-08-28
+
+### Fixed
+
+- **ActiveThumbnail's highlight fade no longer breaks when Layout's
+  `animate: true` is also on.** CSS's `transition` shorthand doesn't merge
+  across separate rules matching the same element — Layout's own
+  higher-specificity `.shoji-layout--*.shoji-layout--animate
+.shoji-layout-tile` rule (three classes) was silently winning over this
+  plugin's `.shoji-thumb-active--highlight` (one class) on a Layout-
+  rendered tile, dropping the `outline-color` transition entirely. The
+  border still went transparent on schedule, just instantly instead of
+  fading — reported directly as "the border disappears quickly, not over
+  the [highlightFadeDuration] I set." Fixed by re-declaring both
+  transitions together, at higher specificity, for tiles that are both a
+  Layout tile and the highlighted one.
+
 ## [0.1.0-beta.11] - 2026-08-28
 
 ### Fixed

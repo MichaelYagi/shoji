@@ -80,6 +80,48 @@
 }
 
 /**
+ * A real bug, reported from real usage combining Layout's `animate: true`
+ * with this plugin's `highlight`: CSS's `transition` shorthand doesn't
+ * merge across separate rules matching the same element — only the
+ * highest-specificity one applies, in full, discarding whatever the loser
+ * declared. Layout's own `.shoji-layout--*.shoji-layout--animate
+ * .shoji-layout-tile` rule (layout.css) — three classes, specificity
+ * (0,3,0) — beats this file's plain `.shoji-thumb-active--highlight`
+ * (0,1,0) outright on a Layout-rendered tile, silently dropping the
+ * outline-color transition above entirely. Confirmed directly: the
+ * `--shoji-active-thumbnail-border-color` change from `highlightDuration`
+ * (index.ts) still fires, but with no transition left to animate it, it
+ * jumps straight to transparent instead of fading — reads as "the fade
+ * duration does nothing," when what actually broke is the transition
+ * itself, silently.
+ *
+ * Fixed by re-declaring both transitions together, for this specific
+ * combination, at higher specificity (four classes, (0,4,0)) than
+ * Layout's rule — the only way to keep *both* animations on a tile that's
+ * simultaneously a Layout tile and the highlighted one. This does mean
+ * knowing Layout's own class names, unlike everywhere else in this
+ * codebase (which talks to other plugins only through the event bus) —
+ * CSS specificity has no such indirection to fall back on, and duplicating
+ * `--shoji-duration`/`--shoji-easing` (core's own public tokens, not a
+ * Layout implementation detail) is the narrowest coupling that actually
+ * fixes it. A no-op file to load when only one of the two plugins is
+ * present — the other plugin's classes simply never appear in the DOM.
+ */
+.shoji-layout--masonry.shoji-layout--animate .shoji-layout-tile.shoji-thumb-active--highlight,
+.shoji-layout--justified.shoji-layout--animate .shoji-layout-tile.shoji-thumb-active--highlight {
+  transition:
+    transform var(--shoji-duration) var(--shoji-easing),
+    outline-color var(--shoji-active-thumbnail-fade-duration, 800ms) ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shoji-layout--masonry.shoji-layout--animate .shoji-layout-tile.shoji-thumb-active--highlight,
+  .shoji-layout--justified.shoji-layout--animate .shoji-layout-tile.shoji-thumb-active--highlight {
+    transition: none;
+  }
+}
+
+/**
  * A real bug, also confirmed by an actual screenshot: giving the anchor a
  * real content-box height (`display: inline-block` above — a plain
  * `display: inline` anchor otherwise only gets a text-line-height box,
