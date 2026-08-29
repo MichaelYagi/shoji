@@ -54,7 +54,7 @@ Skip npm and load the built files straight from [jsDelivr](https://www.jsdelivr.
 No version in the URL resolves to the latest release. To pin an exact one instead, add `@<version>` right after the package name — see [npmjs.com/package/@michaelyagi/shoji?activeTab=code](https://www.npmjs.com/package/@michaelyagi/shoji?activeTab=code) for what that currently is:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@michaelyagi/shoji@0.1.0-beta.9/dist/shoji.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@michaelyagi/shoji@0.1.0-beta.11/dist/shoji.min.js"></script>
 ```
 
 ## Quickstart
