@@ -16,21 +16,26 @@ class EmitterPlugin {
 }
 
 /**
- * DESIGN.md §4.1 — pause-on-zoom / pause-on-rotate-flip / pause-on-caption-
- * expand, all default `true`: a real UX gap, not a reported bug, fixed
- * alongside the rotate/zoom-under-rotation work above. Autoplay only
- * reacts to zoomChange/rotateFlipChange's event *shape* (`core/types.ts`)
- * — never imports either plugin directly — so these tests load all three
- * together, the same cross-plugin pattern `layout-automeasure.test.ts`
- * already established, and drive the interaction through each plugin's
- * own real, public toolbar buttons rather than faking the event bus
- * directly.
+ * DESIGN.md §4.1 — `onZoom`/`onRotateFlip`/`onCaptionExpand`, all default
+ * `'stop'`: a real UX gap, not a reported bug, fixed alongside the
+ * rotate/zoom-under-rotation work above. Autoplay only reacts to
+ * zoomChange/rotateFlipChange's event *shape* (`core/types.ts`) — never
+ * imports either plugin directly — so these tests load all three together,
+ * the same cross-plugin pattern `layout-automeasure.test.ts` already
+ * established, and drive the interaction through each plugin's own real,
+ * public toolbar buttons rather than faking the event bus directly.
  *
- * Deliberately **stays paused** rather than auto-resuming once back at
- * neutral — a real bug, reported from real usage against an earlier,
- * edge-tracked auto-resume design: rotating back to the original
- * orientation is still an active interaction with the view controls, not
- * "nothing happened," so it must not silently resume either.
+ * `'stop'` mode (this file's default, tested throughout the three
+ * describe blocks below) deliberately **stays paused** rather than
+ * auto-resuming once back at neutral — a real bug, reported from real
+ * usage against an earlier, edge-tracked auto-resume design that always
+ * auto-resumed: rotating back to the original orientation is still an
+ * active interaction with the view controls, not "nothing happened," so
+ * it must not silently resume either. `'pause'` mode (its own describe
+ * block further down) is a *second*, differently-built attempt at that
+ * same auto-resume idea — a debounce is what actually fixes the earlier
+ * attempt's failure mode, not just re-adding instant auto-resume under a
+ * new name (`RESUME_DEBOUNCE_MS`'s own doc comment, `autoplay/index.ts`).
  */
 
 const DEFAULT_RECT: DOMRect = {
@@ -129,10 +134,10 @@ function isToggleDisabled(): boolean {
   return toggleButton().getAttribute('aria-disabled') === 'true';
 }
 
-describe('Autoplay — pauseOnZoom (default on)', () => {
-  it('pauseOnZoom: false is a complete no-op, even while zoomed', async () => {
+describe("Autoplay — onZoom: 'stop' (the default)", () => {
+  it('onZoom: false is a complete no-op, even while zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
+    const gallery = makeGallery({ autoplay: { onZoom: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -159,7 +164,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('stays paused once zoomed back out to neutral — no auto-resume', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -174,7 +179,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('re-pauses on a second zoom-in even after a manual restart while still zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -197,7 +202,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('regression: pressing Play while already zoomed in immediately pauses again, instead of running unpaused — a real bug found testing this directly: nothing fires zoomChange just from clicking Play, and toggling straight back to neutral afterward (double-tap-to-reset) only emits the already-neutral event, never one crossing the engaged threshold, so nothing ever caught it', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
 
@@ -220,7 +225,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
       items,
       plugins: [Autoplay, Zoom, RotateFlip, emitter],
       preload: 0,
-      autoplay: { pauseOnZoom: true },
+      autoplay: { onZoom: 'stop' },
     });
     gallery.open(0);
     await flush();
@@ -236,7 +241,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('does not pause a slideshow that was never playing to begin with', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'stop' } });
     gallery.open(0); // never started — playing stays false throughout
     await flush();
 
@@ -248,7 +253,7 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
 
   it('a slide-change-driven zoom reset (an outgoing zoomed slide silently resetting, not a real interaction) does not itself pause a playing slideshow on a fresh slide', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ loop: true, autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ loop: true, autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
 
@@ -266,10 +271,157 @@ describe('Autoplay — pauseOnZoom (default on)', () => {
   });
 });
 
-describe('Autoplay — pauseOnRotateFlip (default on)', () => {
-  it('pauseOnRotateFlip: false is a complete no-op, even while rotated', async () => {
+/**
+ * `onZoom`/`onRotateFlip`: `'pause'` mode — auto-resumes once genuinely
+ * disengaged, unlike `'stop'` mode above. `RESUME_DEBOUNCE_MS`
+ * (`autoplay/index.ts`) is 1000ms; every test here uses
+ * `vi.advanceTimersByTime()` relative to that, never a real wait.
+ */
+describe("Autoplay — onZoom/onRotateFlip: 'pause' mode auto-resume", () => {
+  it('resumes on its own once the debounce elapses after un-zooming, unlike stop mode', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: false } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    expect(isPlaying()).toBe(false);
+    click(button('Zoom out')); // back to neutral — disengaged, but not yet debounced
+    expect(isPlaying()).toBe(false);
+
+    vi.advanceTimersByTime(999);
+    expect(isPlaying()).toBe(false); // not yet — still inside the debounce window
+    vi.advanceTimersByTime(1);
+    expect(isPlaying()).toBe(true); // debounce elapsed with nothing re-engaging it
+
+    gallery.destroy();
+  });
+
+  it("regression (the earlier auto-resume design's second real problem): re-zooming before the debounce elapses cancels and restarts it, instead of resuming mid-interaction", async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onZoom: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    click(button('Zoom out')); // disengage #1 — schedules a resume
+    vi.advanceTimersByTime(700); // well inside the 1000ms window, not yet fired
+    click(button('Zoom in')); // re-engage before it could fire
+    expect(isPlaying()).toBe(false);
+    click(button('Zoom out')); // disengage #2 — must restart the wait, not reuse the old one's remaining time
+
+    vi.advanceTimersByTime(700); // would have fired by now under the old (cancelled) schedule
+    expect(isPlaying()).toBe(false); // must not have resumed mid-interaction
+    vi.advanceTimersByTime(300); // completes the full 1000ms from disengage #2
+    expect(isPlaying()).toBe(true);
+
+    gallery.destroy();
+  });
+
+  it("regression (the earlier auto-resume design's first real problem): a manual restart while still zoomed doesn't leave the resume tracking stuck — it still resumes once genuinely disengaged afterward", async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onZoom: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    expect(isPlaying()).toBe(false);
+
+    click(toggleButton()); // manual restart while still zoomed — immediately re-pauses (reCheckEngagedAfterManualStart)
+    expect(isPlaying()).toBe(false);
+
+    click(button('Zoom out'));
+    vi.advanceTimersByTime(1000);
+    expect(isPlaying()).toBe(true); // not stuck "already engaged" — the resume tracking survived the manual restart
+
+    gallery.destroy();
+  });
+
+  it('a manual pause during ordinary playback is a hard stop — it does not later spring back to life just because zoom state happens to change afterward', async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onZoom: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+    click(toggleButton()); // manual pause — nothing to do with zoom at all
+    expect(isPlaying()).toBe(false);
+
+    click(button('Zoom in'));
+    click(button('Zoom out'));
+    vi.advanceTimersByTime(2000);
+    expect(isPlaying()).toBe(false); // stays stopped — this was never a pending pause-mode resume
+
+    gallery.destroy();
+  });
+
+  it('navigating to a different slide while a resume is pending cancels it — the slide it was paused for is no longer even active', async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ loop: true, autoplay: { onZoom: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    click(button('Zoom out')); // schedules a resume
+    gallery.goTo(1, { animate: false }); // manual nav before it fires — stopOnManualNavigate (default true) also stops playback
+    await flush();
+
+    vi.advanceTimersByTime(2000);
+    expect(isPlaying()).toBe(false); // the cancelled resume never fires on the new slide
+
+    gallery.destroy();
+  });
+
+  it("a 'stop'-mode trigger cancels a different trigger's still-pending 'pause'-mode resume — a hard stop always wins", async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onZoom: 'pause', onRotateFlip: 'stop' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Zoom in'));
+    click(button('Zoom out')); // schedules a pause-mode resume
+    click(button('Rotate right')); // a hard stop from a different, 'stop'-mode trigger
+    expect(isPlaying()).toBe(false);
+
+    vi.advanceTimersByTime(2000);
+    expect(isPlaying()).toBe(false); // the zoom-side resume must not resurrect it
+
+    gallery.destroy();
+  });
+
+  it("regression, RotateFlip's own equivalent of the earlier design's second real problem: rotating x4 back to 0 (four separate disengage-eligible moments) only resumes once idle after the last one, not mid-sequence", async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'pause' } });
+    gallery.open(0);
+    await flush();
+    click(toggleButton());
+
+    click(button('Rotate right')); // 90
+    vi.advanceTimersByTime(400);
+    click(button('Rotate right')); // 180 — still engaged throughout, so nothing was ever scheduled yet
+    vi.advanceTimersByTime(400);
+    click(button('Rotate right')); // 270
+    vi.advanceTimersByTime(400);
+    click(button('Rotate right')); // 360 -> 0 — the original orientation, and the last click
+    expect(isPlaying()).toBe(false);
+
+    vi.advanceTimersByTime(999);
+    expect(isPlaying()).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(isPlaying()).toBe(true); // resumed only once truly idle after the last click
+
+    gallery.destroy();
+  });
+});
+
+describe("Autoplay — onRotateFlip: 'stop' (the default)", () => {
+  it('onRotateFlip: false is a complete no-op, even while rotated', async () => {
+    vi.useFakeTimers();
+    const gallery = makeGallery({ autoplay: { onRotateFlip: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -295,7 +447,7 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
 
   it('regression: still pauses on the click that lands back on the original orientation (rotate x4 = 360deg -> 0), not just the ones that leave it rotated — reported from real usage against an earlier auto-resume design', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -320,7 +472,7 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
 
   it('regression: pressing Play while already rotated immediately pauses again, instead of running unpaused', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'stop' } });
     gallery.open(0);
     await flush();
 
@@ -333,7 +485,7 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
 
   it('flipping back to unflipped (same button twice) also pauses on both clicks', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -350,7 +502,7 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
 
   it('does not pause a slideshow that was never playing to begin with', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'stop' } });
     gallery.open(0);
     await flush();
 
@@ -362,7 +514,7 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
 });
 
 /**
- * DESIGN.md §2.3a/§4-autoplay — `pauseOnCaptionExpand` (default off),
+ * DESIGN.md §2.3a/§4-autoplay — `onCaptionExpand` (default 'stop'),
  * requested directly: expanding a truncated caption to read the rest is the
  * viewer asking for time, not an idle moment to advance past. Reuses
  * `core-lightbox.test.ts`'s own `mockTruncated()` approach — jsdom has no
@@ -371,15 +523,15 @@ describe('Autoplay — pauseOnRotateFlip (default on)', () => {
  * `updateCaptionTruncation()` actually makes.
  *
  * No "pressed Play while already engaged" regression test here, unlike
- * pauseOnZoom/pauseOnRotateFlip above — that scenario is structurally
+ * onZoom/onRotateFlip above — that scenario is structurally
  * impossible for this one: the caption modal traps both pointer and
  * keyboard input while open (core's own focus trap plus a capture-phase
  * keydown handler that stops propagation for every key, not just Escape),
  * so the toolbar's Play button is physically unreachable until the modal
- * is already closed. See `pauseOnCaptionExpand`'s own doc comment
+ * is already closed. See `onCaptionExpand`'s own doc comment
  * (autoplay/index.ts).
  */
-describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
+describe("Autoplay — onCaptionExpand: 'stop' (the default)", () => {
   afterEach(() => {
     // Not vi.spyOn — jsdom's Range doesn't define this method at all, so
     // mockTruncated() below assigns it outright; the top-level afterEach's
@@ -414,10 +566,10 @@ describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
     });
   }
 
-  it('pauseOnCaptionExpand: false is a complete no-op, even while the caption modal is open', async () => {
+  it('onCaptionExpand: false is a complete no-op, even while the caption modal is open', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: false } });
+    const gallery = makeGalleryWithCaption({ autoplay: { onCaptionExpand: false } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -448,7 +600,7 @@ describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
   it('stays paused once the caption modal closes — no auto-resume', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    const gallery = makeGalleryWithCaption({ autoplay: { onCaptionExpand: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -466,7 +618,7 @@ describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
   it('does not pause a slideshow that was never playing to begin with', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    const gallery = makeGalleryWithCaption({ autoplay: { onCaptionExpand: 'stop' } });
     gallery.open(0); // never started — playing stays false throughout
     await flush();
 
@@ -476,10 +628,10 @@ describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
     gallery.destroy();
   });
 
-  it('never disables the Play button while the modal is open — unlike pauseOnZoom/pauseOnRotateFlip, Play is already unreachable there by construction, so there is nothing for this plugin to additionally guard', async () => {
+  it('never disables the Play button while the modal is open — unlike onZoom/onRotateFlip, Play is already unreachable there by construction, so there is nothing for this plugin to additionally guard', async () => {
     vi.useFakeTimers();
     mockTruncated();
-    const gallery = makeGalleryWithCaption({ autoplay: { pauseOnCaptionExpand: true } });
+    const gallery = makeGalleryWithCaption({ autoplay: { onCaptionExpand: 'stop' } });
     gallery.open(0);
     await flush();
     click(toggleButton());
@@ -489,6 +641,28 @@ describe('Autoplay — pauseOnCaptionExpand (default on)', () => {
     expect(isToggleDisabled()).toBe(false);
 
     gallery.destroy();
+  });
+
+  describe("'pause' mode auto-resume", () => {
+    it('resumes on its own, debounced, once the caption modal closes', async () => {
+      vi.useFakeTimers();
+      mockTruncated();
+      const gallery = makeGalleryWithCaption({ autoplay: { onCaptionExpand: 'pause' } });
+      gallery.open(0);
+      await flush();
+      click(toggleButton());
+
+      openCaptionModal();
+      expect(isPlaying()).toBe(false);
+
+      (document.querySelector('.shoji-caption-modal-close') as HTMLButtonElement).click();
+      expect(isPlaying()).toBe(false); // not yet — still inside the debounce window
+
+      vi.advanceTimersByTime(1000);
+      expect(isPlaying()).toBe(true);
+
+      gallery.destroy();
+    });
   });
 });
 
@@ -523,9 +697,9 @@ describe('Autoplay — view-engagement pausing, general', () => {
  * an honest, visible state instead of a click that appears to do nothing.
  */
 describe('Autoplay — Play button disabled while resume is blocked', () => {
-  it('disables the Play button while zoomed in (pauseOnZoom), re-enables once un-zoomed', async () => {
+  it('disables the Play button while zoomed in (onZoom), re-enables once un-zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
     expect(isToggleDisabled()).toBe(false);
@@ -540,9 +714,9 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
     gallery.destroy();
   });
 
-  it('disables the Play button while rotated (pauseOnRotateFlip)', async () => {
+  it('disables the Play button while rotated (onRotateFlip)', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnRotateFlip: true } });
+    const gallery = makeGallery({ autoplay: { onRotateFlip: 'stop' } });
     gallery.open(0);
     await flush();
 
@@ -569,9 +743,9 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
     gallery.destroy();
   });
 
-  it('never disables the button while zoomed, with pauseOnZoom: false', async () => {
+  it('never disables the button while zoomed, with onZoom: false', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnZoom: false } });
+    const gallery = makeGallery({ autoplay: { onZoom: false } });
     gallery.open(0);
     await flush();
 
@@ -583,7 +757,7 @@ describe('Autoplay — Play button disabled while resume is blocked', () => {
 
   it('re-enables on a fresh slide even if the outgoing slide was left zoomed', async () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ loop: true, autoplay: { pauseOnZoom: true } });
+    const gallery = makeGallery({ loop: true, autoplay: { onZoom: 'stop' } });
     gallery.open(0);
     await flush();
 

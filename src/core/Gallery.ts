@@ -1487,7 +1487,7 @@ export class Gallery {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
       // A real bug, reported from real usage against Autoplay's
-      // pauseOnCaptionExpand (§4.1 point 18): a *keyboard* activation here
+      // onCaptionExpand (§4.1 point 18): a *keyboard* activation here
       // (Tab+Enter/Space, the only path this branch actually runs for)
       // must not also bubble up to onKeydown's shortcut dispatch — this is
       // unambiguously "activate this control," not also a global shortcut

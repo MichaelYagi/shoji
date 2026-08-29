@@ -42,7 +42,7 @@
   background: var(--shoji-progress);
 }
 
-/* DESIGN.md §4.1 — while pauseOnZoom/pauseOnRotateFlip is holding playback
+/* DESIGN.md §4.1 — while onZoom/onRotateFlip is holding playback
    paused (the viewer is still zoomed/rotated), pressing Play would just
    silently re-pause it in the same tick, with no visible feedback at all
    that anything happened — reported as looking broken, not just quiet.

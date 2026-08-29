@@ -337,19 +337,32 @@ its own id) rather than a real function input.
             >
             <label><input type="checkbox" id="opt-autoplay-autoStart" /> autoStart</label>
             <label
-              ><input type="checkbox" id="opt-autoplay-pauseOnZoom" checked /> pauseOnZoom</label
+              >onZoom
+              <select id="opt-autoplay-onZoom">
+                <option value="stop" selected>stop</option>
+                <option value="pause">pause</option>
+                <option value="false">off</option>
+              </select></label
             >
             <label
-              ><input type="checkbox" id="opt-autoplay-pauseOnRotateFlip" checked />
-              pauseOnRotateFlip</label
+              >onRotateFlip
+              <select id="opt-autoplay-onRotateFlip">
+                <option value="stop" selected>stop</option>
+                <option value="pause">pause</option>
+                <option value="false">off</option>
+              </select></label
             >
             <label
-              ><input type="checkbox" id="opt-autoplay-pauseOnCaptionExpand" checked />
-              pauseOnCaptionExpand</label
+              >onCaptionExpand
+              <select id="opt-autoplay-onCaptionExpand">
+                <option value="stop" selected>stop</option>
+                <option value="pause">pause</option>
+                <option value="false">off</option>
+              </select></label
             >
             <label
-              ><input type="checkbox" id="opt-autoplay-pauseOnManualNavigate" checked />
-              pauseOnManualNavigate</label
+              ><input type="checkbox" id="opt-autoplay-stopOnManualNavigate" checked />
+              stopOnManualNavigate</label
             >
           </div>
         </fieldset>
@@ -964,6 +977,10 @@ its own id) rather than a real function input.
         const raw = $(id).value.trim();
         return raw === '' ? undefined : raw;
       };
+      const stopPauseOrFalse = (id) => {
+        const raw = $(id).value;
+        return raw === 'false' ? false : raw;
+      };
 
       let gallery = null;
 
@@ -1257,10 +1274,10 @@ its own id) rather than a real function input.
             interval: Number($('opt-autoplay-interval').value),
             showProgress: checked('opt-autoplay-showProgress'),
             autoStart: checked('opt-autoplay-autoStart'),
-            pauseOnZoom: checked('opt-autoplay-pauseOnZoom'),
-            pauseOnRotateFlip: checked('opt-autoplay-pauseOnRotateFlip'),
-            pauseOnCaptionExpand: checked('opt-autoplay-pauseOnCaptionExpand'),
-            pauseOnManualNavigate: checked('opt-autoplay-pauseOnManualNavigate'),
+            onZoom: stopPauseOrFalse('opt-autoplay-onZoom'),
+            onRotateFlip: stopPauseOrFalse('opt-autoplay-onRotateFlip'),
+            onCaptionExpand: stopPauseOrFalse('opt-autoplay-onCaptionExpand'),
+            stopOnManualNavigate: checked('opt-autoplay-stopOnManualNavigate'),
           },
           activeThumbnail: {
             activeClass: $('opt-activeThumbnail-activeClass').value || 'shoji-thumb-active',

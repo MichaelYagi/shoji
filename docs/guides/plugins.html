@@ -105,14 +105,17 @@
           <td>
             Toolbar play/pause + <kbd>Space</kbd>. Video slides play through to their own
             <code>ended</code> event instead of using the fixed interval; a manual pause on a video
-            pauses the whole slideshow. Optionally pauses (and stays paused — no auto-resume) while
-            the viewer is actively zoomed in, interacting with rotate/flip, or reading an expanded
-            caption.
+            pauses the whole slideshow. Pauses by default while the viewer is actively zoomed in,
+            interacting with rotate/flip, or reading an expanded caption — <code>'stop'</code> stays
+            paused until Play is pressed again, <code>'pause'</code> resumes on its own once
+            genuinely disengaged, <code>false</code> ignores it entirely.
           </td>
           <td>
             <code>interval</code> (5000ms), <code>showProgress</code> (true),
-            <code>autoStart</code> (false), <code>pauseOnZoom</code> (false),
-            <code>pauseOnRotateFlip</code> (false), <code>pauseOnCaptionExpand</code> (false)
+            <code>autoStart</code> (false), <code>onZoom</code> (<code>'stop'</code>),
+            <code>onRotateFlip</code> (<code>'stop'</code>),
+            <code>onCaptionExpand</code> (<code>'stop'</code>),
+            <code>stopOnManualNavigate</code> (true)
           </td>
         </tr>
         <tr>

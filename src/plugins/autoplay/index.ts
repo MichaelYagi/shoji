@@ -49,15 +49,71 @@ export interface AutoplayOptions {
   showProgress?: boolean;
   /** Starts the slideshow automatically as soon as the gallery opens — every `open()`, not just the first — instead of waiting for the toolbar button/`Space`. Default `false`. */
   autoStart?: boolean;
-  /** Pauses the slideshow while the viewer is zoomed in on the active slide (Zoom plugin) — stays paused until Play is pressed again, even once un-zoomed back to neutral (no auto-resume). A no-op if Zoom isn't loaded. Default `true` — a viewer actively examining a zoomed-in detail is a clear signal the slideshow shouldn't advance out from under them; set `false` to let it keep running regardless. */
-  pauseOnZoom?: boolean;
-  /** Pauses the slideshow on any RotateFlip interaction — including one that lands back on the original orientation, since the click itself is still an active interruption, not just its end state. Stays paused until Play is pressed again. A no-op if RotateFlip isn't loaded. Default `true`, same reasoning as `pauseOnZoom` above — a viewer reaching for a rotate/flip control is actively engaging with the current slide, not passively watching a slideshow; set `false` to let it keep running regardless. */
-  pauseOnRotateFlip?: boolean;
-  /** Pauses the slideshow when the viewer expands a truncated caption to read the rest (core's own caption modal, DESIGN.md §2.3a) — stays paused until Play is pressed again, same as `pauseOnZoom`/`pauseOnRotateFlip`. No re-check on Play needed the way those two need one: the modal traps both pointer and keyboard input while open (core blocks every key, not just Escape), so Play is physically unreachable until the modal is already closed. Default `true`, same reasoning as the other two — expanding a caption to read the rest is a request for time, not an idle moment to advance past; set `false` to let it keep running regardless. */
-  pauseOnCaptionExpand?: boolean;
-  /** Pauses the slideshow the moment the viewer navigates manually — arrow keys/buttons, a completed swipe, a thumbnail click, or any other `goTo()` not caused by Autoplay's own `advance()` — instead of silently re-timing itself on whatever slide they land on. Stays paused until Play is pressed again, same as the other `pauseOn*` options. Default `true`, same reasoning as `pauseOnZoom`/`pauseOnRotateFlip`/`pauseOnCaptionExpand` above — reaching for the navigation controls at all is a clear signal of active engagement, and a slideshow that keeps ticking underneath that reads as broken, not helpful. Set `false` to restore the original "manual nav just re-times the current slide" behavior. */
-  pauseOnManualNavigate?: boolean;
+  /**
+   * How the slideshow reacts to the viewer zooming in on the active slide
+   * (Zoom plugin). `'stop'` (default): pauses immediately and stays paused
+   * until Play is pressed again, even once un-zoomed back to neutral — no
+   * auto-resume. `'pause'`: same immediate pause, but auto-resumes on its
+   * own once genuinely disengaged (see the module-level doc comment on
+   * `RESUME_DEBOUNCE_MS` for why that's debounced rather than instant).
+   * `false`: a complete no-op, regardless of zoom state. A no-op either way
+   * if Zoom isn't loaded. Was a plain `pauseOnZoom` boolean (`true`
+   * meaning today's `'stop'`) before `'pause'` existed as an option at all.
+   */
+  onZoom?: 'stop' | 'pause' | false;
+  /**
+   * Same shape as `onZoom`, for RotateFlip: `'stop'` (default) pauses on
+   * any interaction — including one that lands back on the original
+   * orientation, since the click itself is still an active interruption,
+   * not just its end state — and stays paused; `'pause'` does the same
+   * immediate pause but auto-resumes once genuinely disengaged (debounced,
+   * same as `onZoom`); `false` is a no-op. A no-op either way if
+   * RotateFlip isn't loaded. Was `pauseOnRotateFlip` before `'pause'`
+   * existed.
+   */
+  onRotateFlip?: 'stop' | 'pause' | false;
+  /**
+   * Same shape as `onZoom`/`onRotateFlip`, for the viewer expanding a
+   * truncated caption to read the rest (core's own caption modal,
+   * DESIGN.md §2.3a). `'stop'` (default) pauses and stays paused; `'pause'`
+   * auto-resumes once the modal closes (debounced, same as the other two —
+   * even though the modal itself makes no *further* engagement possible
+   * once closed, the same short window still applies for consistency and
+   * because it costs nothing here). `false` is a no-op. Was
+   * `pauseOnCaptionExpand` before `'pause'` existed. Unlike `onZoom`/
+   * `onRotateFlip`, no re-check on Play is needed either mode: the modal
+   * traps both pointer and keyboard input while open (core blocks every
+   * key, not just Escape), so Play is physically unreachable until the
+   * modal is already closed.
+   */
+  onCaptionExpand?: 'stop' | 'pause' | false;
+  /** Pauses the slideshow the moment the viewer navigates manually — arrow keys/buttons, a completed swipe, a thumbnail click, or any other `goTo()` not caused by Autoplay's own `advance()` — instead of silently re-timing itself on whatever slide they land on. Stays paused until Play is pressed again — always a hard stop, no `'pause'`-style auto-resume variant: unlike zoom/rotate-flip/caption-expand, navigating away has no "returns to its original state" to resume from, so there's nothing for an auto-resume to key off. Default `true`, same reasoning as `onZoom`/`onRotateFlip`/`onCaptionExpand` above — reaching for the navigation controls at all is a clear signal of active engagement, and a slideshow that keeps ticking underneath that reads as broken, not helpful. Set `false` to restore the original "manual nav just re-times the current slide" behavior. Was `pauseOnManualNavigate` before the other three options gained a `'pause'` mode — renamed alongside them so "stop" only ever means stop now, not a mix of stop and pause depending which option you're reading. */
+  stopOnManualNavigate?: boolean;
 }
+
+/**
+ * Only meaningful for `onZoom`/`onRotateFlip`/`onCaptionExpand`'s `'pause'`
+ * mode. A real bug, reported from real usage against this exact plugin's
+ * *first* attempt at auto-resume (long before `'pause'` existed as a named
+ * option — that attempt just always auto-resumed the moment zoom/rotate-
+ * flip reported "back to neutral"): un-zooming or un-rotating back to
+ * exactly neutral doesn't mean the viewer is done — reaching neutral is
+ * just as easily one step *through* on the way to further interaction
+ * (e.g. rotating 90 -> 180 -> 270 -> 0, or zooming out then immediately
+ * back in) as it is the actual end of one. Resuming instantly on that
+ * first neutral reading sprung the slideshow back to life mid-interaction,
+ * which reads as more broken than never auto-resuming at all — the
+ * original fix for this was simply to remove auto-resume entirely (the
+ * `'stop'`-only behavior every `pauseOn*` option had until now). A short
+ * idle debounce after the *last* disengage is what actually distinguishes
+ * "done interacting" from "just passing through neutral": each further
+ * engagement (re-zooming, another rotate/flip click) cancels and restarts
+ * the wait, so the slideshow only ever resumes once nothing has happened
+ * for a real pause in activity, not on the instant a single event happens
+ * to read as neutral. Not configurable — an internal implementation detail
+ * of what "genuinely disengaged" means, not a knob a host needs.
+ */
+const RESUME_DEBOUNCE_MS = 1000;
 
 /**
  * DESIGN.md §4-autoplay. Advances on a fixed `interval` (default 5000ms) for
@@ -73,10 +129,10 @@ export const Autoplay: ShojiPlugin = {
   defaults: {
     interval: 5000,
     showProgress: true,
-    pauseOnZoom: true,
-    pauseOnRotateFlip: true,
-    pauseOnCaptionExpand: true,
-    pauseOnManualNavigate: true,
+    onZoom: 'stop',
+    onRotateFlip: 'stop',
+    onCaptionExpand: 'stop',
+    stopOnManualNavigate: true,
   } satisfies AutoplayOptions,
 
   init(ctx: PluginContext): () => void {
@@ -84,10 +140,12 @@ export const Autoplay: ShojiPlugin = {
     const interval = Number(ctx.options.interval ?? 5000);
     const showProgress = ctx.options.showProgress !== false;
     const autoStart = ctx.options.autoStart === true;
-    const pauseOnZoom = ctx.options.pauseOnZoom !== false;
-    const pauseOnRotateFlip = ctx.options.pauseOnRotateFlip !== false;
-    const pauseOnCaptionExpand = ctx.options.pauseOnCaptionExpand !== false;
-    const pauseOnManualNavigate = ctx.options.pauseOnManualNavigate !== false;
+    const readMode = (value: unknown): 'stop' | 'pause' | false =>
+      value === false || value === 'pause' ? value : 'stop';
+    const onZoom = readMode(ctx.options.onZoom);
+    const onRotateFlip = readMode(ctx.options.onRotateFlip);
+    const onCaptionExpand = readMode(ctx.options.onCaptionExpand);
+    const stopOnManualNavigate = ctx.options.stopOnManualNavigate !== false;
     const locale = ctx.options.locale as Partial<Record<'play' | 'pause', string>> | undefined;
     const playLabel = locale?.play ?? 'Play slideshow';
     const pauseLabel = locale?.pause ?? 'Pause slideshow';
@@ -104,11 +162,83 @@ export const Autoplay: ShojiPlugin = {
     // consulting these.
     let zoomedIn = false;
     let rotatedOrFlipped = false;
+    let captionOpen = false;
+    // Set only when this plugin itself stopped playback because of an
+    // `onX: 'pause'` trigger — never for a manual stop, a `'stop'`-mode
+    // trigger, `requestAutoplayStop`, or anything else that calls stop()
+    // for an unrelated reason (video pause/end, drag-close, close()). Once
+    // any of those flags is true, `maybeScheduleResume()` (below) is what's
+    // waiting for the *matching* engagement flag (`zoomedIn`/
+    // `rotatedOrFlipped`/`captionOpen`) to clear before it'll actually
+    // queue the debounced resume — see `RESUME_DEBOUNCE_MS`'s own doc
+    // comment for why that's a debounce and not instant.
+    let pausedByZoom = false;
+    let pausedByRotateFlip = false;
+    let pausedByCaptionExpand = false;
+    let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function cancelPendingResume(): void {
+      if (resumeTimer !== null) {
+        clearTimeout(resumeTimer);
+        resumeTimer = null;
+      }
+    }
+
+    /** Called on every hard stop (manual, `'stop'`-mode trigger, `requestAutoplayStop`, manual navigation, or anything else) — a hard stop always wins outright over a softer pending `'pause'`-mode resume from a *different* trigger, otherwise un-rotating after a hard zoom-stop could still spring the slideshow back to life on its own. */
+    function clearPauseFlags(): void {
+      pausedByZoom = false;
+      pausedByRotateFlip = false;
+      pausedByCaptionExpand = false;
+      cancelPendingResume();
+    }
+
+    /**
+     * Queues the actual resume once every `'pause'`-mode trigger that
+     * caused the current stop has genuinely disengaged — not on the first
+     * instant all three read as disengaged, but after `RESUME_DEBOUNCE_MS`
+     * of that holding true, restarting the wait on every call (so
+     * `zoomChange`/`rotateFlipChange`/`captionModalChange` re-engaging
+     * before it fires cancels and re-arms it rather than stacking a second
+     * timer). A no-op if nothing is actually pending — called from every
+     * disengage point regardless of whether anything's waiting, cheaper
+     * than each call site checking first.
+     */
+    function isEngaged(): boolean {
+      return (
+        (onZoom !== false && zoomedIn) ||
+        (onRotateFlip !== false && rotatedOrFlipped) ||
+        (onCaptionExpand !== false && captionOpen)
+      );
+    }
+
+    function maybeScheduleResume(): void {
+      if (!(pausedByZoom || pausedByRotateFlip || pausedByCaptionExpand)) return;
+      if (isEngaged()) return;
+      cancelPendingResume();
+      resumeTimer = setTimeout(() => {
+        resumeTimer = null;
+        // Re-checked here, not just at the top of this function above — a
+        // real bug, caught by this file's own test: a *different* trigger
+        // can re-engage while this timer is already ticking down without
+        // ever calling this function again (its own handler only reaches
+        // maybeScheduleResume() when *it* transitions to disengaged, not
+        // when it transitions to engaged) — e.g. rotating while a zoom
+        // resume is already pending. Firing start() unconditionally would
+        // resume playback while still visibly rotated. Leaves the pending
+        // flags alone rather than clearing them: whichever trigger
+        // eventually disengages next calls maybeScheduleResume() again and
+        // finds them still set.
+        if (isEngaged()) return;
+        clearPauseFlags();
+        start();
+      }, RESUME_DEBOUNCE_MS);
+    }
+
     // Set for the exact duration of advance()'s own gallery.next() call —
     // the afterSlide handler below fires synchronously inside it, so it can
     // tell "this slide change is autoplay's own advance()" apart from any
     // other navigation (arrows/buttons/swipe/goTo()) without needing the
-    // event itself to carry a source. See pauseOnManualNavigate above.
+    // event itself to carry a source. See stopOnManualNavigate above.
     let isAdvancing = false;
 
     // A real bug, regression: this used to capture gallery.getActiveMedia()
@@ -177,7 +307,7 @@ export const Autoplay: ShojiPlugin = {
     }
 
     /**
-     * DESIGN.md §4.1 — while `pauseOnZoom`/`pauseOnRotateFlip` is holding
+     * DESIGN.md §4.1 — while `onZoom`/`onRotateFlip` is holding
      * playback paused, pressing Play would otherwise just silently
      * re-pause it in the same synchronous tick (`toggle()`'s own check,
      * below) — no `transitionend`, no paint in between the two state
@@ -192,7 +322,8 @@ export const Autoplay: ShojiPlugin = {
      */
     function updateToggleAvailability(): void {
       const blocked =
-        !playing && ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped));
+        !playing &&
+        ((onZoom !== false && zoomedIn) || (onRotateFlip !== false && rotatedOrFlipped));
       button.ariaDisabled = blocked ? 'true' : null;
       if (blocked) button.tabIndex = -1;
       else button.removeAttribute('tabindex');
@@ -361,6 +492,12 @@ export const Autoplay: ShojiPlugin = {
 
     function start(): void {
       if (playing) return;
+      // A manual start succeeding makes any still-ticking 'pause'-mode
+      // resume timer moot — harmless left alone (its own eventual start()
+      // call would just no-op against the `if (playing) return` above), but
+      // cancelling it here avoids a dangling timer doing nothing for up to
+      // RESUME_DEBOUNCE_MS after this already resolved things.
+      cancelPendingResume();
       setButtonState(true);
       ctx.emit('autoplayStart', {});
       enterSlide();
@@ -391,11 +528,26 @@ export const Autoplay: ShojiPlugin = {
     // and requestAutoplayStart below — both are "a genuine manual start,"
     // just triggered from a different control.
     function reCheckEngagedAfterManualStart(): void {
-      if ((pauseOnZoom && zoomedIn) || (pauseOnRotateFlip && rotatedOrFlipped)) stop();
+      const stillZoomed = onZoom !== false && zoomedIn;
+      const stillRotated = onRotateFlip !== false && rotatedOrFlipped;
+      if (!stillZoomed && !stillRotated) return;
+      stop();
+      // Threading pause-mode tracking through *this* re-stop too (not just
+      // the zoomChange/rotateFlipChange handlers below) is what avoids
+      // repeating the first auto-resume attempt's other real bug: a manual
+      // restart while still engaged left that design's own edge-tracker
+      // permanently "already engaged," silently skipping the next
+      // re-pause's resume tracking. Setting the flag here, at the actual
+      // moment this stop happens, means it's never missed regardless of
+      // which path (button/Space, or a custom plugin's requestAutoplayStart)
+      // triggered the manual start.
+      if (onZoom === 'pause' && stillZoomed) pausedByZoom = true;
+      if (onRotateFlip === 'pause' && stillRotated) pausedByRotateFlip = true;
     }
 
     function toggle(): void {
       if (playing) {
+        clearPauseFlags(); // a real manual pause is always a hard stop, never a pending soft-resume
         stop();
         return;
       }
@@ -414,7 +566,10 @@ export const Autoplay: ShojiPlugin = {
     const offDragThreshold = ctx.on('dragCloseThreshold', ({ hidden }) => {
       if (hidden) {
         wasPlayingBeforeDrag = playing;
-        if (playing) stop();
+        if (playing) {
+          clearPauseFlags(); // a hard stop, unrelated to onZoom/onRotateFlip/onCaptionExpand — must not resurrect a pending soft-resume from one of those
+          stop();
+        }
       } else if (wasPlayingBeforeDrag) {
         wasPlayingBeforeDrag = false;
         start();
@@ -426,60 +581,82 @@ export const Autoplay: ShojiPlugin = {
      * the slideshow from auto-advancing out from under a viewer actively
      * zoomed into a detail on the current slide. Only reacts to
      * `zoomChange`'s event *shape* (`core/types.ts`) — never imports Zoom
-     * directly, so this is a no-op with it not loaded, or with
-     * `pauseOnZoom: false` set explicitly (events over inheritance,
-     * CLAUDE.md).
+     * directly, so this is a no-op with it not loaded, or with `onZoom:
+     * false` set explicitly (events over inheritance, CLAUDE.md).
      *
-     * Deliberately **stays paused** rather than auto-resuming once
-     * un-zoomed back to neutral — the first design tried the opposite
-     * (edge-tracked "engaged" state, auto-resume on disengage, matching
-     * `dragCloseThreshold` below) and hit two real problems testing it:
-     * (1) a manual restart while still zoomed left the edge-tracker stuck
-     * "already engaged," silently skipping the *next* re-pause; (2) once
-     * fixed, un-zooming back to exactly scale 1 still auto-resumed even
-     * when the viewer's very next action (confirmed directly for
-     * RotateFlip's equivalent, below) was to keep interacting with the
-     * view controls, not watch the slideshow. `scale > 1` still gates
-     * *which* zoomChange events count (an ordinary scale-1 event can also
-     * fire from an unrelated slide-change reset, not a real interaction —
-     * `zoom/index.ts`'s `reset()` — so it can't unconditionally pause on
-     * every event the way rotateFlipChange below safely can).
+     * `'stop'` mode never auto-resumes, matching this plugin's *first*
+     * attempt at this feature — see `RESUME_DEBOUNCE_MS`'s own doc comment
+     * for the two real problems that attempt hit and why `'pause'` mode
+     * (below) is built differently, not just re-adding the same thing
+     * under a new name. `scale > 1` still gates *which* zoomChange events
+     * count (an ordinary scale-1 event can also fire from an unrelated
+     * slide-change reset, not a real interaction — `zoom/index.ts`'s
+     * `reset()` — so it can't unconditionally pause on every event the way
+     * rotateFlipChange below safely can).
      */
     const ZOOM_ENGAGED_THRESHOLD = 1.001; // matches Zoom's own ZOOM_EPSILON — "just barely above 1" is float residue, not a real zoom
     const offZoomChange = ctx.on('zoomChange', ({ scale }) => {
       zoomedIn = scale > ZOOM_ENGAGED_THRESHOLD;
-      if (pauseOnZoom && zoomedIn && playing) stop();
-      else updateToggleAvailability(); // stop() above already refreshes this; covers zooming in while already paused, which stop() wouldn't touch
+      if (onZoom !== false && zoomedIn && playing) {
+        if (onZoom === 'stop') clearPauseFlags();
+        stop();
+        if (onZoom === 'pause') pausedByZoom = true;
+      } else {
+        // stop() above already refreshes toggle availability; this branch
+        // covers zooming in while already paused (stop() wouldn't touch
+        // it) and zooming back out, which may have just disengaged the
+        // last thing a pending 'pause'-mode resume was waiting on.
+        updateToggleAvailability();
+        if (!zoomedIn) maybeScheduleResume();
+      }
     });
     /**
-     * Same UX gap, RotateFlip's own equivalent (see `pauseOnRotateFlip`'s
-     * own doc comment). Pauses on *any*
-     * `rotateFlipChange` event unconditionally, including one that lands
-     * back on the original orientation — confirmed directly, reported from
-     * real usage: rotate four times back to 0deg still reads as an active
-     * interruption of the slideshow, not "nothing happened," so it must
-     * stay paused too, the same as landing anywhere else. Every
-     * `rotateFlipChange` (unlike zoomChange above) only ever fires from a
-     * real button/shortcut click — `rotateFlip/index.ts`'s own per-slide
-     * `reset()` never emits it — so no extra state check is needed here.
+     * Same UX gap, RotateFlip's own equivalent (see `onRotateFlip`'s own
+     * doc comment). Pauses on *any* `rotateFlipChange` event
+     * unconditionally, including one that lands back on the original
+     * orientation — confirmed directly, reported from real usage: rotate
+     * four times back to 0deg still reads as an active interruption of the
+     * slideshow, not "nothing happened," so it must still pause too, the
+     * same as landing anywhere else, in *both* modes — `'pause'` mode's
+     * auto-resume is debounced specifically so this repeated-neutral case
+     * doesn't spring it back to life between clicks (`RESUME_DEBOUNCE_MS`).
+     * Every `rotateFlipChange` (unlike zoomChange above) only ever fires
+     * from a real button/shortcut click — `rotateFlip/index.ts`'s own
+     * per-slide `reset()` never emits it — so no extra state check is
+     * needed here the way zoomChange's `scale > 1` gate is.
      */
     const offRotateFlipChange = ctx.on('rotateFlipChange', ({ flipH, flipV, rotation }) => {
       rotatedOrFlipped = flipH || flipV || rotation !== 0;
-      if (pauseOnRotateFlip && playing) stop();
-      else updateToggleAvailability(); // stop() above already refreshes this; covers rotating while already paused, which stop() wouldn't touch
+      if (onRotateFlip !== false && playing) {
+        if (onRotateFlip === 'stop') clearPauseFlags();
+        stop();
+        if (onRotateFlip === 'pause') pausedByRotateFlip = true;
+      } else {
+        updateToggleAvailability(); // stop() above already refreshes this; covers rotating while already paused, which stop() wouldn't touch
+        if (onRotateFlip !== false && !rotatedOrFlipped) maybeScheduleResume();
+      }
     });
     /**
-     * `pauseOnCaptionExpand`'s own doc comment above — unlike the two
-     * listeners above, no `updateToggleAvailability()` companion call and
-     * no `zoomedIn`/`rotatedOrFlipped`-style tracked flag: the caption
+     * `onCaptionExpand`'s own doc comment above — unlike the two listeners
+     * above, no `updateToggleAvailability()` companion call: the caption
      * modal already makes Play physically unreachable while `open: true`
      * (core's own focus trap + capture-phase keydown blocking, not
      * anything this plugin has to enforce), so there's no "pressed Play
      * while still blocked" case to disable the button for or re-check on
-     * toggle() the way zoom/rotateFlip both need.
+     * toggle() the way zoom/rotateFlip both need. `captionOpen` is still
+     * tracked (unlike before `'pause'` mode existed) purely so
+     * `maybeScheduleResume()` can confirm nothing else is also still
+     * engaged before it queues a resume.
      */
     const offCaptionModalChange = ctx.on('captionModalChange', ({ open }) => {
-      if (pauseOnCaptionExpand && open && playing) stop();
+      captionOpen = open;
+      if (onCaptionExpand !== false && open && playing) {
+        if (onCaptionExpand === 'stop') clearPauseFlags();
+        stop();
+        if (onCaptionExpand === 'pause') pausedByCaptionExpand = true;
+      } else if (!open) {
+        maybeScheduleResume();
+      }
     });
 
     button.addEventListener('click', toggle);
@@ -509,16 +686,21 @@ export const Autoplay: ShojiPlugin = {
       // §2.5) without re-emitting zoomChange/rotateFlipChange — resynced
       // here so a stale "was engaged" reading from the *outgoing* slide
       // can't wrongly re-pause toggle()'s next Play press on a slide
-      // that's actually neutral now.
+      // that's actually neutral now. Also clears any pending 'pause'-mode
+      // resume outright, not just the flags it was waiting on — the slide
+      // it was paused *for* isn't even the active one anymore, so whether
+      // to resume here is genuinely ambiguous; `stopOnManualNavigate`
+      // (default true) already decides what actually happens next.
       zoomedIn = false;
       rotatedOrFlipped = false;
+      clearPauseFlags();
       updateToggleAvailability();
       if (!playing) return;
-      // pauseOnManualNavigate (default true, see its own doc comment) —
+      // stopOnManualNavigate (default true, see its own doc comment) —
       // isAdvancing is only ever true for the exact duration of advance()'s
       // own gallery.next() call above, so its absence here means something
       // other than autoplay itself moved the slide.
-      if (pauseOnManualNavigate && !isAdvancing) stop();
+      if (stopOnManualNavigate && !isAdvancing) stop();
       else enterSlide();
     });
     // A provider video (§4-video) that was still mid-setup when enterSlide()
@@ -538,7 +720,7 @@ export const Autoplay: ShojiPlugin = {
      * here already uses for official plugins (`zoomChange`,
      * `rotateFlipChange`, `captionModalChange`, `dragCloseThreshold`).
      * `GalleryEvents` (`core/types.ts`) already extends `Record<string,
-     * unknown>`, so `ctx.emit('requestAutoplayPause', {})` from any plugin
+     * unknown>`, so `ctx.emit('requestAutoplayStop', {})` from any plugin
      * — official or custom — type-checks with zero core changes; this is
      * just the listening half. Deliberately two separate commands, not one
      * toggle — a custom plugin building its own distinct Play/Pause
@@ -548,23 +730,32 @@ export const Autoplay: ShojiPlugin = {
      * `start()`'s own existing guard, plus the same manual-start re-check
      * `toggle()`'s button/Space path uses, for start).
      */
-    const offRequestPause = ctx.on('requestAutoplayPause', () => {
-      if (playing) stop();
+    const offRequestStop = ctx.on('requestAutoplayStop', () => {
+      if (playing) {
+        clearPauseFlags(); // a command from another plugin is treated like a manual pause, not a soft pending resume
+        stop();
+      }
     });
     const offRequestStart = ctx.on('requestAutoplayStart', () => {
       if (playing) return;
       start();
       reCheckEngagedAfterManualStart();
     });
-    const offClose = ctx.on('close', () => stop());
+    const offClose = ctx.on('close', () => {
+      clearPauseFlags();
+      stop();
+    });
     const offOpen = ctx.on('afterOpen', () => {
       zoomedIn = false;
       rotatedOrFlipped = false;
+      captionOpen = false;
+      clearPauseFlags();
       updateToggleAvailability();
       if (autoStart) start();
     });
 
     return () => {
+      cancelPendingResume(); // a pending 'pause'-mode resume must not fire start() after teardown
       stop();
       outer.removeEventListener('error', onVideoError);
       removeButton();
@@ -579,7 +770,7 @@ export const Autoplay: ShojiPlugin = {
       offZoomChange();
       offRotateFlipChange();
       offCaptionModalChange();
-      offRequestPause();
+      offRequestStop();
       offRequestStart();
     };
   },

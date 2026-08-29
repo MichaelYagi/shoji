@@ -5,6 +5,26 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.13] - 2026-08-28
+
+### Changed
+
+- **Breaking: Autoplay's `pauseOnZoom`/`pauseOnRotateFlip`/`pauseOnCaptionExpand`
+  booleans replaced with `onZoom`/`onRotateFlip`/`onCaptionExpand`, each a
+  `'stop' | 'pause' | false` tri-state.** None of the old options ever
+  actually paused — every one called `stop()` and stayed stopped until Play
+  was pressed again, so "pause" in the name overpromised auto-resume that
+  didn't exist. `'stop'` (the default, matching the old `true`) keeps that
+  exact behavior; `'pause'` is genuinely new — it auto-resumes once the
+  interruption ends, debounced (1000ms) so passing through neutral
+  mid-interaction (e.g. rotating through 0° on the way further) doesn't
+  spring the slideshow back to life prematurely, the two real problems that
+  sank this plugin's first, undocumented-as-an-option attempt at
+  auto-resume. `pauseOnManualNavigate` is renamed `stopOnManualNavigate`
+  (unchanged boolean, no `'pause'` variant — navigating away has no
+  "returns to its original state" to resume from). `requestAutoplayPause`
+  is renamed `requestAutoplayStop` for the identical reason.
+
 ## [0.1.0-beta.12] - 2026-08-28
 
 ### Fixed

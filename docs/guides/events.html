@@ -96,7 +96,7 @@ off(); // stop listening</code></pre>
           <td>
             The truncated-caption "read the rest" modal opening/closing — unrelated to the gallery's
             own <code>open</code>/<code>close</code> above, despite the similar shape. Autoplay's
-            <code>pauseOnCaptionExpand</code> (<a href="./settings.html">Settings</a>) reacts to
+            <code>onCaptionExpand</code> (<a href="./settings.html">Settings</a>) reacts to
             <code>open: true</code>.
           </td>
         </tr>
@@ -297,8 +297,8 @@ off(); // stop listening</code></pre>
           <td>Autoplay</td>
         </tr>
         <tr>
-          <td><code>requestAutoplayPause</code></td>
-          <td>Pauses the slideshow — a no-op while already stopped.</td>
+          <td><code>requestAutoplayStop</code></td>
+          <td>Stops the slideshow — a no-op while already stopped.</td>
           <td>Autoplay</td>
         </tr>
         <tr>

@@ -201,9 +201,9 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
-  it('with pauseOnManualNavigate: false, manual navigation mid-slideshow re-times from the newly active slide instead of pausing, and the old timer is not doubled up', () => {
+  it('with stopOnManualNavigate: false, manual navigation mid-slideshow re-times from the newly active slide instead of pausing, and the old timer is not doubled up', () => {
     vi.useFakeTimers();
-    const gallery = makeGallery({ autoplay: { pauseOnManualNavigate: false } });
+    const gallery = makeGallery({ autoplay: { stopOnManualNavigate: false } });
     gallery.open(0);
     click(toggleButton());
 
@@ -221,7 +221,7 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
-  it('pauseOnManualNavigate defaults to true: manual navigation mid-slideshow pauses it instead of re-timing', () => {
+  it('stopOnManualNavigate defaults to true: manual navigation mid-slideshow pauses it instead of re-timing', () => {
     vi.useFakeTimers();
     const gallery = makeGallery();
     gallery.open(0);
@@ -237,7 +237,7 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
-  it("pauseOnManualNavigate does not pause on autoplay's own advance() — only navigation the viewer causes", () => {
+  it("stopOnManualNavigate does not pause on autoplay's own advance() — only navigation the viewer causes", () => {
     vi.useFakeTimers();
     const gallery = makeGallery();
     gallery.open(0);
@@ -251,7 +251,7 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
-  it('requestAutoplayPause (DESIGN.md §4.1 point 20) lets a custom plugin pause the slideshow without importing Autoplay', () => {
+  it('requestAutoplayStop (DESIGN.md §4.1 point 20) lets a custom plugin pause the slideshow without importing Autoplay', () => {
     vi.useFakeTimers();
     const emitter = new EmitterPlugin();
     const el = document.createElement('div');
@@ -260,20 +260,20 @@ describe('Autoplay — button & basic timing', () => {
     click(toggleButton());
     expect(toggleButton().getAttribute('aria-label')).toBe('Pause slideshow');
 
-    emitter.emit('requestAutoplayPause', {});
+    emitter.emit('requestAutoplayStop', {});
     expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
 
     gallery.destroy();
   });
 
-  it('requestAutoplayPause is a no-op while already stopped', () => {
+  it('requestAutoplayStop is a no-op while already stopped', () => {
     vi.useFakeTimers();
     const emitter = new EmitterPlugin();
     const el = document.createElement('div');
     const gallery = new Gallery(el, { items, plugins: [Autoplay, emitter], preload: 0 });
     gallery.open(0);
 
-    emitter.emit('requestAutoplayPause', {});
+    emitter.emit('requestAutoplayStop', {});
     expect(toggleButton().getAttribute('aria-label')).toBe('Play slideshow');
 
     gallery.destroy();
@@ -761,7 +761,7 @@ describe('Autoplay — provider video (§4-video, e.g. YouTube)', () => {
       ],
       plugins: [Autoplay, fakeVideoProviderPlugin()],
       preload: 1, // >0 is what makes offset-relabeling (vs. a single always-offset-0 slot) possible at all
-      autoplay: { pauseOnManualNavigate: false }, // this test's own gallery.next() calls simulate reaching the slide, not a real viewer-initiated pause scenario
+      autoplay: { stopOnManualNavigate: false }, // this test's own gallery.next() calls simulate reaching the slide, not a real viewer-initiated pause scenario
     });
     gallery.open(0);
     click(toggleButton());

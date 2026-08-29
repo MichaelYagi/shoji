@@ -66,7 +66,7 @@ test('pause stops the advance', async ({ page }) => {
 });
 
 /**
- * DESIGN.md §4.1 point 19 — `pauseOnManualNavigate` (default true):
+ * DESIGN.md §4.1 point 19 — `stopOnManualNavigate` (default true):
  * navigating manually mid-slideshow pauses it instead of silently
  * re-timing on the newly active slide. Real keyboard arrow press against a
  * real running interval timer, not a synthetic event.
@@ -244,12 +244,12 @@ test('zooming in pauses the slideshow, and it stays paused once zoomed back out 
 }) => {
   // Wide enough that no toolbar button collapses into the overflow popover
   // (DESIGN.md §3.1a, covered by its own tests elsewhere) — this test is
-  // only about the pause behavior itself. pauseOnZoom defaults true;
-  // ?pauseOnZoom=1 (demo/pages/e2e-plugins.ts) is redundant with the
+  // only about the pause behavior itself. onZoom defaults to 'stop';
+  // ?onZoom=stop (demo/pages/e2e-plugins.ts) is redundant with the
   // default now, kept only so this test stays explicit about what it's
   // actually exercising rather than relying on an option it never sets.
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnZoom=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onZoom=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -270,7 +270,7 @@ test('zooming in pauses the slideshow, and it stays paused once zoomed back out 
 });
 
 /**
- * pauseOnRotateFlip defaults true (DESIGN.md §4.1) — ?pauseOnRotateFlip=1
+ * onRotateFlip defaults to 'stop' (DESIGN.md §4.1) — ?onRotateFlip=stop
  * (demo/pages/e2e-plugins.ts) is redundant with the default now, kept
  * only for explicitness.
  *
@@ -286,7 +286,7 @@ test('rotating pauses the slideshow, and every rotate click keeps it paused — 
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onRotateFlip=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -335,7 +335,7 @@ test('regression: pressing Space while already rotated immediately re-pauses, in
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnRotateFlip=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onRotateFlip=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -364,7 +364,7 @@ test('regression: the Play button visibly disables while resume is blocked (zoom
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnZoom=1&pauseOnRotateFlip=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onZoom=stop&onRotateFlip=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -383,9 +383,9 @@ test('regression: the Play button visibly disables while resume is blocked (zoom
 });
 
 /**
- * DESIGN.md §2.3a/§4.1 — `pauseOnCaptionExpand` (default true;
- * ?pauseOnCaptionExpand=1 is redundant with the default now, kept only for
- * explicitness). Unlike pauseOnZoom/pauseOnRotateFlip above,
+ * DESIGN.md §2.3a/§4.1 — `onCaptionExpand` (default 'stop';
+ * ?onCaptionExpand=stop is redundant with the default now, kept only for
+ * explicitness). Unlike onZoom/onRotateFlip above,
  * there's no separate "Play button visibly disables while blocked" test and
  * no Space-bypass regression test for this one — the caption modal already
  * makes the Play button (and every other key/click behind it) physically
@@ -397,7 +397,7 @@ test('expanding a truncated caption pauses the slideshow, and it stays paused on
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnCaptionExpand=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onCaptionExpand=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 
@@ -449,7 +449,7 @@ test('regression: pressing Space to resume right after closing a click-opened ca
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/pages/e2e-plugins.html?interval=300&pauseOnCaptionExpand=1');
+  await page.goto('/pages/e2e-plugins.html?interval=300&onCaptionExpand=stop');
   await page.locator('#thumbs a[data-index="0"]').click();
   await expect(page.locator('.shoji-dialog')).toBeVisible();
 

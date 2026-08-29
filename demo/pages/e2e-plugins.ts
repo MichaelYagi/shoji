@@ -70,13 +70,17 @@ if (thumbs && status) {
   // guessing a value that avoids every possible collision for every test.
   const intervalParam = Number(new URLSearchParams(location.search).get('interval'));
   const interval = intervalParam > 0 ? intervalParam : 300;
-  // Off by default (matching Autoplay's own pauseOnZoom/pauseOnRotateFlip
-  // defaults) — same override pattern as ?interval= above, for tests
-  // exercising either.
-  const pauseOnZoom = new URLSearchParams(location.search).get('pauseOnZoom') === '1';
-  const pauseOnRotateFlip = new URLSearchParams(location.search).get('pauseOnRotateFlip') === '1';
-  const pauseOnCaptionExpand =
-    new URLSearchParams(location.search).get('pauseOnCaptionExpand') === '1';
+  // Undefined (the plugin's own 'stop' default) unless a test needs
+  // 'pause' mode's auto-resume specifically — same override pattern as
+  // ?interval= above. `'stop'`/`'pause'` pass straight through as literal
+  // values; anything else (including omitted) leaves it undefined.
+  const modeParam = (name: string): 'stop' | 'pause' | undefined => {
+    const value = new URLSearchParams(location.search).get(name);
+    return value === 'stop' || value === 'pause' ? value : undefined;
+  };
+  const onZoom = modeParam('onZoom');
+  const onRotateFlip = modeParam('onRotateFlip');
+  const onCaptionExpand = modeParam('onCaptionExpand');
   // Undefined (the default, Gallery's own 5000ms) unless a test needs a
   // short one to exercise the idle auto-hide timer without a multi-second
   // real wait — same override pattern as ?interval= above.
@@ -136,7 +140,7 @@ if (thumbs && status) {
       ...extraButtonPlugins,
       ...foreignElementPlugin,
     ],
-    autoplay: { interval, pauseOnZoom, pauseOnRotateFlip, pauseOnCaptionExpand },
+    autoplay: { interval, onZoom, onRotateFlip, onCaptionExpand },
     ...(autoHideDelay !== undefined ? { autoHideDelay } : {}),
   });
 
