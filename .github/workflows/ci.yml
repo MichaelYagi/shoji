@@ -157,3 +157,18 @@ jobs:
         run: npm publish --tag ${{ steps.tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Every publish gets promoted to `latest`, not just left under its own
+      # prerelease tag — npmjs.com's package page shows `latest`
+      # prominently, so skipping this leaves the newest release invisible
+      # there even though it's really in the registry. A real gap, found
+      # directly: a beta published under the `beta` tag sat there
+      # unpromoted until someone happened to check npmjs.com and noticed
+      # `latest` was several versions behind. Skipped when this version
+      # already published *as* `latest` above (a real, non-prerelease
+      # version) — nothing more to do in that case.
+      - name: Promote to latest
+        if: steps.tag.outputs.tag != 'latest'
+        run: npm dist-tag add @michaelyagi/shoji@$(node -p "require('./package.json').version") latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

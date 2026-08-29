@@ -97,6 +97,18 @@ npm run verify     # the full gate: typecheck + lint + unit + e2e + size
 
 `demo/assets/` (sample photos/video for the local demo pages) is gitignored — drop your own media there, or the demo pages just render with 0 items.
 
+## Releasing
+
+1. Bump `package.json`'s `version` to `<version>`, commit, and push to `main`.
+2. Tag that same version and push the tag:
+
+```bash
+git tag v<version>   # matching package.json exactly, e.g. v0.1.0-beta.11
+git push --tags
+```
+
+Pushing the tag triggers `.github/workflows/ci.yml`'s `publish-npm` job — it runs the full verify gate (typecheck, lint, unit, e2e, size) first and only publishes if that passes. The dist-tag is derived automatically from the version string: a prerelease (e.g. `0.1.0-beta.11`) publishes under its own tag (`beta`) and is also promoted to `latest`; a plain version (e.g. `1.0.0`) just publishes as `latest` directly.
+
 ## License
 
 MIT © Michael Yagi
