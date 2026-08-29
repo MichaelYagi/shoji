@@ -223,14 +223,30 @@ test("the open placeholder is capped at the real photo's own small native size t
       });
 
       gallery.open(0);
-      // Let the placeholder's own (fast — a genuinely broken/missing image,
-      // but decode()'s rejection still reveals it the same as success would)
-      // decode settle, without waiting on the real (deliberately held-open)
-      // image at all.
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const outers = document.querySelectorAll('.shoji-outer');
       const myOuter = outers[outers.length - 1] as HTMLElement;
+      const media = myOuter.querySelector('.shoji-slide-media') as HTMLElement;
+
+      // Wait for the FLIP transform to actually finish (transitionend),
+      // not a fixed sleep racing it — the same settle() pattern this file
+      // already uses elsewhere. A real bug this was hiding under CI load:
+      // getBoundingClientRect() on anything inside `media` reports the
+      // *visually transformed* box, not its own CSS width/height, for as
+      // long as media's own scale() hasn't settled back to 'none' yet.
+      // Under CI's documented CPU contention (playwright.config.ts), a
+      // dropped-frame-heavy run can take meaningfully longer wall-clock
+      // than the nominal ~300ms duration, so a flat 300ms sleep
+      // intermittently measured mid-transform instead of settled — a width
+      // between the origin marker's 50px and the real photo's 100px,
+      // exactly what CI observed. The placeholder's own decode (fast, and
+      // unrelated to the held-open real image) reliably finishes well
+      // within this same window regardless.
+      await new Promise<void>((resolve) => {
+        media.addEventListener('transitionend', () => resolve(), { once: true });
+        setTimeout(resolve, 1500);
+      });
+
       const placeholder = myOuter.querySelector(
         '.shoji-slide-open-placeholder',
       ) as HTMLElement | null;
