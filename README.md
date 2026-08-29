@@ -103,7 +103,7 @@ npm run verify     # the full gate: typecheck + lint + unit + e2e + size
 2. Tag that same version and push the tag:
 
 ```bash
-git tag v<version>   # matching package.json exactly, e.g. v0.1.0-beta.11
+git tag v<version>   # "v" + package.json's version, e.g. v0.1.0-beta.11
 git push --tags
 ```
 
