@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.11] - 2026-08-28
+
+### Fixed
+
+- **`publish-npm` CI job now promotes every publish to `latest`.** Previously
+  a prerelease published under its own dist-tag (e.g. `beta`) and stayed
+  there — `latest` on npmjs.com went stale until someone noticed and
+  promoted it by hand. The job now runs `npm dist-tag add ... latest`
+  right after publishing, skipped only when the version already published
+  *as* `latest` directly.
+- **README's "Releasing" steps corrected.** `package.json`'s `version`
+  field is a bare semver string with no `v` prefix; only the git tag gets
+  one (`git tag v<version>`). The two were previously conflated.
+
 ## [0.1.0-beta.10] - 2026-08-28
 
 ### Added
