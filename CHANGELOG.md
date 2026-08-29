@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.10] - 2026-08-28
+
+### Added
+
+- **`ActiveThumbnail`'s `highlightFadeDuration` option.** Controls how long
+  the `highlightDuration` fade-to-transparent transition itself takes, in
+  milliseconds. Default `800` — noticeably slower than the shared
+  `--shoji-duration` (300ms) the fade previously reused, which was tuned
+  for ordinary UI transitions, not a deliberately slow, visible fade.
+  Reported directly as "fades too fast"; the new default already fixes
+  that without any config change, and the option gives full control over
+  the exact speed. Backed by a dedicated
+  `--shoji-active-thumbnail-fade-duration` custom property.
+
 ## [0.1.0-beta.9] - 2026-08-27
 
 ### Fixed

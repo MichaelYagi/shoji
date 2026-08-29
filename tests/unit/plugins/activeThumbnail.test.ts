@@ -228,6 +228,26 @@ describe('ActiveThumbnail plugin', () => {
     gallery.destroy();
   });
 
+  it('highlight: true sets --shoji-active-thumbnail-fade-duration, defaulting to 800ms, regardless of whether highlightDuration is set', () => {
+    const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
+    gallery.open(0);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-fade-duration')).toBe(
+      '800ms',
+    );
+    gallery.destroy();
+  });
+
+  it('highlight: true with a custom highlightFadeDuration sets the var to that value', () => {
+    const { gallery, thumbs } = makeSelectorGallery({
+      activeThumbnail: { highlight: true, highlightFadeDuration: 2000 },
+    });
+    gallery.open(0);
+    expect(thumbs[0]!.style.getPropertyValue('--shoji-active-thumbnail-fade-duration')).toBe(
+      '2000ms',
+    );
+    gallery.destroy();
+  });
+
   it('highlight: true moves the styled class along with activeClass as the slide changes', () => {
     const { gallery, thumbs } = makeSelectorGallery({ activeThumbnail: { highlight: true } });
     gallery.open(0);

@@ -12,6 +12,8 @@ export interface ActiveThumbnailOptions {
   borderColor?: string;
   /** Only meaningful when `highlight: true`. Milliseconds after `close()` (i.e. after the highlight actually becomes visible, not from when the slide became active) to fade it out. Default `undefined` — persists indefinitely, moving only when a different slide becomes active. Does not touch `activeClass`, only the built-in `highlight` styling. */
   highlightDuration?: number;
+  /** Only meaningful when `highlight: true` and `highlightDuration` is set — otherwise nothing ever fades, so this has no visible effect. How long the fade-to-transparent transition itself takes, in milliseconds, once `highlightDuration` elapses. Default `800`. Reported directly as "fades too fast" against the shared `--shoji-duration` (300ms, tuned for ordinary UI transitions, not a deliberately slow fade) this used to reuse. */
+  highlightFadeDuration?: number;
 }
 
 function prefersReducedMotion(): boolean {
@@ -56,6 +58,10 @@ export const ActiveThumbnail: ShojiPlugin = {
     const borderColor = String(ctx.options.borderColor ?? 'blue');
     const highlightDuration =
       typeof ctx.options.highlightDuration === 'number' ? ctx.options.highlightDuration : null;
+    const highlightFadeDuration =
+      typeof ctx.options.highlightFadeDuration === 'number'
+        ? ctx.options.highlightFadeDuration
+        : 800;
     const HIGHLIGHT_CLASS = 'shoji-thumb-active--highlight';
 
     let current: HTMLElement | null = null;
@@ -109,6 +115,10 @@ export const ActiveThumbnail: ShojiPlugin = {
           // new active element and this same element being re-marked (e.g.
           // reopening at the same index) after having already faded once.
           el.style.setProperty('--shoji-active-thumbnail-border-color', borderColor);
+          el.style.setProperty(
+            '--shoji-active-thumbnail-fade-duration',
+            `${highlightFadeDuration}ms`,
+          );
         }
       }
       current = el;

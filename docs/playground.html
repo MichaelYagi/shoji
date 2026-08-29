@@ -377,6 +377,14 @@ its own id) rather than a real function input.
                 placeholder="none"
                 min="0"
             /></label>
+            <label
+              >highlightFadeDuration (ms, blank = 800)
+              <input
+                type="number"
+                id="opt-activeThumbnail-highlightFadeDuration"
+                placeholder="800"
+                min="0"
+            /></label>
           </div>
         </fieldset>
 
@@ -1215,6 +1223,7 @@ its own id) rather than a real function input.
         if (checked('plugin-customVideoControls')) plugins.push(CustomVideoControls);
 
         const highlightDuration = numOrUndefined('opt-activeThumbnail-highlightDuration');
+        const highlightFadeDuration = numOrUndefined('opt-activeThumbnail-highlightFadeDuration');
 
         const gestures = {};
         const lockThreshold = numOrUndefined('opt-lockThreshold');
@@ -1267,6 +1276,8 @@ its own id) rather than a real function input.
         if (Object.keys(gestures).length > 0) options.gestures = gestures;
         if (highlightDuration !== undefined)
           options.activeThumbnail.highlightDuration = highlightDuration;
+        if (highlightFadeDuration !== undefined)
+          options.activeThumbnail.highlightFadeDuration = highlightFadeDuration;
 
         const layout = {
           type: $('opt-layout-type').value,

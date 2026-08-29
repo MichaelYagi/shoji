@@ -420,6 +420,15 @@
       fades it out. Overridable with plain CSS like any other custom property; irrelevant when
       <code>highlight</code> is left at its default (<code>false</code>) — nothing reads it then.
     </p>
+    <p>
+      <code>--shoji-active-thumbnail-fade-duration</code> controls how long that fade-to-transparent
+      transition itself takes — set per-element from the <code>highlightFadeDuration</code> JS
+      option (default <code>800</code>ms), a dedicated property rather than reusing core's own
+      <code>--shoji-duration</code>, since a deliberately slow, visible fade calls for a different
+      default than an ordinary UI transition. Only meaningful alongside
+      <code>highlightDuration</code>
+      — nothing ever animates toward transparent without it.
+    </p>
 
     <h2>Icons</h2>
     <p>

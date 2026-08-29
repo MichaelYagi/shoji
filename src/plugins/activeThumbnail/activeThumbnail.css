@@ -44,12 +44,14 @@
   outline: 2px solid var(--shoji-active-thumbnail-border-color, blue);
   outline-offset: -2px;
   /* Only matters for the opt-in `highlightDuration` fade (index.ts sets
-     the color to `transparent` when it elapses) — reusing core's own
-     general-purpose transition-duration var rather than a new one, per
-     CLAUDE.md's no-hardcoded-timings rule. Harmless the rest of the time:
-     the color is set once per navigation, not animated toward on
-     ordinary use. */
-  transition: outline-color var(--shoji-duration, 300ms) ease;
+     the color to `transparent` when it elapses) — harmless the rest of
+     the time, since the color is set once per navigation, not animated
+     toward on ordinary use. A dedicated var, not core's shared
+     `--shoji-duration`: reported directly as "fades too fast" against
+     that 300ms default, tuned for ordinary UI transitions rather than a
+     deliberately slow, visible fade. `highlightFadeDuration` (index.ts)
+     sets this per element; 800ms here is only the CSS-level fallback. */
+  transition: outline-color var(--shoji-active-thumbnail-fade-duration, 800ms) ease;
 }
 
 /**
