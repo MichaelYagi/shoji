@@ -29,11 +29,12 @@
     <h1>Infinite scroll</h1>
     <p>
       Shoji has no dedicated infinite-scroll plugin, and isn't going to grow one — its actual
-      footprint in a scrolling gallery is small: one method (<code>updateSlides()</code>), one
-      lookup convention for opening the right slide (<code>data-shoji-id</code>), and a plugin
-      choice. Everything else — the sentinel/scroll-position logic that decides when to fetch more,
-      how the on-page grid renders or virtualizes its tiles, any scroll-anchoring math — is plain
-      host code Shoji never sees or participates in. The
+      footprint in a scrolling gallery is small: one core method (<code>updateSlides()</code>, plus
+      its <code>addSlides()</code>/<code>removeSlides()</code> sugar), one lookup convention for
+      opening the right slide (<code>data-shoji-id</code>), and a plugin choice. Everything else —
+      the sentinel/scroll-position logic that decides when to fetch more, how the on-page grid
+      renders or virtualizes its tiles, any scroll-anchoring math — is plain host code Shoji never
+      sees or participates in. The
       <a href="../examples/infinite-scroll.html">Infinite scroll example</a> has that code in full;
       this guide is about the handful of places Shoji itself is actually touched.
     </p>
@@ -43,10 +44,11 @@
       Every time the host's own list of loaded items changes — a new page appended, an older page
       prepended, or nothing at all if a scroll tick only changed which tiles are currently rendered
       — call <code>gallery.updateSlides(items)</code> with the full, current, correctly-ordered
-      array. That's the entire contract. Shoji diffs the new array against what it already knew by
-      <code>id</code> (see the <a href="./methods.html">Methods</a> guide), so it doesn't matter
-      whether items were added at the start, the end, or both — there's no separate "append" vs.
-      "prepend" API to call.
+      array. That's the entire contract everything else in this guide is sugar over. Shoji diffs the
+      new array against what it already knew by <code>id</code> (see the
+      <a href="./methods.html">Methods</a> guide), so it doesn't matter whether items were added at
+      the start, the end, or both — there's no separate "append" vs. "prepend" call
+      <em>required</em>.
     </p>
     <p>
       One real bug this surfaces if missed: the bidirectional example keeps its loaded items in a
@@ -57,16 +59,54 @@
       exactly once, right before handing the array over.
     </p>
 
+    <h2>
+      <code>gallery.items</code>, <code>addSlides()</code>/<code>removeSlides()</code>: usually less
+      to write than a raw <code>updateSlides()</code> call
+    </h2>
+    <p>
+      Most hosts don't actually need "there's no separate append vs. prepend API" above — they only
+      ever append. <code>gallery.addSlides(items, atIndex?)</code> is sugar over
+      <code>updateSlides()</code> for exactly that: it splices <code>items</code> into a copy of
+      whatever Shoji already has (default: append at the end;
+      <code>Array.prototype.splice</code> semantics for <code>atIndex</code>, so
+      <code>0</code> prepends) and hands the result off — still doing the same active-slide
+      preservation <code>updateSlides()</code> always does.
+      <code>gallery.removeSlides(match)</code> is the reverse, for eviction: a single id/index, or
+      an array mixing both. Both read from <code>gallery.items</code> (a public, read-only getter —
+      the exact array Shoji itself is holding right now, already resolved), so a host that has no
+      other reason to track its own parallel copy of the list often doesn't need to: the
+      forward-only demo keeps no host-side item array at all anymore, reading
+      <code>gallery.items</code> wherever it needs the current list instead. See the
+      <a href="./methods.html">Methods</a> guide for the full signatures.
+    </p>
+    <p>
+      This isn't always a win, though — the bidirectional demo deliberately keeps calling
+      <code>updateSlides()</code> directly, not
+      <code>addSlides()</code>/<code>removeSlides()</code>. It already needs its own
+      <code>id → item</code> map for its tile pool's own O(1) lookups (assigning/releasing a pooled
+      DOM element by item id as the viewport scrolls), so there's no state saved by also asking
+      Shoji to track a second copy piecemeal — one full, already-sorted array per load (from a map
+      that's capped small regardless, see below) is simpler to reason about than working out which
+      of two Shoji calls a given load needs. Reach for <code>addSlides()</code>/<code
+        >removeSlides()</code
+      >
+      when <code>gallery.items</code> can just <em>be</em> your list; keep calling
+      <code>updateSlides()</code> directly when you already have a good reason (like this one) to
+      maintain your own.
+    </p>
+
     <h2>Opening a slide: <code>data-shoji-id</code>, not a captured index</h2>
     <p>
       A thumbnail's click handler shouldn't close over the index it happened to render at — by the
       time it's clicked, <code>updateSlides()</code> may have grown or reordered the array
       underneath it. Both demos instead store the item's <code>id</code> on the element (<code
         >a.dataset.shojiId = item.id</code
-      >) and re-resolve the index fresh, at click time, from whatever the current array actually is:
+      >) and re-resolve the index fresh, at click time, from whatever the current array actually is
+      — <code>gallery.items</code> for forward-only (it keeps no array of its own), the sorted
+      <code>Map</code> for bidirectional (it already has one, for other reasons — see above):
     </p>
     <pre><code>function openById(id) {
-  const index = sortedItems().findIndex((i) => i.id === id);
+  const index = gallery.items.findIndex((i) => i.id === id);
   if (index !== -1) gallery.open(index);
 }</code></pre>
     <p>
@@ -92,6 +132,17 @@
       with Shoji's <a href="./layout.html">Layout plugin</a> in <code>grid</code> mode (uniform tile
       sizes) — not masonry or justified, which size rows from each photo's real aspect ratio, so
       there's no fixed row height for a virtual list's position math to rely on.
+    </blockquote>
+
+    <blockquote>
+      The forward-only demo, by contrast, never virtualizes what it appends — no windowing, no
+      <code>loading="lazy"</code>, tiles stay mounted forever. That's a fine trade for a demo, or a
+      gallery bounded to some thousands of photos in a session; a genuinely unbounded forward scroll
+      would eventually need the same kind of windowing the bidirectional demo does, just for one
+      direction instead of two. Shoji itself doesn't care either way —
+      <code>updateSlides()</code>/<code>addSlides()</code> only touch whatever array you hand them,
+      so nothing about switching a forward-only integration to a windowed one changes how it talks
+      to Shoji.
     </blockquote>
 
     <p>

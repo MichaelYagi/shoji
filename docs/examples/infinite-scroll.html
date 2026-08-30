@@ -94,11 +94,14 @@
     <h1>Infinite scroll</h1>
     <p>
       Shoji has no dedicated infinite-scroll plugin — its entire integration surface for both demos
-      below is <code>gallery.updateSlides()</code>, a <code>data-shoji-id</code> marker on each
-      thumbnail, and a plugin choice. Everything else on this page — fetching, rendering, scroll
-      position, virtualization — is plain host code Shoji never sees. See the
-      <a href="../guides/infinite-scroll.html">Infinite scroll guide</a> for what those three
-      touchpoints do and why.
+      below is <code>updateSlides()</code> (or its <code>addSlides()</code>/<code
+        >removeSlides()</code
+      >
+      sugar), a <code>data-shoji-id</code> marker on each thumbnail, and a plugin choice. Everything
+      else on this page — fetching, rendering, scroll position, virtualization — is plain host code
+      Shoji never sees. See the
+      <a href="../guides/infinite-scroll.html">Infinite scroll guide</a> for what those touchpoints
+      do and why.
     </p>
 
     <div class="demo-tabs" role="tablist">
@@ -124,9 +127,19 @@
 
     <div class="tab-panel" id="tab-forward" role="tabpanel" aria-labelledby="tabbtn-forward">
       <p>
-        Each new page is appended to the item array and handed to <code>updateSlides()</code>.
-        <code>ActiveThumbnail</code> is enabled here — tiles are only ever appended, never removed,
-        so there's no risk of it tracking a thumbnail that's since disappeared.
+        Each new page is handed to <code>gallery.addSlides()</code> — sugar over
+        <code>updateSlides()</code> for the append case, so there's no host-side item array to keep
+        in sync with it (<code>gallery.items</code> is Shoji's own copy).
+        <code>ActiveThumbnail</code>
+        is enabled here — tiles are only ever appended, never removed, so there's no risk of it
+        tracking a thumbnail that's since disappeared.
+      </p>
+      <p>
+        <strong>This page never virtualizes the DOM it appends to</strong> — every tile ever loaded
+        stays mounted, with no <code>loading="lazy"</code> either. Fine for a demo, or a real
+        gallery bounded to some thousands of photos in a session, but a genuinely unbounded scroll
+        would eventually need the same windowing the bidirectional demo already does, just for one
+        direction instead of two.
       </p>
       <div class="scroll-box" id="scroll-forward" style="overflow-anchor: auto">
         <div id="gallery-forward" class="thumb-grid"></div>
@@ -138,7 +151,15 @@
     <div class="tab-panel" id="tab-bidi" role="tabpanel" aria-labelledby="tabbtn-bidi" hidden>
       <p>
         A virtualized grid (see the guide for what that means) rebuilds the full item array from its
-        own loaded-item map and hands it to <code>updateSlides()</code> every time that map grows.
+        own loaded-item map and hands it to <code>updateSlides()</code> every time that map grows —
+        deliberately not <code>addSlides()</code>/<code>removeSlides()</code>, unlike the
+        forward-only demo: this grid already needs its own <code>id → item</code> map for the tile
+        pool's own O(1) lookups (<code>assignTile()</code>/<code>releaseTile()</code>), so there's
+        no state to save by also asking Shoji to track a second copy piecemeal — one full,
+        already-sorted array per load is simpler than reasoning about which of two Shoji calls (add
+        one side, remove the other) a given load needs. That array stays small regardless (capped by
+        <code>MAX_LOADED_ROWS</code>
+        below), so re-sorting it every time costs nothing measurable.
         <code>ActiveThumbnail</code> is deliberately left off — this grid can unmount the exact tile
         it would be highlighting the moment that tile scrolls outside the rendered window.
       </p>
@@ -189,7 +210,6 @@
       // ---------------------------------------------------------------
       (function forwardOnly() {
         const PAGE_SIZE = 6;
-        let items = [];
         let cursor = 0; // ever-increasing; never resets, never bounded
 
         function renderThumb(item, onClick) {
@@ -230,8 +250,12 @@
           return delay(400).then(() => page);
         }
 
+        // No host-side items array to keep in sync — gallery.items is
+        // already Shoji's own copy (see the guide's "gallery.items,
+        // addSlides()/removeSlides()" section), so there's nothing else to
+        // read this from.
         function openById(id) {
-          const index = items.findIndex((i) => i.id === id);
+          const index = gallery.items.findIndex((i) => i.id === id);
           if (index !== -1) gallery.open(index);
         }
 
@@ -239,10 +263,12 @@
           if (loading) return;
           loading = true;
           const newItems = await fetchPage();
-          items = [...items, ...newItems];
-          gallery.updateSlides(items);
+          // addSlides() (default: append at the end) is sugar over
+          // updateSlides() for exactly this case — one call, no manually
+          // maintained array to keep in sync with it.
+          gallery.addSlides(newItems);
           for (const item of newItems) grid.appendChild(renderThumb(item, openById));
-          status.textContent = `Loaded ${items.length} item(s). Never runs out.`;
+          status.textContent = `Loaded ${gallery.items.length} item(s). Never runs out.`;
           loading = false;
           // Re-observing (not just observing) forces a fresh visibility
           // check even if the sentinel never left the viewport — an
@@ -671,20 +697,32 @@
     </script>
 
     <h2>Code: the Shoji integration</h2>
-    <p>Forward-only — enable the plugin, then append and <code>updateSlides()</code>:</p>
+    <p>
+      Forward-only — enable the plugin, then <code>addSlides()</code> (sugar over
+      <code>updateSlides()</code> for the append case, see the
+      <a href="../guides/infinite-scroll.html">guide</a>) each new page. No host-side item array to
+      keep in sync — <code>gallery.items</code> is already Shoji's own copy:
+    </p>
     <pre><code>const gallery = new Shoji(grid, { items: [], plugins: [Shoji.ActiveThumbnail] });
 
 async function loadNextPage() {
   const newItems = await fetchNextPage();
-  items = [...items, ...newItems];
-  gallery.updateSlides(items);
+  gallery.addSlides(newItems); // appends by default
   for (const item of newItems) grid.appendChild(renderThumb(item)); // sets a.dataset.shojiId
+}
+
+function openById(id) {
+  const index = gallery.items.findIndex((i) => i.id === id);
+  if (index !== -1) gallery.open(index);
 }</code></pre>
     <p>
-      Bidirectional's <code>updateSlides()</code> call is identical in kind, just sourced from a
-      <code>Map</code> instead of a plain array — sorted before every call, since <code>Map</code>
-      iteration order is insertion order, not numeric order, and an older page's ids are always
-      smaller but still inserted last:
+      Bidirectional calls the plain <code>updateSlides()</code> instead of
+      <code>addSlides()</code>/<code>removeSlides()</code> — it already needs its own
+      <code>id → item</code> map for the tile pool's own lookups, so there's no state to save by
+      also asking Shoji to track a second copy piecemeal; one full, already-sorted array per load is
+      simpler than reasoning about which of two Shoji calls a given load needs. Sourced from that
+      map, sorted before every call — <code>Map</code> iteration order is insertion order, not
+      numeric order, and an older page's ids are always smaller but still inserted last:
     </p>
     <pre><code>function sortedItems() {
   return [...itemsById.values()].sort((a, b) => idNum(a.id) - idNum(b.id));
