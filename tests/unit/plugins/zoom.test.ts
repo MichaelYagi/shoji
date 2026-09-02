@@ -217,6 +217,88 @@ describe('Zoom — buttons', () => {
     expect(activeImg().style.transform).toBe('');
     gallery.destroy();
   });
+
+  /**
+   * The actual-size button's icon (src/core/iconSwap.ts,
+   * `arrows-angle-expand`/`arrows-angle-contract`) tracks `scale > 1`
+   * directly, matching the button's own real click behavior exactly — not
+   * a separate "are we exactly at native pixel size" concept. A real bug
+   * in an earlier version tracked a separate cache for that instead, which
+   * went stale after the very first press: `reset()` nulled it every time
+   * without every call site re-populating it, so only the first actual-
+   * size press of a session ever updated the icon at all.
+   */
+  describe('actual-size icon (expand/contract) reflects live zoom state', () => {
+    function iconSwapOn(): boolean {
+      return button('Actual size')
+        .querySelector('.shoji-icon-swap')!
+        .classList.contains('shoji-icon-swap--on');
+    }
+
+    it('alternates correctly across repeated presses, not just the first one', async () => {
+      const gallery = makeGallery();
+      gallery.open(0);
+      await flushSlideLoad();
+      Object.defineProperty(activeImg(), 'naturalWidth', { value: 600, configurable: true });
+
+      expect(iconSwapOn()).toBe(false);
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(true);
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(false);
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(true);
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(false);
+
+      gallery.destroy();
+    });
+
+    it('flips to contract when zoomed via the zoom-in button too, not just via actual-size itself', async () => {
+      const gallery = makeGallery();
+      gallery.open(0);
+      await flushSlideLoad();
+
+      expect(iconSwapOn()).toBe(false);
+      click(button('Zoom in'));
+      expect(iconSwapOn()).toBe(true); // zoomed in at all, even though nowhere near "actual size"
+      click(button('Zoom out'));
+      expect(iconSwapOn()).toBe(false);
+
+      gallery.destroy();
+    });
+
+    it("stays expand for a photo whose native resolution is at or below its fitted size (nothing to reach) — the button's own click is a no-op there", async () => {
+      const gallery = makeGallery();
+      gallery.open(0);
+      await flushSlideLoad();
+      // natural rendered width is 300 (mocked rect); naturalWidth <= that
+      // means "actual size" would be a downscale, not an upscale.
+      Object.defineProperty(activeImg(), 'naturalWidth', { value: 200, configurable: true });
+
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(false); // clampScale's own floor of 1 makes this a no-op
+      expect(activeImg().style.transform).toBe('none'); // apply()'s own neutral-state value, scale still 1
+
+      gallery.destroy();
+    });
+
+    it('resets to expand on a fresh slide, even if the outgoing slide was left zoomed', async () => {
+      const gallery = makeGallery({ loop: true });
+      gallery.open(0);
+      await flushSlideLoad();
+      Object.defineProperty(activeImg(), 'naturalWidth', { value: 600, configurable: true });
+
+      click(button('Actual size'));
+      expect(iconSwapOn()).toBe(true);
+
+      gallery.goTo(1, { animate: false });
+      await flushSlideLoad();
+      expect(iconSwapOn()).toBe(false);
+
+      gallery.destroy();
+    });
+  });
 });
 
 describe('Zoom — requestZoom* commands (DESIGN.md §4.6), a generic surface for a custom plugin', () => {

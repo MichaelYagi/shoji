@@ -5,6 +5,32 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.14] - 2026-09-02
+
+### Added
+
+- **A shared toolbar icon-swap mechanism (`src/core/iconSwap.ts`)** for any
+  button whose icon reflects live state — both icons stay in the DOM at
+  once, cross-fading via CSS opacity (`--shoji-icon-swap-duration`, default
+  150ms, its own dedicated custom property) instead of an instant
+  `innerHTML` cut. Retrofitted onto Fullscreen's enter/exit icon and
+  Autoplay's play/pause icon, replacing each plugin's own independent
+  swap logic.
+- **Zoom's "Actual size" button now has a live icon** —
+  `arrows-angle-expand` while not zoomed in, `arrows-angle-contract` while
+  zoomed in at all (by any means: pinch, wheel, the zoom-in/out buttons,
+  or the button itself) — matching the button's real click behavior
+  exactly (any zoom resets to fit; only exactly-at-fit zooms to native
+  size). Stays on expand for a photo whose native resolution is at or
+  below its own fitted size, since there's nothing bigger to reach.
+
+### Fixed
+
+- A bug in the above feature, caught before release: an earlier version
+  tracked "are we exactly at native pixel size" via a separate cache
+  instead of reading `scale` directly, which went stale after the first
+  actual-size press of a session and never updated again.
+
 ## [0.1.0-beta.13] - 2026-08-28
 
 ### Changed

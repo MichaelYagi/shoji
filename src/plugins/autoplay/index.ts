@@ -1,4 +1,5 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
+import { createIconSwap } from '../../core/iconSwap';
 import { PAUSE_ICON, PLAY_ICON } from './icons';
 import './autoplay.css';
 
@@ -273,7 +274,8 @@ export const Autoplay: ShojiPlugin = {
     button.className = 'shoji-toolbar-button shoji-autoplay-toggle';
     button.setAttribute('aria-label', playLabel);
     button.title = playLabel;
-    button.innerHTML = PLAY_ICON;
+    const iconSwap = createIconSwap(PLAY_ICON, PAUSE_ICON);
+    button.appendChild(iconSwap.el);
 
     const progress = document.createElement('div');
     progress.className = 'shoji-autoplay-progress';
@@ -331,7 +333,7 @@ export const Autoplay: ShojiPlugin = {
 
     function setButtonState(isPlaying: boolean): void {
       playing = isPlaying;
-      button.innerHTML = isPlaying ? PAUSE_ICON : PLAY_ICON;
+      iconSwap.setState(isPlaying);
       button.setAttribute('aria-label', isPlaying ? pauseLabel : playLabel);
       button.title = isPlaying ? pauseLabel : playLabel;
       updateToggleAvailability();

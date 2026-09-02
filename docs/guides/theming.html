@@ -151,6 +151,19 @@
           <td>Open/close, slide transitions, layout FLIP animations.</td>
         </tr>
         <tr>
+          <td><code>--shoji-icon-swap-duration</code></td>
+          <td>
+            <code>150ms</code> (forced to <code>0ms</code> under
+            <code>prefers-reduced-motion: reduce</code>)
+          </td>
+          <td>
+            Cross-fade for a toolbar icon that reflects live state — Fullscreen's enter/exit,
+            Autoplay's play/pause, Zoom's actual-size expand/contract. A dedicated var, not a reuse
+            of <code>--shoji-duration</code>: a snappy state flip reads differently from a UI
+            transition on the open/close scale.
+          </td>
+        </tr>
+        <tr>
           <td><code>--shoji-easing</code></td>
           <td><code>cubic-bezier(0.4, 0, 0.2, 1)</code></td>
           <td>Open/close/zoom-transition curve.</td>

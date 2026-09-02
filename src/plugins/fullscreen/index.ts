@@ -1,4 +1,5 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
+import { createIconSwap } from '../../core/iconSwap';
 import { COMPRESS_ICON, EXPAND_ICON } from './icons';
 
 /**
@@ -72,7 +73,8 @@ export const Fullscreen: ShojiPlugin = {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'shoji-toolbar-button';
-    button.innerHTML = EXPAND_ICON;
+    const iconSwap = createIconSwap(EXPAND_ICON, COMPRESS_ICON);
+    button.appendChild(iconSwap.el);
     button.setAttribute('aria-label', enterLabel);
     button.title = enterLabel;
     button.setAttribute('aria-pressed', 'false');
@@ -82,7 +84,7 @@ export const Fullscreen: ShojiPlugin = {
     }
 
     function setState(active: boolean): void {
-      button.innerHTML = active ? COMPRESS_ICON : EXPAND_ICON;
+      iconSwap.setState(active);
       button.setAttribute('aria-label', active ? exitLabel : enterLabel);
       button.title = active ? exitLabel : enterLabel;
       button.setAttribute('aria-pressed', String(active));

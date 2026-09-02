@@ -1,6 +1,12 @@
 import type { PluginContext, ShojiPlugin } from '../../core/plugin';
+import { createIconSwap } from '../../core/iconSwap';
 import { waitForTransitionEnd } from '../../core/zoomTransition';
-import { ZOOM_ACTUAL_SIZE_ICON, ZOOM_IN_ICON, ZOOM_OUT_ICON } from './icons';
+import {
+  ZOOM_ACTUAL_SIZE_CONTRACT_ICON,
+  ZOOM_ACTUAL_SIZE_EXPAND_ICON,
+  ZOOM_IN_ICON,
+  ZOOM_OUT_ICON,
+} from './icons';
 import {
   clampPan,
   clampScale,
@@ -171,6 +177,31 @@ export const Zoom: ShojiPlugin = {
 
     function emitChange(): void {
       ctx.emit('zoomChange', { index: gallery.currentIndex, scale });
+      updateActualSizeIcon();
+    }
+
+    /**
+     * The actual-size button's icon reflects live state, requested directly:
+     * `arrows-angle-expand` at fit, `arrows-angle-contract` while zoomed in
+     * at all — by pinch, wheel, the zoom-in/out buttons, or this button
+     * itself, not just specifically at native pixel size. Matches
+     * `actualSizeToggle()`'s own real click behavior exactly: it resets to
+     * fit for *any* `scale > 1`, regardless of how that zoom was reached,
+     * and only attempts to zoom to native size from exactly `scale === 1`
+     * (a no-op there for a photo whose native resolution is at or below its
+     * fitted size — `clampScale(targetScale, 1, ...)`'s own floor — which
+     * this correctly still shows as expand, since scale is still 1 in that
+     * case). A real bug in an earlier version of this: tracking a separate
+     * "are we exactly at native size" cache (naturalWidth / natural.width,
+     * refreshed on slideItemLoad) went stale the moment `reset()` cleared
+     * it without every call site re-populating it, so only the *first*
+     * actual-size press of a session ever updated the icon at all — using
+     * `scale` directly instead, already the single live source of truth
+     * `zoomChange` itself is built on, has no cache to go stale in the
+     * first place.
+     */
+    function updateActualSizeIcon(): void {
+      actualSizeIconSwap.setState(scale > ZOOM_EPSILON);
     }
 
     /** Wraps a transform-setting `run` in a transition, for discrete jumps (buttons, double-tap, actual-size) — never for pinch/pan/wheel, which already track the input 1:1 and would visibly lag behind it under a transition. `afterEnd`, if given, runs once the transition actually completes, not before — `reset()` uses it to clear `transformOrigin` only once it's safe to (see its own comment for why clearing it any earlier is a real bug). The transition itself is always cleared afterward, so it doesn't linger onto the next, possibly-continuous, zoom action. */
@@ -244,6 +275,7 @@ export const Zoom: ShojiPlugin = {
       natural = null;
       container = null;
       originOffset = null;
+      updateActualSizeIcon(); // scale is already 1 here, so this is always the expand state
       if (wasEngaged) emitChange(); // after scale is already 1, so listeners see the real new value
       const img = getImg();
       if (!img) return;
@@ -443,7 +475,17 @@ export const Zoom: ShojiPlugin = {
 
     const zoomInBtn = buildButton(ZOOM_IN_ICON, zoomInLabel);
     const zoomOutBtn = buildButton(ZOOM_OUT_ICON, zoomOutLabel);
-    const actualSizeBtn = buildButton(ZOOM_ACTUAL_SIZE_ICON, actualSizeLabel);
+
+    const actualSizeBtn = document.createElement('button');
+    actualSizeBtn.type = 'button';
+    actualSizeBtn.className = 'shoji-toolbar-button';
+    const actualSizeIconSwap = createIconSwap(
+      ZOOM_ACTUAL_SIZE_EXPAND_ICON,
+      ZOOM_ACTUAL_SIZE_CONTRACT_ICON,
+    );
+    actualSizeBtn.appendChild(actualSizeIconSwap.el);
+    actualSizeBtn.setAttribute('aria-label', actualSizeLabel);
+    actualSizeBtn.title = actualSizeLabel;
 
     zoomInBtn.addEventListener('click', zoomInStep);
     zoomOutBtn.addEventListener('click', zoomOutStep);

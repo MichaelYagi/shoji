@@ -51,6 +51,13 @@
 
   --shoji-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --shoji-duration: 300ms;
+  /* A dedicated var, not a reuse of --shoji-duration: a toolbar icon
+     cross-fade (Fullscreen's enter/exit, Autoplay's play/pause, Zoom's
+     actual-size expand/contract, src/core/iconSwap.ts) reads as a snappy
+     state flip, not a UI transition on the same scale as opening/closing —
+     the same "reuse read as too slow/fast for a different purpose"
+     reasoning `--shoji-active-thumbnail-fade-duration` was split out for. */
+  --shoji-icon-swap-duration: 150ms;
   /* The toolbar's own rendered height (44px button + top/bottom padding) —
      defined before the caption sizing below since it now derives from
      this. Also reserves space at the top of a provider embed (YouTube
@@ -125,6 +132,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --shoji-duration: 0ms;
+    --shoji-icon-swap-duration: 0ms;
   }
 }
 
@@ -356,6 +364,41 @@
   opacity: 0.3;
   cursor: default;
   pointer-events: none;
+}
+
+/* `src/core/iconSwap.ts` — a toolbar button whose icon reflects live state
+   (Fullscreen enter/exit, Autoplay play/pause, Zoom actual-size
+   expand/contract). Both icons stay in the DOM at once, exactly stacked;
+   the modifier class below only ever changes which one is opaque, so the
+   swap is a plain cross-fade with nothing being added/removed mid-transition
+   (no flash-of-no-icon between an old node's removal and a new one's
+   fill/stroke painting in). */
+.shoji-icon-swap {
+  position: relative;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+}
+
+.shoji-icon-swap-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--shoji-icon-swap-duration, 150ms) var(--shoji-easing);
+}
+
+.shoji-icon-swap-icon--on {
+  opacity: 0;
+}
+
+.shoji-icon-swap--on .shoji-icon-swap-icon--off {
+  opacity: 0;
+}
+
+.shoji-icon-swap--on .shoji-icon-swap-icon--on {
+  opacity: 1;
 }
 
 .shoji-slides {

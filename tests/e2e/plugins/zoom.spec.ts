@@ -102,11 +102,107 @@ test('actual size toggles zoom (fixture image is scaled down to fit the dialog)'
   // into the overflow popover — reveal it before clicking, same as a real
   // viewer would.
   const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
+  const iconSwap = actualSize.locator('.shoji-icon-swap');
+  await expect(iconSwap).not.toHaveClass(/shoji-icon-swap--on/);
+
   await clickToolbarButton(page, actualSize);
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  await expect(iconSwap).toHaveClass(/shoji-icon-swap--on/);
 
   await clickToolbarButton(page, actualSize);
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
+  await expect(iconSwap).not.toHaveClass(/shoji-icon-swap--on/);
+});
+
+/**
+ * A real bug, reported from real usage: the icon-swap cache backing this
+ * button's icon (an earlier version tracked "are we exactly at native
+ * pixel size" separately from `scale` itself) went stale after the first
+ * press — `reset()` nulled it every time without every call site
+ * re-populating it, so only the *first* actual-size press of a session
+ * ever updated the icon at all. Fixed by reading `scale` directly
+ * (src/plugins/zoom/index.ts's `updateActualSizeIcon()`) instead of a
+ * separately-cached value — this is the regression test for that, run in
+ * a real browser since the bug was specifically about state surviving
+ * across repeated real clicks, not a single jsdom-simulated one.
+ */
+test('actual-size icon keeps toggling correctly across repeated presses, not just the first one', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 400, height: 300 });
+  await openLightbox(page);
+
+  const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
+  const iconSwap = actualSize.locator('.shoji-icon-swap');
+
+  for (let i = 0; i < 4; i++) {
+    await clickToolbarButton(page, actualSize);
+    const expected = i % 2 === 0;
+    if (expected) await expect(iconSwap).toHaveClass(/shoji-icon-swap--on/);
+    else await expect(iconSwap).not.toHaveClass(/shoji-icon-swap--on/);
+  }
+});
+
+/**
+ * The actual-size icon reflects `scale > 1` generally, not "are we
+ * specifically at native pixel size" — it must flip to the contract icon
+ * for any zoom, including one reached via the zoom-in button rather than
+ * actual-size itself, since that's what the button's own click actually
+ * does at that point (resets to fit, regardless of how the zoom was
+ * reached).
+ */
+test('actual-size icon also flips when zoomed via the zoom-in button, not just via itself', async ({
+  page,
+}) => {
+  await openLightbox(page);
+
+  const zoomIn = page.locator('.shoji-toolbar-button[aria-label="Zoom in"]');
+  const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
+  const iconSwap = actualSize.locator('.shoji-icon-swap');
+  await expect(iconSwap).not.toHaveClass(/shoji-icon-swap--on/);
+
+  await clickToolbarButton(page, zoomIn);
+  await expect(iconSwap).toHaveClass(/shoji-icon-swap--on/);
+});
+
+/** Real-browser confirmation that the icon swap (src/core/iconSwap.ts) genuinely cross-fades via CSS opacity — not an instant `innerHTML` cut — since jsdom (tests/unit/) doesn't run CSS transitions at all. */
+test('actual-size icon cross-fades via CSS opacity, not an instant swap', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 300 });
+  await openLightbox(page);
+
+  const actualSize = page.locator('.shoji-toolbar-button[aria-label="Actual size"]');
+  const offIcon = actualSize.locator('.shoji-icon-swap-icon--off');
+  const onIcon = actualSize.locator('.shoji-icon-swap-icon--on');
+
+  const transitionProperty = await offIcon.evaluate(
+    (el) => getComputedStyle(el).transitionProperty,
+  );
+  expect(transitionProperty).toBe('opacity');
+
+  await expect(offIcon).toHaveCSS('opacity', '1');
+  await expect(onIcon).toHaveCSS('opacity', '0');
+
+  await clickToolbarButton(page, actualSize);
+  // Polled repeatedly rather than sampled once at a guessed midpoint — a
+  // single fixed-delay sample racing a transition is exactly the flaky
+  // pattern this project has hit before (tests/e2e/core-zoom-transition.spec.ts's
+  // own history): under real load the fade can start later than expected,
+  // making one precisely-timed sample land before or after it entirely.
+  // Polling across a window comfortably longer than
+  // --shoji-icon-swap-duration's 150ms default just needs *some* sample to
+  // land strictly between 0 and 1 to prove real interpolation happened —
+  // an instant `innerHTML`-style cut would never produce one, regardless
+  // of when sampled.
+  let sawMidFade = false;
+  for (let i = 0; i < 15; i++) {
+    const opacity = await offIcon.evaluate((el) => Number(getComputedStyle(el).opacity));
+    if (opacity > 0 && opacity < 1) {
+      sawMidFade = true;
+      break;
+    }
+    await page.waitForTimeout(30);
+  }
+  expect(sawMidFade).toBe(true);
 });
 
 test('dragging while zoomed pans the image instead of navigating slides', async ({ page }) => {

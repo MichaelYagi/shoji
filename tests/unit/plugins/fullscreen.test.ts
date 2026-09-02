@@ -126,6 +126,21 @@ describe('Fullscreen — toggling', () => {
     gallery.destroy();
   });
 
+  it('the icon-swap wrapper (src/core/iconSwap.ts) reflects state via its modifier class, not a raw icon swap', () => {
+    const gallery = makeGallery();
+    const button = toggleButton();
+    const swap = button.querySelector('.shoji-icon-swap');
+    expect(swap).not.toBeNull();
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(false);
+
+    click(button);
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(true);
+
+    click(button);
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(false);
+    gallery.destroy();
+  });
+
   it('clicking again while active exits fullscreen', () => {
     const gallery = makeGallery();
     const button = toggleButton();

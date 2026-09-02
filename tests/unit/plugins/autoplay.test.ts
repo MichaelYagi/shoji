@@ -104,6 +104,24 @@ describe('Autoplay — button & basic timing', () => {
     gallery.destroy();
   });
 
+  it('the icon-swap wrapper (src/core/iconSwap.ts) reflects play/pause state via its modifier class', () => {
+    const gallery = makeGallery();
+    gallery.open(0);
+
+    const button = toggleButton();
+    const swap = button.querySelector('.shoji-icon-swap');
+    expect(swap).not.toBeNull();
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(false);
+
+    click(button);
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(true);
+
+    click(button);
+    expect(swap!.classList.contains('shoji-icon-swap--on')).toBe(false);
+
+    gallery.destroy();
+  });
+
   it('honors a custom interval option', () => {
     vi.useFakeTimers();
     const gallery = makeGallery({ autoplay: { interval: 1000 } });
