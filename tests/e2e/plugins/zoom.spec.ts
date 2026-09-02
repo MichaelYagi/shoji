@@ -403,3 +403,46 @@ test('regression: zoom-out back to neutral keeps transform-origin anchored until
   await expect.poll(() => img.evaluate((el) => el.style.transition)).toBe('');
   await expect.poll(() => activeImgHasZoomedClass(page)).toBe(false);
 });
+
+test("a plain (non-ctrl) mouse wheel zooms in, by default (mouseWheelZoom: true) — the real-browser counterpart to the trackpad two-finger drag this option exists to catch, since jsdom can neither send a real wheel event nor prove it bubbles to this plugin's own listener on .shoji-outer", async ({
+  page,
+  isMobile,
+}) => {
+  // page.mouse.wheel() isn't implemented on mobile WebKit at all (throws
+  // outright), and a mouse-wheel simulation is a desktop/trackpad
+  // interaction anyway — same reasoning as the drag-gesture suite's own
+  // isMobile skips. Real touch-emulated projects have no wheel input to
+  // test here.
+  test.skip(
+    isMobile,
+    'mouse-wheel simulation is a desktop/trackpad interaction; see comment above',
+  );
+
+  await openLightbox(page);
+
+  const before = await activeImgTransform(page);
+  expect(before).toBe('');
+
+  const box = await (await activeImgHandle(page)).boundingBox();
+  if (!box) throw new Error('no bounding box for active image');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // Several ticks, not one — the sensitivity was deliberately tuned down to
+  // Kiri's own gentler feel (§4.6's eighteenth entry), so a single real
+  // wheel tick's deltaY is too small to reliably clear scale 1 across every
+  // browser's own default wheel-tick magnitude. The exact resulting scale
+  // isn't asserted below — Playwright's mouse.wheel(dy) maps to genuinely
+  // different real deltaY magnitudes per browser engine (confirmed
+  // directly: the same 10 ticks land around scale 1.x on Firefox but 2.66
+  // on Chromium/WebKit) — that precise coefficient/formula is what the
+  // exact-deltaY unit tests already pin down; this test's own job is only
+  // to prove a real wheel event genuinely bubbles to and zooms via this
+  // plugin's listener in a real browser, which jsdom can't.
+  for (let i = 0; i < 10; i++) {
+    await page.mouse.wheel(0, -100);
+  }
+
+  await expect.poll(() => activeImgHasZoomedClass(page)).toBe(true);
+  const after = await activeImgTransform(page);
+  const scale = Number(after.match(/scale3d\(([\d.]+),/)?.[1]);
+  expect(scale).toBeGreaterThan(1);
+});

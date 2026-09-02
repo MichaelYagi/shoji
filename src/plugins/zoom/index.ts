@@ -25,6 +25,24 @@ export interface ZoomOptions {
   doubleTapScale?: number;
   /** Multiplier applied per zoom-in/zoom-out toolbar button click. Default 1.5. */
   buttonStep?: number;
+  /**
+   * Which wheel/trackpad-scroll input zooms the active photo, on top of
+   * pinch, the toolbar buttons, and `w`/`s`. `true` (default): any wheel
+   * event zooms, `ctrl` or not. This is the only way to make a trackpad's
+   * plain two-finger *drag* zoom — trackpads never expose raw multi-touch
+   * to the browser at all, so a two-finger drag/scroll and an ordinary
+   * one-finger scroll (or a bare mouse wheel) are all just the same plain
+   * `wheel` event, indistinguishable from each other. As an unavoidable
+   * side effect, a bare mouse wheel also zooms, with nothing to tell that
+   * apart from a trackpad either — inside a full-screen modal with no page
+   * behind it to scroll, this reads as a feature (a wheel/trackpad zoom
+   * shortcut, on top of everything else), not a conflict with anything.
+   * `'ctrl'`: only `ctrl`+wheel — the one case a trackpad's own gesture
+   * recognition reports distinctly, since that's how the OS/browser
+   * already reports a genuine two-finger *pinch* specifically (unlike a
+   * plain drag). `false`: wheel/trackpad input never zooms at all.
+   */
+  mouseWheelZoom?: boolean | 'ctrl';
 }
 
 const ZOOM_EPSILON = 1.001; // treat "just barely above 1" as unzoomed — avoids float residue pinning isZoomed() true forever
@@ -68,6 +86,7 @@ export const Zoom: ShojiPlugin = {
     maxScale: 4,
     doubleTapScale: 2,
     buttonStep: 1.5,
+    mouseWheelZoom: true,
   } satisfies ZoomOptions,
 
   init(ctx: PluginContext): () => void {
@@ -75,6 +94,7 @@ export const Zoom: ShojiPlugin = {
     const maxScale = Number(ctx.options.maxScale ?? 4);
     const doubleTapScale = Number(ctx.options.doubleTapScale ?? 2);
     const buttonStep = Number(ctx.options.buttonStep ?? 1.5);
+    const mouseWheelZoom = (ctx.options.mouseWheelZoom as boolean | 'ctrl' | undefined) ?? true;
     const locale = (gallery.options.locale ?? {}) as Record<string, string>;
     const zoomInLabel = locale.zoomIn ?? 'Zoom in';
     const zoomOutLabel = locale.zoomOut ?? 'Zoom out';
@@ -333,11 +353,6 @@ export const Zoom: ShojiPlugin = {
     // --- double-tap / double-click (relayed by core; Pointer Events unify the two, see GestureEngine) ---
     const offDoubleTap = ctx.on('doubleTap', ({ x, y }) => toggleZoom(x, y));
 
-    // --- ctrl+wheel / trackpad pinch (relayed by core) ---
-    const offWheelZoom = ctx.on('wheelZoom', ({ deltaScale, x, y }) => {
-      zoomTo(scale + deltaScale, x, y);
-    });
-
     /**
      * A generic command surface, requested directly (DESIGN.md §4.6), so a
      * *custom* (host-authored) plugin's own button can drive zoom without
@@ -362,6 +377,31 @@ export const Zoom: ShojiPlugin = {
     let lastX = 0;
     let lastY = 0;
     const outer = ctx.ui.outer();
+
+    /**
+     * `mouseWheelZoom`'s own doc comment above — a raw listener here rather
+     * than the core `wheelZoom` bus event (still relayed for anyone else,
+     * e.g. a custom plugin — GestureEngine.ts is untouched): that event is
+     * only ever emitted for `ctrl`+wheel, `GestureEngine`'s own hard-coded
+     * gate, no way to opt into the default (`true`, any wheel event)
+     * through it. `'ctrl'` reproduces the *original*, pre-this-option
+     * behavior (only `ctrl`+wheel); `false` turns wheel/trackpad zoom off
+     * entirely. Multiplicative-of-current-`scale`, not additive, and a much
+     * smaller coefficient than `GestureEngine`'s own ctrl+wheel path (0.01,
+     * additive) — matching Kiri's own proven-comfortable feel exactly
+     * (0.0015, `zoom * (1 + delta)`) rather than reusing GestureEngine's,
+     * which was tuned for a single discrete pinch gesture, not the stream of
+     * many small ticks a trackpad's two-finger drag/scroll actually sends;
+     * at GestureEngine's coefficient that stream felt aggressive.
+     */
+    function onWheel(event: WheelEvent): void {
+      if (mouseWheelZoom === false) return;
+      if (mouseWheelZoom === 'ctrl' && !event.ctrlKey) return;
+      event.preventDefault();
+      const deltaScale = -event.deltaY * 0.0015;
+      zoomTo(scale * (1 + deltaScale), event.clientX, event.clientY);
+    }
+    outer.addEventListener('wheel', onWheel, { passive: false });
 
     function onPointerDown(event: PointerEvent): void {
       if (scale <= ZOOM_EPSILON || isRealControl(event)) return;
@@ -592,7 +632,7 @@ export const Zoom: ShojiPlugin = {
       offPinchMove();
       offPinchEnd();
       offDoubleTap();
-      offWheelZoom();
+      outer.removeEventListener('wheel', onWheel);
       offRequestZoomIn();
       offRequestZoomOut();
       offRequestZoomActualSize();

@@ -448,11 +448,12 @@ describe('Zoom — pinch/wheel (core gesture relay, DESIGN.md §2.4)', () => {
 
     dialog().dispatchEvent(
       new WheelEvent('wheel', {
-        deltaY: -100,
+        deltaY: -1000, // one big flick, not a realistic single tick — Kiri's own gentler 0.0015 coefficient needs more deltaY than the old 0.01 did to clearly cross scale 2 in one dispatch
         ctrlKey: true,
         clientX: 150,
         clientY: 150,
         cancelable: true,
+        bubbles: true, // real wheel events always bubble — this plugin's own listener is on .shoji-outer, an ancestor of .shoji-dialog
       }),
     );
 
@@ -460,17 +461,103 @@ describe('Zoom — pinch/wheel (core gesture relay, DESIGN.md §2.4)', () => {
     gallery.destroy();
   });
 
-  it('plain (non-ctrl) wheel does not zoom', async () => {
+  it("plain (non-ctrl) wheel zooms too, by default (mouseWheelZoom: true) — the only way to also catch a trackpad's plain two-finger drag, which reports as an ordinary wheel event with no ctrl marker", async () => {
     const gallery = makeGallery();
     gallery.open(0);
     await flushSlideLoad();
 
     dialog().dispatchEvent(
-      new WheelEvent('wheel', { deltaY: -100, ctrlKey: false, clientX: 150, clientY: 150 }),
+      new WheelEvent('wheel', {
+        deltaY: -1000,
+        ctrlKey: false,
+        clientX: 150,
+        clientY: 150,
+        bubbles: true,
+      }),
     );
 
-    expect(activeImg().style.transform).toBe('');
+    expect(activeImg().style.transform).toMatch(/scale3d\(([2-9]|\d\d)/);
     gallery.destroy();
+  });
+
+  /**
+   * A trackpad's own two-finger *drag* (as opposed to a pinch) never
+   * reaches the browser as real multi-touch — the OS/browser reports it as
+   * a plain `wheel` event, identical in shape to an ordinary scroll or a
+   * bare mouse wheel. `mouseWheelZoom: true` is the only way to make that
+   * zoom, at the unavoidable cost of a bare mouse wheel also zooming (there
+   * is no way to tell the two apart).
+   */
+  describe('mouseWheelZoom option', () => {
+    it("'ctrl' — reproduces the option's own pre-existing behavior: a plain wheel event does not zoom, only ctrl+wheel does", async () => {
+      const gallery = makeGallery({ zoom: { mouseWheelZoom: 'ctrl' } });
+      gallery.open(0);
+      await flushSlideLoad();
+
+      dialog().dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -100, ctrlKey: false, bubbles: true }),
+      );
+
+      expect(activeImg().style.transform).toBe('');
+      gallery.destroy();
+    });
+
+    it('true — a plain wheel event (no ctrl) now also zooms, same as ctrl+wheel already did', async () => {
+      const gallery = makeGallery({ zoom: { mouseWheelZoom: true } });
+      gallery.open(0);
+      await flushSlideLoad();
+
+      dialog().dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: -1000,
+          ctrlKey: false,
+          clientX: 150,
+          clientY: 150,
+          bubbles: true,
+        }),
+      );
+
+      expect(activeImg().style.transform).toMatch(/scale3d\(([2-9]|\d\d)/);
+      gallery.destroy();
+    });
+
+    it('true — ctrl+wheel still works too (additive, not a replacement)', async () => {
+      const gallery = makeGallery({ zoom: { mouseWheelZoom: true } });
+      gallery.open(0);
+      await flushSlideLoad();
+
+      dialog().dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: -1000,
+          ctrlKey: true,
+          clientX: 150,
+          clientY: 150,
+          bubbles: true,
+        }),
+      );
+
+      expect(activeImg().style.transform).toMatch(/scale3d\(([2-9]|\d\d)/);
+      gallery.destroy();
+    });
+
+    it('false — not even ctrl+wheel zooms', async () => {
+      const gallery = makeGallery({ zoom: { mouseWheelZoom: false } });
+      gallery.open(0);
+      await flushSlideLoad();
+
+      dialog().dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: -100,
+          ctrlKey: true,
+          clientX: 150,
+          clientY: 150,
+          bubbles: true,
+        }),
+      );
+
+      expect(activeImg().style.transform).toBe('');
+      gallery.destroy();
+    });
   });
 });
 
@@ -782,6 +869,7 @@ describe("Zoom — transition (discrete jumps animate, continuous gestures don't
         clientX: 150,
         clientY: 150,
         cancelable: true,
+        bubbles: true,
       }),
     );
 

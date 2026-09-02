@@ -322,6 +322,14 @@ its own id) rather than a real function input.
               >buttonStep
               <input type="number" id="opt-zoom-buttonStep" value="1.5" min="1" step="0.1"
             /></label>
+            <label
+              >mouseWheelZoom
+              <select id="opt-zoom-mouseWheelZoom">
+                <option value="true" selected>true (default) — wheel + trackpad drag</option>
+                <option value="ctrl">ctrl — only ctrl+wheel</option>
+                <option value="false">false — off entirely</option>
+              </select></label
+            >
           </div>
         </fieldset>
 
@@ -981,6 +989,12 @@ its own id) rather than a real function input.
         const raw = $(id).value;
         return raw === 'false' ? false : raw;
       };
+      const boolOrCtrl = (id) => {
+        const raw = $(id).value;
+        if (raw === 'true') return true;
+        if (raw === 'false') return false;
+        return raw; // 'ctrl'
+      };
 
       let gallery = null;
 
@@ -1269,6 +1283,7 @@ its own id) rather than a real function input.
             maxScale: Number($('opt-zoom-maxScale').value),
             doubleTapScale: Number($('opt-zoom-doubleTapScale').value),
             buttonStep: Number($('opt-zoom-buttonStep').value),
+            mouseWheelZoom: boolOrCtrl('opt-zoom-mouseWheelZoom'),
           },
           autoplay: {
             interval: Number($('opt-autoplay-interval').value),

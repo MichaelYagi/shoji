@@ -70,13 +70,15 @@
           <td>Zoom</td>
           <td><code>Shoji.Zoom</code> / <code>zoom</code></td>
           <td>
-            Pinch, double-tap/double-click, ctrl+wheel, and three toolbar buttons (zoom in/out,
-            actual size) — pan by dragging once zoomed. Buttons are hidden entirely on a video slide
-            (nothing to zoom).
+            Pinch, double-tap/double-click, wheel/trackpad-scroll, and three toolbar buttons (zoom
+            in/out, actual size) — pan by dragging once zoomed. Buttons are hidden entirely on a
+            video slide (nothing to zoom).
           </td>
           <td>
             <code>maxScale</code> (4), <code>doubleTapScale</code> (2), <code>buttonStep</code>
-            (1.5)
+            (1.5), <code>mouseWheelZoom</code> (<code>true</code> — any wheel event zooms, the only
+            way to also catch a trackpad's plain two-finger drag; <code>'ctrl'</code> restricts it
+            to ctrl+wheel, <code>false</code> disables it)
           </td>
         </tr>
         <tr>

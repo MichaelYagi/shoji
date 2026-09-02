@@ -5,6 +5,31 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.15] - 2026-09-02
+
+### Added
+
+- **Zoom's `mouseWheelZoom?: boolean | 'ctrl'` option** (default `true`) —
+  a plain wheel/trackpad-scroll now zooms the active photo, on top of
+  pinch, the toolbar buttons, and `w`/`s`. This is the only way to make a
+  trackpad's plain two-finger _drag_ zoom: trackpads never expose raw
+  multi-touch to the browser, so a two-finger drag reports as an ordinary
+  `wheel` event, indistinguishable from a one-finger scroll or a bare
+  mouse wheel — inside the lightbox's own full-screen modal, with nothing
+  behind it to scroll, that reads as an added shortcut rather than a
+  conflict. `'ctrl'` reproduces the exact pre-existing behavior (only
+  `ctrl`+wheel zooms); `false` turns wheel/trackpad zoom off entirely.
+
+### Changed
+
+- **Wheel/trackpad zoom sensitivity reduced roughly sixfold and made
+  multiplicative** (`scale * (1 + delta)`, `delta = -deltaY * 0.0015`)
+  instead of additive (`scale + delta`, `delta = -deltaY * 0.01`) — the
+  first version reused `ctrl`+wheel's own coefficient, tuned for a single
+  discrete pinch, which felt aggressive against the steady stream of small
+  ticks a real two-finger drag sends. `ctrl`+wheel now uses this same
+  gentler formula.
+
 ## [0.1.0-beta.14] - 2026-09-02
 
 ### Added
