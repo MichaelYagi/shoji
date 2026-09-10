@@ -5,6 +5,36 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.16] - 2026-09-09
+
+### Added
+
+- **`GalleryItem.thumbnailWidth`/`thumbnailHeight`** (`data-shoji-thumbnail-width`/
+  `data-shoji-thumbnail-height` in selector mode) — declare the thumbnail's
+  own true pixel size, separately from `width`/`height` (the real photo's).
+  Lets Layout size a tile from the thumbnail's real shape instead of the
+  photo's when they deliberately differ (e.g. a fixed-shape thumbnail grid
+  next to variable-aspect-ratio photos), and lets the open-transition
+  placeholder grow to a correctly-shaped, correctly-scaled size instead of
+  guessing. Unset by default — no behavior change for any existing item.
+
+### Fixed
+
+- **The open/close zoom transition no longer collapses a photo into a thin
+  sliver when its thumbnail's aspect ratio genuinely differs from the
+  photo's own** (e.g. a real center-cropped square thumbnail next to a
+  panoramic photo) — falls back to a combined shrink/grow-plus-fade instead
+  of a single, badly-distorted scale. The same fallback also covers opening
+  an item with no known size at all, which previously skipped the zoom-in
+  animation outright rather than degrade gracefully.
+- **A bug in the above `thumbnailWidth`/`thumbnailHeight` feature, caught
+  before wide use**: the very first open of an item using it visibly slid
+  across the screen instead of zooming in (every later open zoomed
+  correctly) — the open placeholder was being capped at the thumbnail's own
+  tiny resolution instead of the real photo's, so the animation was almost
+  all movement and no size change. Fixed by capping placeholder size from
+  the real photo's dimensions first, the thumbnail's only as a last resort.
+
 ## [0.1.0-beta.15] - 2026-09-02
 
 ### Added

@@ -233,6 +233,69 @@ describe('zoomTransition', () => {
       expect(target.style.transform).toBe('');
     });
 
+    it("still jumps onto/transitions away from origin's box like the normal FLIP open, plus a simultaneous opacity fade, when the thumbnail is a deliberate crop whose aspect ratio has nothing to do with the photo's — a panoramic photo (3:1) against a center-cropped square thumbnail (1:1), the reported bug: transformBetween's single scale used to be the *only* thing shown, fully opaque, collapsing the photo into a thin horizontal strip instead of anything that reads as 'arriving at the thumbnail'. Fading it out alongside the same motion (not replacing the motion with a static in-place fade — reported back as unusable, 'can't tell where it fades to') keeps the sliver from ever being the fully-visible end state.", () => {
+      mockRect(origin, { top: 100, left: 50, width: 225, height: 225 }); // center-cropped square thumb
+      mockRect(target, { top: 0, left: 0, width: 1600, height: 533 }); // panoramic 3:1 slide
+
+      zoomIn({ origin, target, aspectRatio: 3000 / 1000 });
+
+      // Same FLIP target as the plain-zoom case — transitions toward natural
+      // layout, not an in-place fade with no motion at all.
+      expect(target.style.transform).toBe('none');
+      expect(target.style.opacity).toBe('1');
+      expect(target.style.transition).toContain('transform');
+      expect(target.style.transition).toContain('opacity');
+      expect(target.style.transition).toContain('var(--shoji-duration)');
+    });
+
+    it("falls back to the same transform-plus-fade combo when the target's true size is completely unknown, not just when it's known-but-mismatched — Gallery.ts's open() for an item with no declared width/height and nothing real rendered yet (no naturalSize, no real child in target): the analytical box effectiveTargetBox() would otherwise fall back to is an unguessed, uncapped size (\"probably fills the dialog\"), the exact overshoot Gallery.ts's own open() doc comment warns a genuinely small photo would suffer — fading it out the same way as an aspect-ratio mismatch sidesteps that regardless of which direction the guess is wrong in", () => {
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+
+      zoomIn({ origin, target }); // no aspectRatio, no naturalSize, target has no real child
+
+      expect(target.style.opacity).toBe('1');
+      expect(target.style.transition).toContain('transform');
+      expect(target.style.transition).toContain('opacity');
+    });
+
+    it('does not fall back to a fade for unknown target size when a real, already-rendered child is present — only actually unknown (no naturalSize AND nothing real to measure) triggers it', () => {
+      const img = document.createElement('img');
+      target.appendChild(img);
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+      mockRect(img, { top: 0, left: 0, width: 800, height: 600 }); // real, already-rendered content
+
+      zoomIn({ origin, target }); // still no aspectRatio, no naturalSize
+
+      expect(target.style.transform).toBe('none'); // plain zoom, not the fade combo
+      expect(target.style.opacity).toBe('');
+    });
+
+    it("does not fall back to a fade for unknown target size when naturalSize is known — Gallery.ts's own ordinary case (item.width/height declared, real image not loaded yet), unaffected by this fallback", () => {
+      mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
+      mockRect(target, { top: 0, left: 0, width: 800, height: 600 });
+
+      zoomIn({ origin, target, naturalSize: { width: 1600, height: 1200 } });
+
+      expect(target.style.transform).toBe('none');
+      expect(target.style.opacity).toBe('');
+    });
+
+    it('does not fall back to a fade for a merely letterboxed (not extremely mismatched) aspect ratio — a square thumbnail against a 16:9 photo (ratio 1.778) still gets the real zoom transform, not every shape mismatch should trigger the fallback', () => {
+      mockRect(origin, { top: 0, left: 0, width: 100, height: 100 }); // square tile
+      mockRect(target, { top: 0, left: 0, width: 1600, height: 900 }); // 16:9 slide
+
+      // naturalSize given — isolates this test to the aspect-ratio-mismatch
+      // check specifically; without it, the *separate* "unknown target
+      // size" fallback (no naturalSize, no real rendered child either)
+      // would also apply here, for an unrelated reason.
+      zoomIn({ origin, target, naturalSize: { width: 1600, height: 900 } });
+
+      expect(target.style.transform).toBe('none'); // real FLIP transition target, not a fade
+      expect(target.style.opacity).toBe('');
+    });
+
     it('does nothing under prefers-reduced-motion', () => {
       window.matchMedia = makeMatchMedia(true);
       mockRect(origin, { top: 100, left: 50, width: 40, height: 30 });
@@ -463,7 +526,13 @@ describe('zoomTransition', () => {
       } as CSSStyleDeclaration);
       target.style.opacity = '0.7'; // baked in before zoomOut() runs, as Gallery.beginClose does
 
-      zoomOut({ origin, target }, () => {});
+      // naturalSize given — a real close always has real content ready
+      // (isActiveReady() gates zoomOut() itself, Gallery.ts) or a known
+      // naturalSize; without either here, the *separate* "unknown target
+      // size" fallback would also apply, immediately overwriting the
+      // baked-in opacity as part of its own fade-in setup, for an
+      // unrelated reason this test isn't about.
+      zoomOut({ origin, target, naturalSize: { width: 800, height: 600 } }, () => {});
       expect(target.style.opacity).toBe('0.7'); // untouched while the transition is still running
 
       const event = new Event('transitionend') as Event & { propertyName?: string };
@@ -616,6 +685,60 @@ describe('zoomTransition', () => {
       );
 
       expect(firstTransform).toBe('translate3d(0px, 42px, 0px) scale3d(0.9, 0.9, 1)');
+    });
+
+    it("still transitions toward origin's box like the normal zoom-out, plus a simultaneous opacity fade, when the thumbnail is a deliberate crop whose aspect ratio has nothing to do with the photo's (the reported bug: a panoramic 3:1 photo closing into a center-cropped 1:1 square thumbnail used to collapse into a thin, fully-opaque horizontal strip). Fading it out alongside the same motion — not replacing the motion with a static in-place fade, reported back as unusable ('can't tell where it fades to') — keeps the sliver from ever being fully visible.", () => {
+      mockRect(origin, { top: 100, left: 50, width: 225, height: 225 });
+      mockRect(target, { top: 0, left: 0, width: 1600, height: 533 });
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+      const onComplete = vi.fn();
+
+      zoomOut({ origin, target, aspectRatio: 3000 / 1000 }, onComplete);
+
+      // Same translate3d/scale3d landing transform the plain-zoom case
+      // would use — the fallback doesn't skip it, just pairs it with a fade.
+      expect(target.style.transform).toMatch(/translate3d\([-\d.]+px, [-\d.]+px, 0\) scale3d/);
+      expect(target.style.opacity).toBe('0');
+      expect(target.style.transition).toContain('transform');
+      expect(target.style.transition).toContain('opacity');
+      expect(onComplete).not.toHaveBeenCalled();
+
+      // waitForTransitionEnd listens on the 'transform' property by default
+      // (unchanged) — both properties share the same duration/start, so
+      // either one's real transitionend signals "done" equally well.
+      const event = new Event('transitionend') as Event & { propertyName?: string };
+      Object.defineProperty(event, 'propertyName', { value: 'transform' });
+      target.dispatchEvent(event);
+
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(target.style.opacity).toBe('');
+      expect(target.style.transition).toBe('');
+      expect(target.style.transform).toBe(''); // cleaned up, matches what was written
+    });
+
+    it("regression: does not clobber another plugin's transform set on the same element before cleanup runs, via the aspect-mismatch fade-fallback path too — same protection as the plain-zoom path (clearInlineTransform only clears a transform that still matches what this animation itself last wrote), just reached via the fade branch", () => {
+      mockRect(origin, { top: 100, left: 50, width: 225, height: 225 });
+      mockRect(target, { top: 0, left: 0, width: 1600, height: 533 });
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+        transitionDuration: '300ms',
+      } as CSSStyleDeclaration);
+      const onComplete = vi.fn();
+
+      zoomOut({ origin, target, aspectRatio: 3000 / 1000 }, onComplete);
+      // another plugin (rotateFlip) sets its own transform on the same
+      // element before this animation's own transitionend fires
+      const rotateFlipTransform = 'scaleX(-1) scaleY(1) rotate(90deg)';
+      target.style.transform = rotateFlipTransform;
+
+      const event = new Event('transitionend') as Event & { propertyName?: string };
+      Object.defineProperty(event, 'propertyName', { value: 'transform' });
+      target.dispatchEvent(event);
+
+      expect(onComplete).toHaveBeenCalledTimes(1); // still fires, regardless
+      expect(target.style.transform).toBe(rotateFlipTransform);
+      expect(target.style.opacity).toBe(''); // opacity still cleared unconditionally
     });
 
     it('calls onComplete synchronously when there is no valid rect to animate to', () => {

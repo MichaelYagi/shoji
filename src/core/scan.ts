@@ -43,9 +43,16 @@ function numAttr(el: Element, name: string): number | undefined {
  * `.provider`, both already applied in `scanVideo` by the time this runs)
  * or have no field of their own at all (`no-drag`, GestureController's
  * drag-opt-out); `key in item` can't see either case, so both are excluded
- * by name instead.
+ * by name instead. `thumbnail-width`/`thumbnail-height` are the same
+ * shape — they fold into `thumbnailWidth`/`thumbnailHeight`.
  */
-const NO_OWN_DATA_FIELD = new Set(['no-drag', 'video-id', 'video-provider']);
+const NO_OWN_DATA_FIELD = new Set([
+  'no-drag',
+  'video-id',
+  'video-provider',
+  'thumbnail-width',
+  'thumbnail-height',
+]);
 
 function applyCommon(element: HTMLElement, item: GalleryItem, src: string): void {
   const caption = attr(element, 'data-shoji-caption');
@@ -75,6 +82,10 @@ function scanImage(element: HTMLElement): GalleryItem | undefined {
   if (width !== undefined) item.width = width;
   const height = numAttr(element, 'data-shoji-height');
   if (height !== undefined) item.height = height;
+  const thumbnailWidth = numAttr(element, 'data-shoji-thumbnail-width');
+  if (thumbnailWidth !== undefined) item.thumbnailWidth = thumbnailWidth;
+  const thumbnailHeight = numAttr(element, 'data-shoji-thumbnail-height');
+  if (thumbnailHeight !== undefined) item.thumbnailHeight = thumbnailHeight;
   // On the wrapping element, not the inner <img> (that's the thumb; `src`
   // above is the full-resolution image, so it needs its own attribute).
   const srcset = attr(element, 'data-shoji-srcset');

@@ -1640,16 +1640,16 @@ export class Gallery {
     this.captionVisibleOnVideo = !!this.options.showVideoCaption;
     lockBodyScroll();
     const origin = this.getOriginElement(index);
-    // Both the open placeholder and the zoom-in animation below need a size
-    // to show/grow toward before the real image has loaded — without
-    // item.width/height, that size can only ever be guessed ("probably
-    // fills the dialog"), which is exactly what visibly overshoots for a
-    // genuinely small photo (§2.3/§2.3b's own real-bug history). Rather
-    // than guess, skip both entirely when naturalSize is unknown: the
-    // ordinary spinner shows, and the real image just appears once it's
-    // ready — no animation of its own, deliberately (same "no second,
-    // disconnected transition" reasoning the placeholder-to-real-image
-    // handoff already uses elsewhere).
+    // The open placeholder below needs a size to show/grow toward before
+    // the real image has loaded — guessing overshoots a genuinely small
+    // photo (§2.3/§2.3b's real-bug history). resolveNaturalSize() covers
+    // this with a real size when either item.width/height or
+    // item.thumbnailWidth/thumbnailHeight is known; only when neither is
+    // does the placeholder skip and the spinner show instead. The zoom-in
+    // animation itself still always runs (below) regardless —
+    // zoomTransition.ts's computeTransformOutcome() falls back to a fade
+    // rather than a wrong-sized zoom whenever it can't trust the target's
+    // size either.
     const naturalSize = this.resolveNaturalSize(index);
     // The first slide's caption fades in alongside zoomIn() the same way a
     // navigated-to one fades in alongside the mode transition (§2.5) —
@@ -1688,7 +1688,7 @@ export class Gallery {
     this.scheduleAutoHide();
 
     const media = this.slides?.getActiveMedia();
-    if (media && origin && naturalSize) {
+    if (media && origin) {
       zoomIn({
         origin,
         target: media,
@@ -1952,9 +1952,12 @@ export class Gallery {
     this.bus.emit('dragCloseThreshold', { hidden });
   }
 
-  /** `item.width`/`height`, else origin's `naturalWidth`/`naturalHeight` (accurate when `item.thumb` is unset). Feeds `computeTransform`'s letterbox-aware sizing. */
+  /** `item.thumbnailWidth`/`thumbnailHeight` (the thumbnail's own true shape) first, else `item.width`/`height` (the photo's), else origin's live `naturalWidth`/`naturalHeight`. Shape only — see `resolveNaturalSize` for why the size cap below uses the opposite order. DESIGN.md §2.3b (sixteenth/seventeenth entries). */
   private resolveAspectRatio(index: number, origin: HTMLElement | null): number | undefined {
     const item = this.itemList[index];
+    if (item?.thumbnailWidth && item.thumbnailHeight) {
+      return item.thumbnailWidth / item.thumbnailHeight;
+    }
     if (item?.width && item.height) return item.width / item.height;
     const thumbImg = origin?.querySelector('img');
     if (thumbImg?.naturalWidth && thumbImg.naturalHeight) {
@@ -1963,18 +1966,14 @@ export class Gallery {
     return undefined;
   }
 
-  /**
-   * `item.width`/`height` only — deliberately never a thumbnail's own
-   * `naturalWidth`/`naturalHeight` the way `resolveAspectRatio` above will:
-   * that's a fine stand-in for *shape*, but using it as the real photo's
-   * true pixel size would under-cap a genuinely large photo down to
-   * thumbnail resolution. `undefined` here just means "genuinely unknown,"
-   * not "assume small" — `zoomTransition.ts`'s `containedBox` already
-   * treats it that way (no cap applied at all).
-   */
+  /** `item.width`/`height` (the real photo) first, `item.thumbnailWidth`/`thumbnailHeight` only once that's unknown too — opposite priority from `resolveAspectRatio` on purpose: this only caps the placeholder's *size*, never its shape, so preferring the real (usually larger) photo size is never a distortion risk, and is what lets the placeholder grow to a properly large size instead of the thumbnail's own tiny one. DESIGN.md §2.3b (seventeenth entry) has the real bug this fixed. */
   private resolveNaturalSize(index: number): { width: number; height: number } | undefined {
     const item = this.itemList[index];
-    return item?.width && item.height ? { width: item.width, height: item.height } : undefined;
+    if (item?.width && item.height) return { width: item.width, height: item.height };
+    if (item?.thumbnailWidth && item.thumbnailHeight) {
+      return { width: item.thumbnailWidth, height: item.thumbnailHeight };
+    }
+    return undefined;
   }
 
   /**

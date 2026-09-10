@@ -166,7 +166,7 @@ function effectiveTargetBox(
  * on origin's center, only the unconstrained axis's edges fall short.
  */
 /**
- * The actual translate3d/scale3d math `computeTransform` below needs —
+ * The actual translate3d/scale3d math `computeTransformOutcome` below needs —
  * pulled out on its own so `zoomOut`'s `zoomStart` jump (a *second* use of
  * the exact same center-to-center box-fitting math, landing on a captured
  * live rect instead of `origin`'s) can reuse it directly, rather than
@@ -215,12 +215,72 @@ function effectiveOriginBox(origin: HTMLElement): Box {
   return origin.getBoundingClientRect();
 }
 
-function computeTransform(
+/**
+ * How much more extreme one box's aspect ratio can be than the other's
+ * before `transformBetween`'s single uniform scale (`Math.min`-constrained,
+ * same tradeoff `object-fit: contain` makes) stops reading as "shrinking
+ * into the thumbnail" and starts reading as "collapsing into a sliver" — a
+ * deliberately cropped thumbnail (e.g. a center-cropped square next to a
+ * panoramic photo) can differ from the real photo's shape by far more than
+ * ordinary letterboxing ever does. `2` (not the `1.5` first proposed):
+ * `tests/unit/zoomTransition.test.ts`'s own "never distorts the image's
+ * aspect ratio" regression fixture (a square origin against a 16:9 target,
+ * ratio 1.778) is a real, intentional case that must still get the plain
+ * zoom transform, opacity fade included — it lands at ~56% of the origin's
+ * height, letterboxed but clearly still "arriving at the thumbnail," and
+ * doesn't need the fade to read correctly. `1.5` would have wrongly routed
+ * that case through the fade-plus-transform combo below too. `2` keeps that
+ * case (1.778 < 2) while still catching a 3:1 panoramic photo against a
+ * square thumbnail (ratio 3.0 > 2), the reported bug — that one lands at
+ * ~33% of the origin's height, a visibly thin strip if left fully opaque.
+ */
+const ASPECT_MISMATCH_THRESHOLD = 2;
+
+type TransformOutcome =
+  /** A sane single-scale zoom transform exists — used alone. */
+  | { kind: 'zoom'; transform: string }
+  /**
+   * Both boxes have real size, but their aspect ratios differ too much for
+   * `transform` alone to look sane (still `transformBetween`'s own
+   * translate/scale — there's no *other* way to move toward the thumbnail's
+   * position) — paired with a simultaneous opacity fade so the mismatch
+   * dissolves away as part of the motion, never sitting fully opaque as the
+   * animation's own final, distorted-looking frame. A plain in-place fade
+   * (no `transform` at all) was tried first and reported back as reading
+   * "I can't tell where it fades to" — the translate/scale is what keeps
+   * this move legible as "going toward the thumbnail," the fade just keeps
+   * the sliver shape from ever being the thing fully shown.
+   */
+  | { kind: 'fade'; transform: string }
+  /** No real size to animate to/from at all (e.g. `origin` isn't actually
+   * laid out) — nothing sane to do, animated or not. */
+  | { kind: 'none' };
+
+/**
+ * True if `target`'s effective box (`effectiveTargetBox` above) came from
+ * actually measuring real, already-rendered content — not a guess.
+ * Duplicates that function's own "is this a trustworthy child" check
+ * rather than having it report the distinction back, since only this one
+ * caller needs it. See `computeTransformOutcome`'s own `unknownTargetSize`
+ * for why the distinction matters.
+ */
+function hasRealTargetContent(target: HTMLElement): boolean {
+  const child = target.firstElementChild;
+  const isPlaceholder =
+    child instanceof HTMLElement &&
+    (child.classList.contains('shoji-slide-spinner') ||
+      child.classList.contains('shoji-slide-open-placeholder'));
+  if (!(child instanceof HTMLElement) || isPlaceholder) return false;
+  const rect = child.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function computeTransformOutcome(
   origin: HTMLElement,
   target: HTMLElement,
   aspectRatio?: number,
   naturalSize?: { width: number; height: number },
-): string | null {
+): TransformOutcome {
   const originRect = effectiveOriginBox(origin);
   const targetRect = effectiveTargetBox(target, aspectRatio, naturalSize);
   if (
@@ -229,10 +289,35 @@ function computeTransform(
     originRect.width === 0 ||
     originRect.height === 0
   ) {
-    return null;
+    return { kind: 'none' };
   }
-  return transformBetween(targetRect, originRect);
+  const transform = transformBetween(targetRect, originRect);
+  // `effectiveTargetBox` had nothing real to measure and no `naturalSize`
+  // to cap an analytical guess at (Gallery.ts's open() own doc comment:
+  // guessing "probably fills the dialog" visibly overshoots a genuinely
+  // small photo) — `targetRect` above is thus an uncapped guess, not a
+  // number to confidently zoom toward. Same "can't trust a single
+  // scale/size, fade instead" reasoning as the aspect-mismatch case below,
+  // just triggered by an unknown size instead of a known-but-mismatched
+  // one. Never hits this for a real close (isActiveReady() gates zoomOut()
+  // itself, Gallery.ts) — only an open() before anything's loaded, with no
+  // item.width/height declared either.
+  const unknownTargetSize = !naturalSize && !hasRealTargetContent(target);
+  if (unknownTargetSize) {
+    return { kind: 'fade', transform };
+  }
+  const originRatio = originRect.width / originRect.height;
+  const targetRatio = targetRect.width / targetRect.height;
+  const ratioOfRatios = Math.max(originRatio, targetRatio) / Math.min(originRatio, targetRatio);
+  if (ratioOfRatios > ASPECT_MISMATCH_THRESHOLD) {
+    return { kind: 'fade', transform };
+  }
+  return { kind: 'zoom', transform };
 }
+
+/** Both `transform` and `opacity`, same duration — the `'fade'` outcome's own transition value; see its doc comment for why both properties animate together. */
+const FADE_TRANSITION =
+  'transform var(--shoji-duration) var(--shoji-easing), opacity var(--shoji-duration) var(--shoji-easing)';
 
 /**
  * Waits for `target`'s own transition (on `property`, default `'transform'`)
@@ -279,9 +364,9 @@ export function waitForTransitionEnd(
  *
  * A second real bug, found via reopening the lightbox: `expectedTransform`
  * must be the value *read back* from `target.style.transform` right after
- * assigning it, not the raw string `computeTransform()` produced. Setting
- * `element.style.transform` to a string containing an arbitrary JS float
- * (e.g. `scale(0.10416666666666667)`, `computeTransform`'s un-rounded
+ * assigning it, not the raw string `computeTransformOutcome()` produced.
+ * Setting `element.style.transform` to a string containing an arbitrary JS
+ * float (e.g. `scale(0.10416666666666667)`, `transformBetween`'s un-rounded
  * `Math.min(...)` result) and reading it back gives a *differently
  * formatted* string — the browser's CSSOM serializer rounds/reformats
  * numeric values on its own (observed in Chromium: `scale(0.104167)`).
@@ -289,7 +374,7 @@ export function waitForTransitionEnd(
  * failed for any scale factor without a short, clean decimal, silently
  * skipping the clear — permanently leaving `zoomOut`'s shrink transform
  * applied to `.shoji-slide-media` after the lightbox closed. The next
- * `open()`'s `computeTransform` then measured that *already-shrunk*
+ * `open()`'s `computeTransformOutcome` then measured that *already-shrunk*
  * element's `getBoundingClientRect()` as if it were the natural size,
  * computing a near-1 (barely visible) scale instead of a real zoom-in —
  * reads as "doesn't zoom, just appears," and compounds on every further
@@ -319,11 +404,15 @@ function clearInlineTransform(target: HTMLElement, expectedTransform: string): v
  */
 export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransitionTarget): void {
   if (prefersReducedMotion()) return;
-  const transform = computeTransform(origin, target, aspectRatio, naturalSize);
-  if (!transform) return;
+  const outcome = computeTransformOutcome(origin, target, aspectRatio, naturalSize);
+  if (outcome.kind === 'none') return;
+  const { transform } = outcome;
+  // See the `'fade'` outcome's own doc comment — animates alongside the
+  // same transform below, not instead of it.
+  const isFade = outcome.kind === 'fade';
 
   target.style.transition = 'none';
-  // computeTransform's translateX/Y is center-to-center math — must pair with
+  // transformBetween's translateX/Y is center-to-center math — must pair with
   // a center transform-origin (the CSS default), not 'top left', or the
   // scaled box ends up offset from origin by however far origin's center
   // sits from its own top-left corner.
@@ -334,11 +423,15 @@ export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransit
   // transition ends, not left on permanently: this is the offset-0 pool
   // slot, alive for the gallery's whole lifetime, not a class scoped to
   // only-while-zoomed.
-  target.style.willChange = 'transform';
+  target.style.willChange = isFade ? 'transform, opacity' : 'transform';
   target.style.transform = transform;
+  if (isFade) target.style.opacity = '0';
   void target.offsetHeight; // force the instant jump to commit before transitioning away from it
-  target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+  target.style.transition = isFade
+    ? FADE_TRANSITION
+    : 'transform var(--shoji-duration) var(--shoji-easing)';
   target.style.transform = 'none';
+  if (isFade) target.style.opacity = '1';
 
   waitForTransitionEnd(target, () => clearInlineTransform(target, 'none'));
 }
@@ -360,18 +453,22 @@ export function zoomOut(
   }
   // Measured before dragStart/zoomStart is ever applied to `target` — see
   // ZoomTransitionTarget.dragStart's doc comment for why the order matters.
-  const transform = computeTransform(origin, target, aspectRatio, naturalSize);
-  if (!transform) {
+  const outcome = computeTransformOutcome(origin, target, aspectRatio, naturalSize);
+  if (outcome.kind === 'none') {
     onComplete();
     return;
   }
+  const { transform } = outcome;
+  // See zoomIn's own doc comment on this — same "animates alongside the
+  // transform, not instead of it" reasoning.
+  const isFade = outcome.kind === 'fade';
 
-  // computeTransform's translateX/Y is center-to-center math — must pair with
+  // transformBetween's translateX/Y is center-to-center math — must pair with
   // a center transform-origin (the CSS default), not 'top left', or the
   // scaled box ends up offset from origin by however far origin's center
   // sits from its own top-left corner.
   target.style.transformOrigin = 'center';
-  target.style.willChange = 'transform'; // see zoomIn's doc comment on this line
+  target.style.willChange = isFade ? 'transform, opacity' : 'transform'; // see zoomIn's doc comment on this line
   if (dragStart) {
     // Instant jump to exactly where the drag left off — same FLIP
     // technique `zoomIn()` uses to jump onto origin's box before
@@ -392,7 +489,7 @@ export function zoomOut(
     // — see ZoomTransitionTarget.zoomStart's doc comment for why that
     // doesn't work here). `target`'s own effective box, re-measured fresh:
     // cheap, and guaranteed unchanged since the read inside
-    // computeTransform() above — nothing's touched `target` in between.
+    // computeTransformOutcome() above — nothing's touched `target` in between.
     // Still correct even if `target` is currently rotated/flipped (the
     // RotateFlip plugin, applied directly to this same element, unlike
     // Zoom's own scale/pan — see below): both this measurement and
@@ -420,9 +517,12 @@ export function zoomOut(
       void target.offsetHeight;
     }
   }
-  target.style.transition = 'transform var(--shoji-duration) var(--shoji-easing)';
+  target.style.transition = isFade
+    ? FADE_TRANSITION
+    : 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;
   target.style.transform = transform;
+  if (isFade) target.style.opacity = '0';
   // Read back what the browser actually stored, not the raw string just
   // assigned — see clearInlineTransform's own doc comment for why the two
   // can differ (CSSOM float reformatting) and why that difference matters.

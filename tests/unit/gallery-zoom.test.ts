@@ -280,7 +280,7 @@ describe('Gallery — open-placeholder source (item.thumb / data-shoji-thumb / o
   });
 });
 
-describe('Gallery — no known dimensions means no guessing (open placeholder AND zoom-in animation both skipped, not just sized differently)', () => {
+describe('Gallery — no known dimensions means no guessing (open placeholder still skipped; the zoom-in animation itself still runs, via zoomTransition.ts\'s own "unknown target size" fade fallback rather than a guessed size)', () => {
   it('shows the plain spinner, not the thumbnail placeholder, when item.width/height are unknown — even though a thumb source (item.thumb) is available', () => {
     const mount = document.createElement('div');
     const marker = document.createElement('div');
@@ -300,7 +300,7 @@ describe('Gallery — no known dimensions means no guessing (open placeholder AN
     gallery.destroy();
   });
 
-  it('does not run the zoom-in animation on open() when item.width/height are unknown, even with a valid origin found', () => {
+  it('still runs the zoom-in animation on open() when item.width/height are unknown, even with a valid origin found — via zoomTransition.ts\'s own "unknown target size" fade fallback (no naturalSize to trust an analytical contained-box guess at), not by skipping the animation outright the way it used to', () => {
     const mount = document.createElement('div');
     const marker = document.createElement('div');
     marker.setAttribute('data-shoji-id', 'x');
@@ -313,8 +313,9 @@ describe('Gallery — no known dimensions means no guessing (open placeholder AN
     });
     gallery.open(0);
 
-    expect(zoomTransition.zoomIn).not.toHaveBeenCalled();
-    expect(activeMedia().style.transform).toBe('');
+    expect(zoomTransition.zoomIn).toHaveBeenCalledTimes(1);
+    expect(activeMedia().style.transform).toBe('none'); // real FLIP target, not skipped
+    expect(activeMedia().style.opacity).toBe('1'); // the fade-fallback pairing
 
     marker.remove();
     gallery.destroy();

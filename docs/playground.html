@@ -532,8 +532,9 @@ its own id) rather than a real function input.
       // are the ORIGINAL's real pixel size, not the thumb's — required
       // for the open-transition growth cap and Layout's measure-free
       // positioning (see that example page for the full explanation).
-      function svgDataUri(label, w, h, color) {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${w / 8}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+      function svgDataUri(label, w, h, color, fontSize) {
+        const size = fontSize ?? w / 8;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${color}"/><text x="${w / 2}" y="${h / 2}" font-size="${size}" fill="white" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
       }
 
@@ -653,6 +654,56 @@ its own id) rather than a real function input.
           height: 534,
           video: true,
         },
+        // Deliberately not photoItem() and deliberately no width/height —
+        // a real 240x240 square thumbnail next to a 3000x1000 (3:1)
+        // panoramic photo, demonstrating the aspect-ratio-mismatch
+        // open/close-animation fallback (zoomTransition.ts). No
+        // width/height means Layout's autoMeasure (on by default,
+        // DESIGN.md §5) reads this item's own true shape from its
+        // thumbnail — genuinely square — for tile-sizing purposes, so it
+        // renders as a real square tile in every Layout type, with no
+        // custom CSS and no broken row/column math (Layout is using its
+        // own correct measurement, not fighting an external override).
+        //
+        // thumbnailWidth/thumbnailHeight (Gallery.ts's own
+        // resolveNaturalSize()/resolveAspectRatio(), separate from Layout
+        // entirely — Layout never reads these) declare the thumbnail's own
+        // true size for the *lightbox's* benefit, since width/height (the
+        // real photo's size) is deliberately absent above: without either,
+        // the open animation would have nothing trustworthy to grow toward
+        // and would fall back to a plain fade with no real placeholder
+        // shown first (reported back as "starts from a blank background").
+        // With thumbnailWidth/thumbnailHeight known, the real placeholder
+        // (the thumbnail image itself) shows immediately and grows to its
+        // own correct size, and the real 3:1 photo swaps in once it's
+        // loaded, same handoff every other item's own low-res-to-full-res
+        // placeholder already goes through.
+        //
+        // The close animation detects the real mismatch regardless of any
+        // of this: zoomTransition.ts's effectiveTargetBox() measures the
+        // *actual rendered photo* once it's loaded, not any declared size
+        // — by the time you close, the real 3:1 photo has been on screen
+        // and decoded the whole time you were viewing it. Open/close this
+        // item and watch both animations — before the fallback, the
+        // panoramic photo visibly collapsed into a thin horizontal strip
+        // while shrinking toward the square thumbnail on close (and
+        // started from nothing at all on open); now both directions fade
+        // as they zoom instead.
+        {
+          id: '25',
+          caption: 'Sunset 25 (panoramic photo, real square thumbnail)',
+          metadata_id: '996',
+          width: 3000,
+          height: 1000,
+          thumbnailWidth: 240,
+          thumbnailHeight: 240,
+          thumb: svgDataUri('thumb 25', 240, 240, COLORS[4]),
+          // Explicit fontSize — the shared default (w/8) is tuned for
+          // near-square/portrait/landscape items; at this deliberately
+          // panoramic 3:1 shape it massively overflows (375px against a
+          // 1000px-tall canvas).
+          src: svgDataUri('ORIGINAL 25 (panoramic)', 3000, 1000, COLORS[4], 150),
+        },
       ];
 
       // DOM mode isn't a second, hand-duplicated item list — it's generated
@@ -679,6 +730,10 @@ its own id) rather than a real function input.
               attrs.push(`data-shoji-metadata_id="${escapeAttr(item.metadata_id)}"`);
             if (item.width) attrs.push(`data-shoji-width="${escapeAttr(item.width)}"`);
             if (item.height) attrs.push(`data-shoji-height="${escapeAttr(item.height)}"`);
+            if (item.thumbnailWidth)
+              attrs.push(`data-shoji-thumbnail-width="${escapeAttr(item.thumbnailWidth)}"`);
+            if (item.thumbnailHeight)
+              attrs.push(`data-shoji-thumbnail-height="${escapeAttr(item.thumbnailHeight)}"`);
 
             if (item.video) {
               if (item.poster) attrs.push(`data-shoji-poster="${escapeAttr(item.poster)}"`);

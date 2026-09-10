@@ -438,6 +438,20 @@ export const Layout: ShojiPlugin = {
     }
 
     function aspectOf(item: GalleryItem | undefined): MasonryTile {
+      // thumbnailWidth/thumbnailHeight (a host-declared thumbnail shape,
+      // e.g. a fixed-shape thumbnail grid next to a variable-aspect-ratio
+      // photo — Gallery.ts's own resolveAspectRatio()/resolveNaturalSize()
+      // read the same field, same priority, for the zoom-transition's
+      // benefit) wins over width/height here on purpose: this tile
+      // *represents* the thumbnail, so its own true shape — when the host
+      // bothered to declare one, genuinely different from the photo's —
+      // is what a tile should actually look like, not the real photo's
+      // shape squashed onto it. width/height (the real photo) still fully
+      // applies whenever thumbnailWidth/thumbnailHeight aren't set, exactly
+      // as before.
+      if (item?.thumbnailWidth && item.thumbnailHeight) {
+        return { width: item.thumbnailWidth, height: item.thumbnailHeight };
+      }
       if (item?.width && item.height) return { width: item.width, height: item.height };
       const measured = item && measuredAspect.get(item);
       if (measured) return measured;

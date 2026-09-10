@@ -13,6 +13,24 @@ export interface GalleryItem {
   video?: VideoDescriptor;
   width?: number;
   height?: number;
+  /**
+   * The *thumbnail's* own true pixel size — never the real photo's, which
+   * `width`/`height` above already cover. Only meaningful when a
+   * thumbnail's rendered shape can genuinely differ from the photo it
+   * represents (e.g. a host's own fixed-shape thumbnail grid next to a
+   * variable-aspect-ratio photo). Takes priority over `width`/`height`
+   * wherever the *thumbnail's* own shape is what matters, when both are
+   * given: Layout's own tile-shape sizing (`src/plugins/layout`) — a tile
+   * represents the thumbnail, not the photo — and the zoom-transition's
+   * open-placeholder sizing (`zoomTransition.ts`, via `Gallery.ts`'s
+   * `resolveAspectRatio`/`resolveNaturalSize`), which really does show the
+   * thumbnail image itself and grows it to a real, correctly-scaled size
+   * rather than the real photo's (possibly very different) shape. Falls
+   * back to `width`/`height` wherever this is unset — no behavior change
+   * for an item that never declares it.
+   */
+  thumbnailWidth?: number;
+  thumbnailHeight?: number;
   alt?: string;
   caption?: string | HTMLElement | DangerousHtmlCaption;
   download?: string | false;
