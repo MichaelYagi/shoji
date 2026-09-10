@@ -1589,7 +1589,12 @@ export class Gallery {
     this.bus.emit('captionModalChange', { open: false });
   }
 
-  private renderCurrentSlide(openPlaceholderSrc?: string): void {
+  /** `onCenterContentVisible` — only `open()` passes this, to start the zoom-in once something real is actually visible (its own `beginZoom` doc comment). */
+  private renderCurrentSlide(
+    openPlaceholderSrc?: string,
+    onCenterContentVisible?: () => void,
+    openPlaceholderAlreadyVisible = false,
+  ): void {
     if (!this.slides || !this.dom) return;
     const dom = this.dom;
     this.slides.render(
@@ -1605,10 +1610,13 @@ export class Gallery {
           // that's actually supposed to update it), especially for an
           // already-preloaded slide.
           if (!this.captionFadePending) this.updateCaptionVisibility();
+          onCenterContentVisible?.();
         }
       },
       openPlaceholderSrc,
       this.loop,
+      onCenterContentVisible,
+      openPlaceholderAlreadyVisible,
     );
     this.setSlideLoading(!this.slides.isActiveReady());
 
@@ -1677,34 +1685,68 @@ export class Gallery {
     // navigate() never passes one) — same "no second, disconnected
     // transition" reasoning as the naturalSize-unknown case above, just
     // triggered by content type instead of missing dimensions.
-    this.renderCurrentSlide(
+    const openPlaceholderSrc =
       naturalSize && !this.itemList[index]?.video
         ? this.resolveOpenPlaceholderSrc(this.itemList[index], origin)
-        : undefined,
+        : undefined;
+    // True when `openPlaceholderSrc` is the exact same resource `origin`'s
+    // own `<img>` is already showing on screen right now — the overwhelming
+    // common case, since a thumbnail's own `item.thumb` is normally also
+    // what rendered it in the grid. That image is *already decoded and
+    // painted* — a real bug: still routing it through the same
+    // decode()-then-reveal wait as a genuinely fresh, never-seen resource
+    // (SlideManager.ts's revealOpenPlaceholder()) held the dialog on a bare,
+    // empty box for a real (reported, screen-recorded) stretch before
+    // anything appeared, even though there was nothing left to actually
+    // wait for.
+    const originImg = origin?.querySelector('img');
+    const openPlaceholderAlreadyVisible =
+      !!openPlaceholderSrc &&
+      !!originImg &&
+      (originImg.currentSrc || originImg.src) === openPlaceholderSrc;
+    // Deferred, not fired synchronously here: `target` still holds the
+    // spinner until the open placeholder's own decode() resolves
+    // (SlideManager.ts's revealOpenPlaceholder(), a microtask away) — start
+    // the FLIP grow before then and the viewer watches an empty box grow
+    // for a couple of frames (DESIGN.md §2.3b). Fires from whichever of
+    // {placeholder, real content} lands first; zoomStarted guards against
+    // both.
+    let zoomStarted = false;
+    const beginZoom = (): void => {
+      if (zoomStarted) return;
+      zoomStarted = true;
+      const media = this.slides?.getActiveMedia();
+      if (media && origin) {
+        zoomIn({
+          origin,
+          target: media,
+          aspectRatio: this.resolveAspectRatio(index, origin),
+          naturalSize,
+        });
+      }
+      if (fadeInOnOpen && this.dom) {
+        // No half-duration split here, unlike transitionCaption() — there's
+        // no outgoing caption to fade out first, just this one fading in
+        // from nothing, over the same full --shoji-duration zoomIn() itself
+        // runs on.
+        this.captionFadePending = false;
+        this.updateCaptionVisibility();
+        this.dom.caption.style.opacity = '';
+      }
+    };
+    this.renderCurrentSlide(
+      openPlaceholderSrc,
+      openPlaceholderSrc ? beginZoom : undefined,
+      openPlaceholderAlreadyVisible,
     );
     this.dom!.outer.classList.add('shoji-open');
     document.addEventListener('keydown', this.onKeydown);
     this.focusTrap.activate(this.dom!.dialog);
     this.scheduleAutoHide();
 
-    const media = this.slides?.getActiveMedia();
-    if (media && origin) {
-      zoomIn({
-        origin,
-        target: media,
-        aspectRatio: this.resolveAspectRatio(index, origin),
-        naturalSize,
-      });
-    }
-    if (fadeInOnOpen && this.dom) {
-      // No half-duration split here, unlike transitionCaption() — there's
-      // no outgoing caption to fade out first, just this one fading in
-      // from nothing, over the same full --shoji-duration zoomIn() itself
-      // runs on.
-      this.captionFadePending = false;
-      this.updateCaptionVisibility();
-      this.dom.caption.style.opacity = '';
-    }
+    // Nothing to wait on, or already resident (a reopen) — SlideManager.ts's
+    // own "nothing to do" fast path never calls back for that case at all.
+    if (!openPlaceholderSrc || this.slides?.isActiveReady()) beginZoom();
 
     this.bus.emit('open', { index });
     this.bus.emit('afterOpen', { index });

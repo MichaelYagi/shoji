@@ -112,13 +112,15 @@ export class SlideManager {
     }
   }
 
-  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only from `Gallery.open()`) swaps the centerIndex slot's spinner for a low-res placeholder once it decodes, if not already ready. `loop` matches `Gallery.ts`'s own `nextIndex()`/`prevIndex()` wrap-around — without it, the pool slot just past the last (or before the first) item has no item to preload at all, so a boundary drag reveals nothing even though the completed navigation itself already wraps correctly. */
+  /** Re-renders whichever slots need a different item; `onLoad` fires per index once its media settles. `openPlaceholderSrc` (only from `Gallery.open()`) swaps the centerIndex slot's spinner for a low-res placeholder once it decodes, if not already ready; `onOpenPlaceholderReady` fires once that swap happens (`Gallery.ts`'s `beginZoom` doc comment explains why). `openPlaceholderAlreadyVisible` (`Gallery.ts`'s own doc comment on it) skips that decode wait entirely when it's not actually needed. `loop` matches `Gallery.ts`'s own `nextIndex()`/`prevIndex()` wrap-around — without it, the pool slot just past the last (or before the first) item has no item to preload at all, so a boundary drag reveals nothing even though the completed navigation itself already wraps correctly. */
   render(
     items: readonly GalleryItem[],
     centerIndex: number,
     onLoad: (index: number) => void,
     openPlaceholderSrc?: string,
     loop = false,
+    onOpenPlaceholderReady?: () => void,
+    openPlaceholderAlreadyVisible = false,
   ): void {
     // A real bug found wiring this up, in two parts:
     // 1. Wrapping is only safe from an *index-collision* standpoint when
@@ -220,7 +222,29 @@ export class SlideManager {
       if (index === centerIndex && openPlaceholderSrc) {
         const naturalSize =
           item.width && item.height ? { width: item.width, height: item.height } : undefined;
-        this.revealOpenPlaceholder(openPlaceholderSrc, slot, index, naturalSize);
+        // The box's *shape*: item.thumbnailWidth/thumbnailHeight (the
+        // placeholder image's own real shape) when declared, else
+        // naturalSize's — same thumbnail-shape-wins priority as
+        // Gallery.ts's resolveAspectRatio() and Layout's aspectOf(). A real
+        // bug found via this exact demo item: sizing the placeholder box to
+        // the real *photo*'s aspect (3:1) while its actual pixels are the
+        // *thumbnail*'s (a square) left most of the box transparent —
+        // object-fit: contain letterboxes the square into a thin strip
+        // inside the wide box, reading as a "blank" flash once that box is
+        // shrunk down to the origin thumbnail's on-screen size.
+        const aspectRatio =
+          item.thumbnailWidth && item.thumbnailHeight
+            ? item.thumbnailWidth / item.thumbnailHeight
+            : naturalSize && naturalSize.width / naturalSize.height;
+        this.revealOpenPlaceholder(
+          openPlaceholderSrc,
+          slot,
+          index,
+          naturalSize,
+          aspectRatio,
+          onOpenPlaceholderReady,
+          openPlaceholderAlreadyVisible,
+        );
       }
 
       if (item.video?.provider === 'html5') {
@@ -358,16 +382,32 @@ export class SlideManager {
    * (`.shoji-slide`) fixes it: same box, only ever `translateX`'d for
    * pool-offset positioning, never scaled — a stable read regardless of
    * what its child is mid-animation through.
+   *
+   * A third real bug: `aspectRatio` (the box's *shape*) must come from the
+   * thumbnail's own aspect (`item.thumbnailWidth`/`thumbnailHeight` when
+   * declared, the caller's own doc comment on this call explains the
+   * priority) — this image's actual pixels are the thumbnail's, and sizing
+   * the box to `naturalSize`'s aspect (the real photo's) instead left most
+   * of it transparent whenever the two differ, `object-fit: contain`
+   * letterboxing the real thumbnail content down to a thin strip inside a
+   * wrongly-shaped box (DESIGN.md §2.3b).
    */
   private revealOpenPlaceholder(
     src: string,
     slot: Slot,
     index: number,
     naturalSize?: { width: number; height: number },
+    aspectRatio?: number,
+    onReady?: () => void,
+    alreadyVisible = false,
   ): void {
     const img = createOpenPlaceholder(src);
     const reveal = (): void => {
-      if (slot.assignedIndex !== index || slot.ready) return; // stale, or the real content already won the race
+      if (slot.assignedIndex !== index) return; // stale — a newer render() call has since moved on
+      if (slot.ready) {
+        onReady?.(); // real content already won the race; onLoad already called this too, harmlessly (guarded there)
+        return;
+      }
       // Only loading indicators, not slot.media wholesale — a provider video
       // may have already appended its own (still-hidden) container alongside
       // it. A real bug: this only ever cleared the spinner, not a
@@ -380,18 +420,37 @@ export class SlideManager {
         .querySelectorAll('.shoji-slide-spinner, .shoji-slide-provider-poster')
         .forEach((el) => el.remove());
       slot.media.appendChild(img);
-      if (naturalSize) {
+      // aspectRatio, not naturalSize.width/naturalSize.height: naturalSize
+      // is the real *photo*'s size (used below only to cap how large this
+      // box can grow), but this image's actual pixels are the *thumbnail*'s
+      // — sizing the box to the photo's aspect instead of the thumbnail's
+      // own (the caller's own doc comment on this call explains why) left
+      // most of it transparent, object-fit: contain letterboxing the square
+      // thumbnail into a thin strip inside a wide box.
+      if (aspectRatio) {
         const containerRect = slot.root.getBoundingClientRect();
         const box = containedBox(
           { left: 0, top: 0, width: containerRect.width, height: containerRect.height },
-          naturalSize.width / naturalSize.height,
+          aspectRatio,
           naturalSize,
         );
         img.style.width = `${box.width}px`;
         img.style.height = `${box.height}px`;
       }
+      onReady?.();
     };
-    if (typeof img.decode === 'function') {
+    if (alreadyVisible) {
+      // `src` is the exact resource `origin`'s own <img> is already
+      // decoded and painted with right now (Gallery.ts's own doc comment on
+      // `openPlaceholderAlreadyVisible` explains why) — nothing left to
+      // wait on. Still deferred a tick (not called inline here), not for
+      // decode reasons but because `open()`'s own caller hasn't made the
+      // dialog visible yet at this exact point in its synchronous body
+      // (`classList.add('shoji-open')` runs right after this call
+      // returns) — `zoomIn()`'s rect measurements need that to have
+      // already happened.
+      queueMicrotask(reveal);
+    } else if (typeof img.decode === 'function') {
       img.decode().then(reveal, reveal);
     } else {
       img.addEventListener('load', reveal, { once: true });

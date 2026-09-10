@@ -164,8 +164,7 @@ function effectiveTargetBox(
  * image. `Math.min` keeps the box fully contained within origin's rect
  * (same tradeoff `object-fit: contain` makes); center always lands exactly
  * on origin's center, only the unconstrained axis's edges fall short.
- */
-/**
+ *
  * The actual translate3d/scale3d math `computeTransformOutcome` below needs —
  * pulled out on its own so `zoomOut`'s `zoomStart` jump (a *second* use of
  * the exact same center-to-center box-fitting math, landing on a captured
@@ -176,6 +175,26 @@ function effectiveTargetBox(
  */
 function transformBetween(from: Box, to: Box): string {
   const scale = Math.min(to.width / from.width, to.height / from.height);
+  return transformString(from, to, scale, scale);
+}
+
+/**
+ * Same center-to-center landing as `transformBetween`, but independent
+ * scaleX/scaleY instead of one uniform factor — `from` is allowed to warp
+ * to `to`'s exact aspect ratio rather than merely fitting inside it. Used
+ * only for the `'fade'` outcome below: a real bug, reported from real usage
+ * on this exact panoramic-photo/square-thumbnail mismatch — `transformBetween`'s
+ * "contain" tradeoff avoided visibly distorting the *photo* mid-zoom, but a
+ * `'fade'` close/open isn't preserving that undistorted look anyway (opacity
+ * is already carrying the transition), so it bought nothing there except
+ * landing on a wrong-shaped, visibly-too-small box instead of the thumbnail's
+ * own real size once the shrink finished (DESIGN.md §2.3b).
+ */
+function transformBetweenStretch(from: Box, to: Box): string {
+  return transformString(from, to, to.width / from.width, to.height / from.height);
+}
+
+function transformString(from: Box, to: Box, scaleX: number, scaleY: number): string {
   const translateX = to.left + to.width / 2 - (from.left + from.width / 2);
   const translateY = to.top + to.height / 2 - (from.top + from.height / 2);
   // translate3d/scale3d, not translate()/scale() — forces the GPU
@@ -184,7 +203,7 @@ function transformBetween(from: Box, to: Box): string {
   // (DESIGN.md §4.6): this is the identical technique (a large photo
   // scaled via `transform`) on the same element, just driven by open/close
   // instead of pinch/toolbar zoom.
-  return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scale}, ${scale}, 1)`;
+  return `translate3d(${translateX}px, ${translateY}px, 0) scale3d(${scaleX}, ${scaleY}, 1)`;
 }
 
 /**
@@ -278,6 +297,7 @@ function hasRealTargetContent(target: HTMLElement): boolean {
 function computeTransformOutcome(
   origin: HTMLElement,
   target: HTMLElement,
+  direction: 'in' | 'out',
   aspectRatio?: number,
   naturalSize?: { width: number; height: number },
 ): TransformOutcome {
@@ -291,7 +311,6 @@ function computeTransformOutcome(
   ) {
     return { kind: 'none' };
   }
-  const transform = transformBetween(targetRect, originRect);
   // `effectiveTargetBox` had nothing real to measure and no `naturalSize`
   // to cap an analytical guess at (Gallery.ts's open() own doc comment:
   // guessing "probably fills the dialog" visibly overshoots a genuinely
@@ -304,20 +323,67 @@ function computeTransformOutcome(
   // item.width/height declared either.
   const unknownTargetSize = !naturalSize && !hasRealTargetContent(target);
   if (unknownTargetSize) {
-    return { kind: 'fade', transform };
+    // targetRect here is a pure, uncapped guess — there's no real shape to
+    // preserve *or* to intentionally land on, so this keeps the plain
+    // "contain" scale rather than reaching for transformBetweenStretch
+    // below: that fix is about landing pixel-exact on a real, known origin
+    // box once the *target's* real shape is what's causing the mismatch,
+    // not about a target whose shape isn't known at all.
+    return { kind: 'fade', transform: transformBetween(targetRect, originRect) };
   }
   const originRatio = originRect.width / originRect.height;
   const targetRatio = targetRect.width / targetRect.height;
   const ratioOfRatios = Math.max(originRatio, targetRatio) / Math.min(originRatio, targetRatio);
-  if (ratioOfRatios > ASPECT_MISMATCH_THRESHOLD) {
-    return { kind: 'fade', transform };
-  }
-  return { kind: 'zoom', transform };
+  // Only on close: a real bug, reported directly, ruled out the alternative
+  // here too — closing a severely mismatched box with a plain "contain"
+  // scale collapses it into a barely-visible sliver (the original reason
+  // 'fade' exists at all). Opening doesn't have that failure mode the same
+  // way — growing *out* from a small, uniformly-scaled box never produces
+  // an unreadable sliver the way shrinking *into* one does — so it isn't
+  // worth trading for the fade's own real cost: a real stretch of time
+  // where the photo is dim/near-invisible while it's still catching up to
+  // full opacity, reported directly from real usage as looking broken, not
+  // like a deliberate transition. Opening a badly mismatched item now just
+  // grows a plain, undistorted "contain" box the same as any other item —
+  // it won't perfectly fill the origin thumbnail's own footprint along the
+  // way, but the photo itself is visible and correctly proportioned at
+  // every single frame, the whole time.
+  const isMismatch = direction === 'out' && ratioOfRatios > ASPECT_MISMATCH_THRESHOLD;
+  // transformBetweenStretch, not transformBetween, once fading for a real
+  // aspect mismatch: see its own doc comment for why landing pixel-exact on
+  // origin's real box is strictly better there than preserving an
+  // undistorted "contain" fit.
+  const transform = isMismatch
+    ? transformBetweenStretch(targetRect, originRect)
+    : transformBetween(targetRect, originRect);
+  return isMismatch ? { kind: 'fade', transform } : { kind: 'zoom', transform };
 }
 
-/** Both `transform` and `opacity`, same duration — the `'fade'` outcome's own transition value; see its doc comment for why both properties animate together. */
-const FADE_TRANSITION =
-  'transform var(--shoji-duration) var(--shoji-easing), opacity var(--shoji-duration) var(--shoji-easing)';
+/**
+ * The `'fade'` outcome's own transition values — see its doc comment for why
+ * `transform` and `opacity` animate together. `transform` must stay listed
+ * first in both: `waitForTransitionEnd` reads back `transitionDuration`'s
+ * first comma-separated value to know how long to wait, and that has to be
+ * `transform`'s full duration, not opacity's shorter one below.
+ *
+ * Opacity gets its own, shorter `--shoji-fade-duration` rather than sharing
+ * the full duration: an opacity ramp spread across the *whole* transition
+ * reads as "blank" for a big chunk of it — low opacity is barely
+ * perceptible against the dialog's dark backdrop, so most of a full-
+ * duration fade-in looks like nothing is happening yet, and a full-duration
+ * fade-out looks like the content vanished well before the shrink motion
+ * actually finishes (a real bug, reported from real usage on this exact
+ * panoramic-photo/square-thumbnail mismatch: DESIGN.md §2.3b). Concentrating
+ * the opacity change into a short window at the *start* of `zoomIn` (content
+ * appears fast, size/shape keeps animating for the rest of the duration)
+ * and at the *end* of `zoomOut` (content stays fully visible while
+ * shrinking, only disappearing right at the very end) keeps the image
+ * visible for as much of the motion as possible either way.
+ */
+const FADE_IN_TRANSITION =
+  'transform var(--shoji-duration) var(--shoji-easing), opacity var(--shoji-fade-duration, 120ms) var(--shoji-easing)';
+const FADE_OUT_TRANSITION =
+  'transform var(--shoji-duration) var(--shoji-easing), opacity var(--shoji-fade-duration, 120ms) var(--shoji-easing) calc(var(--shoji-duration) - var(--shoji-fade-duration, 120ms))';
 
 /**
  * Waits for `target`'s own transition (on `property`, default `'transform'`)
@@ -404,7 +470,7 @@ function clearInlineTransform(target: HTMLElement, expectedTransform: string): v
  */
 export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransitionTarget): void {
   if (prefersReducedMotion()) return;
-  const outcome = computeTransformOutcome(origin, target, aspectRatio, naturalSize);
+  const outcome = computeTransformOutcome(origin, target, 'in', aspectRatio, naturalSize);
   if (outcome.kind === 'none') return;
   const { transform } = outcome;
   // See the `'fade'` outcome's own doc comment — animates alongside the
@@ -428,7 +494,7 @@ export function zoomIn({ origin, target, aspectRatio, naturalSize }: ZoomTransit
   if (isFade) target.style.opacity = '0';
   void target.offsetHeight; // force the instant jump to commit before transitioning away from it
   target.style.transition = isFade
-    ? FADE_TRANSITION
+    ? FADE_IN_TRANSITION
     : 'transform var(--shoji-duration) var(--shoji-easing)';
   target.style.transform = 'none';
   if (isFade) target.style.opacity = '1';
@@ -453,7 +519,7 @@ export function zoomOut(
   }
   // Measured before dragStart/zoomStart is ever applied to `target` — see
   // ZoomTransitionTarget.dragStart's doc comment for why the order matters.
-  const outcome = computeTransformOutcome(origin, target, aspectRatio, naturalSize);
+  const outcome = computeTransformOutcome(origin, target, 'out', aspectRatio, naturalSize);
   if (outcome.kind === 'none') {
     onComplete();
     return;
@@ -518,7 +584,7 @@ export function zoomOut(
     }
   }
   target.style.transition = isFade
-    ? FADE_TRANSITION
+    ? FADE_OUT_TRANSITION
     : 'transform var(--shoji-duration) var(--shoji-easing)';
   void target.offsetHeight;
   target.style.transform = transform;

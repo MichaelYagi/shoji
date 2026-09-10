@@ -82,19 +82,20 @@ function activeMedia(): HTMLElement {
 }
 
 describe('Gallery — zoom transition origin lookup', () => {
-  it('uses the scanned element in selector mode with no markup needed', () => {
+  it('uses the scanned element in selector mode with no markup needed', async () => {
     const el = document.createElement('div');
     el.innerHTML = `<a href="a.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-a.jpg"></a><a href="b.jpg" data-shoji-width="800" data-shoji-height="600"><img src="thumb-b.jpg"></a>`;
     document.body.appendChild(el);
 
     const gallery = new Gallery(el, { preload: 0 });
     gallery.open(1);
+    await flush(); // zoomIn is deferred until the open placeholder's own decode() resolves
 
     expect(activeMedia().style.transform).not.toBe('');
     gallery.destroy();
   });
 
-  it('prefers a data-shoji-id marker over the scanned element when both exist', () => {
+  it('prefers a data-shoji-id marker over the scanned element when both exist', async () => {
     // The anchor carries no data-shoji-id of its own, so scan.ts falls back
     // to item.id = src ('a.jpg') for it — the *separate* marker div is the
     // only element tagged data-shoji-id="a.jpg", so a match there is
@@ -116,6 +117,7 @@ describe('Gallery — zoom transition origin lookup', () => {
 
     const gallery = new Gallery(el, { preload: 0 });
     gallery.open(0);
+    await flush(); // zoomIn is deferred until the open placeholder's own decode() resolves
 
     expect(zoomTransition.zoomIn).toHaveBeenCalledWith(expect.objectContaining({ origin: marker }));
 
