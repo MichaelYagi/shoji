@@ -144,7 +144,19 @@ function effectiveTargetBox(
     (child.classList.contains('shoji-slide-spinner') ||
       child.classList.contains('shoji-slide-open-placeholder'));
   if (child instanceof HTMLElement && !isPlaceholder) {
-    const rect = child.getBoundingClientRect();
+    // A provider video's own direct child (`.shoji-slide-provider-video`) is
+    // deliberately `position: absolute; inset: 0` (shoji.css's own real-bug
+    // fix for centering it) — it fills the whole slide regardless of the
+    // video's real shape. The actual aspect-correctly-sized element is one
+    // level deeper (`> iframe` for YouTube, or Vimeo's own `.shoji-video-
+    // mount` wrapping one) — measuring the wrapper directly landed the FLIP
+    // transform on a box shaped like the *dialog*, not the video, a real
+    // bug: the shrink/grow undersized whichever axis the dialog's own shape
+    // didn't happen to match origin's.
+    const measureTarget = child.classList.contains('shoji-slide-provider-video')
+      ? (child.querySelector('.shoji-video-mount, iframe') ?? child)
+      : child;
+    const rect = measureTarget.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) return rect;
   }
   const containerRect = target.getBoundingClientRect();
@@ -155,15 +167,19 @@ function effectiveTargetBox(
 }
 
 /**
- * Center-to-center translate + a single uniform scale that lands `target`'s
- * effective box (`effectiveTargetBox` above) *within* `origin`'s box,
- * without distorting it. `null` if either has no real size — nothing sane
- * to animate. One scale factor, not independent scaleX/scaleY: origin and
- * the photo essentially never share an exact aspect ratio, and scaling each
- * axis independently to force a rect match visibly squeezes/stretches the
- * image. `Math.min` keeps the box fully contained within origin's rect
- * (same tradeoff `object-fit: contain` makes); center always lands exactly
- * on origin's center, only the unconstrained axis's edges fall short.
+ * Center-to-center translate + a single uniform scale that lands `from`
+ * (`effectiveTargetBox` above) *within* `to`'s box, without distorting it,
+ * as CSS `transform: translate3d(...) scale3d(...)` applied to `pivot` —
+ * the element actually receiving that transform, almost always `from`
+ * itself or something sharing its center, but not always (see `pivot`'s own
+ * doc comment on `transformString` below). `null` if either has no real
+ * size — nothing sane to animate. One scale factor, not independent
+ * scaleX/scaleY: origin and the photo essentially never share an exact
+ * aspect ratio, and scaling each axis independently to force a rect match
+ * visibly squeezes/stretches the image. `Math.min` keeps the box fully
+ * contained within `to`'s rect (same tradeoff `object-fit: contain` makes);
+ * center always lands exactly on `to`'s center, only the unconstrained
+ * axis's edges fall short.
  *
  * The actual translate3d/scale3d math `computeTransformOutcome` below needs —
  * pulled out on its own so `zoomOut`'s `zoomStart` jump (a *second* use of
@@ -173,9 +189,9 @@ function effectiveTargetBox(
  * different element — see `ZoomTransitionTarget.zoomStart`'s own doc
  * comment for why that direct-replication approach doesn't work.
  */
-function transformBetween(from: Box, to: Box): string {
+function transformBetween(pivot: Box, from: Box, to: Box): string {
   const scale = Math.min(to.width / from.width, to.height / from.height);
-  return transformString(from, to, scale, scale);
+  return transformString(pivot, from, to, scale, scale);
 }
 
 /**
@@ -190,13 +206,41 @@ function transformBetween(from: Box, to: Box): string {
  * landing on a wrong-shaped, visibly-too-small box instead of the thumbnail's
  * own real size once the shrink finished (DESIGN.md §2.3b).
  */
-function transformBetweenStretch(from: Box, to: Box): string {
-  return transformString(from, to, to.width / from.width, to.height / from.height);
+function transformBetweenStretch(pivot: Box, from: Box, to: Box): string {
+  return transformString(pivot, from, to, to.width / from.width, to.height / from.height);
 }
 
-function transformString(from: Box, to: Box, scaleX: number, scaleY: number): string {
-  const translateX = to.left + to.width / 2 - (from.left + from.width / 2);
-  const translateY = to.top + to.height / 2 - (from.top + from.height / 2);
+/**
+ * `pivot` — a real bug, found via a provider video: `from` is *not* always
+ * the element the computed transform actually gets applied to. A photo's
+ * `<img>` fills (or is centered within, via flex, even if letterboxed) its
+ * parent `.shoji-slide-media` — the element the CSS `transform` lands on —
+ * so measuring the `<img>` and transforming its parent were always
+ * interchangeable there, same center either way. A provider video's real,
+ * aspect-correct content (`effectiveTargetBox`'s own doc comment) sits
+ * inside `.shoji-slide-provider-video`, itself pushed down by
+ * `--shoji-provider-video-top-inset` (the toolbar gutter, shoji.css) — its
+ * center is *not* `.shoji-slide-media`'s own, so a translate computed
+ * purely from `from`/`to` centers landed the *container* on `to` correctly
+ * while the actual video content inside it sat visibly offset (too high) by
+ * however far the gutter had pushed it down. `pivot` (always `target`'s own
+ * `getBoundingClientRect()` — the element the transform is actually applied
+ * to) corrects for exactly that gap: `scale` is still driven by `from`
+ * relative to `to` alone, but the translate now accounts for `from` sitting
+ * off-center within `pivot`, landing on `to` regardless of which one's true.
+ * Reduces to the plain center-to-center formula whenever `from` and `pivot`
+ * share a center (every existing case — this is a strict generalization,
+ * not a behavior change for anything already working).
+ */
+function transformString(pivot: Box, from: Box, to: Box, scaleX: number, scaleY: number): string {
+  const pivotX = pivot.left + pivot.width / 2;
+  const pivotY = pivot.top + pivot.height / 2;
+  const fromX = from.left + from.width / 2;
+  const fromY = from.top + from.height / 2;
+  const toX = to.left + to.width / 2;
+  const toY = to.top + to.height / 2;
+  const translateX = toX - pivotX - scaleX * (fromX - pivotX);
+  const translateY = toY - pivotY - scaleY * (fromY - pivotY);
   // translate3d/scale3d, not translate()/scale() — forces the GPU
   // compositing path instead of a main-thread-painted 2D transform, the
   // same fix already validated for the Zoom plugin's own scale animation
@@ -303,6 +347,11 @@ function computeTransformOutcome(
 ): TransformOutcome {
   const originRect = effectiveOriginBox(origin);
   const targetRect = effectiveTargetBox(target, aspectRatio, naturalSize);
+  // Always `target`'s own rect — the element the computed transform is
+  // actually applied to — regardless of which descendant `targetRect` above
+  // measured for shape (`transformString`'s own doc comment explains why
+  // the two can differ, and why that gap matters).
+  const pivotRect = target.getBoundingClientRect();
   if (
     targetRect.width === 0 ||
     targetRect.height === 0 ||
@@ -329,7 +378,7 @@ function computeTransformOutcome(
     // below: that fix is about landing pixel-exact on a real, known origin
     // box once the *target's* real shape is what's causing the mismatch,
     // not about a target whose shape isn't known at all.
-    return { kind: 'fade', transform: transformBetween(targetRect, originRect) };
+    return { kind: 'fade', transform: transformBetween(pivotRect, targetRect, originRect) };
   }
   const originRatio = originRect.width / originRect.height;
   const targetRatio = targetRect.width / targetRect.height;
@@ -354,8 +403,8 @@ function computeTransformOutcome(
   // origin's real box is strictly better there than preserving an
   // undistorted "contain" fit.
   const transform = isMismatch
-    ? transformBetweenStretch(targetRect, originRect)
-    : transformBetween(targetRect, originRect);
+    ? transformBetweenStretch(pivotRect, targetRect, originRect)
+    : transformBetween(pivotRect, targetRect, originRect);
   return isMismatch ? { kind: 'fade', transform } : { kind: 'zoom', transform };
 }
 
@@ -577,7 +626,7 @@ export function zoomOut(
       // work, and it needs target's rotation to still be sitting there
       // when the transition starts, not already erased by this jump.
       const existing = target.style.transform;
-      const jump = transformBetween(targetRect, zoomStart);
+      const jump = transformBetween(target.getBoundingClientRect(), targetRect, zoomStart);
       target.style.transition = 'none';
       target.style.transform = existing && existing !== 'none' ? `${existing} ${jump}` : jump;
       void target.offsetHeight;

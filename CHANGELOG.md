@@ -5,6 +5,43 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.17] - 2026-09-10
+
+### Fixed
+
+- **Opening a lightbox item never fades/dims anymore, even when its
+  thumbnail's aspect ratio is badly mismatched with the real photo's.**
+  Closing still fades in that case (avoiding a collapse into an unreadable
+  sliver), but opening now always grows a plain, undistorted box — the
+  photo stays visible and correctly proportioned at full opacity on every
+  frame, instead of visibly dimming in (or out) for a chunk of the
+  transition. Several compounding causes behind the same underlying report
+  are fixed along the way: the fade's own opacity duration is now
+  decoupled from the transform's (front-loaded on open, back-loaded on
+  close — previously spread across the whole transition and easily read as
+  "nothing happening yet"); the shrink-toward-thumbnail transform now
+  lands pixel-exact on the thumbnail's real size instead of a uniform
+  "contain" scale that fell short on one axis; the zoom-in animation no
+  longer starts before real content has actually replaced the loading
+  spinner; the open placeholder is now sized using the thumbnail's own
+  aspect ratio instead of the real photo's (fixing a letterboxed,
+  mostly-transparent placeholder box); and reopening an already-visible
+  thumbnail now skips an unnecessary decode wait entirely.
+- **Closing a YouTube/Vimeo video no longer shrinks it to the wrong size
+  and position.** The real video content (an iframe, or Vimeo's own mount
+  wrapping one) sits inset from its own container by the toolbar gutter —
+  the zoom transition was measuring the container's own unconstrained box
+  instead of the video's real one (landing the shrink toward the dialog's
+  shape rather than the video's), and translating as if the video's center
+  coincided with its container's, which it doesn't. Both are now
+  measured/computed correctly; the video's real, visible box lands
+  pixel-exact on the origin thumbnail on close.
+
+### Changed
+
+- Core budget raised 39.7 kB → 40.4 kB for the fixes above; see
+  DESIGN.md's own bug-log and budget-history for the full chain.
+
 ## [0.1.0-beta.16] - 2026-09-09
 
 ### Added
