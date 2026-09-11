@@ -16,7 +16,7 @@ still include breaking changes).
   exact, independently-scaled landing once the mismatch was severe (a
   panoramic photo against a square thumbnail); anything milder — an
   ordinary landscape photo against a square thumbnail is enough — still
-  used a uniform scale that preserves the *photo's* own aspect ratio,
+  used a uniform scale that preserves the _photo's_ own aspect ratio,
   which isn't what a cropped thumbnail's shape actually is. Closing now
   always lands exactly on the thumbnail's box; whether it also fades
   (needed only for a severe mismatch, to hide the shape warp along the
