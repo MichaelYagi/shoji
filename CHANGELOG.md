@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0, so minor bumps may
 still include breaking changes).
 
+## [0.1.0-beta.18] - 2026-09-10
+
+### Fixed
+
+- **Closing a lightbox item into a deliberately-cropped thumbnail (e.g. a
+  square grid tile next to a 4:3 or wider photo) now lands pixel-exact on
+  the thumbnail's real size on every axis, instead of falling short on
+  one of them.** The shrink-to-thumbnail transform only switched to an
+  exact, independently-scaled landing once the mismatch was severe (a
+  panoramic photo against a square thumbnail); anything milder — an
+  ordinary landscape photo against a square thumbnail is enough — still
+  used a uniform scale that preserves the *photo's* own aspect ratio,
+  which isn't what a cropped thumbnail's shape actually is. Closing now
+  always lands exactly on the thumbnail's box; whether it also fades
+  (needed only for a severe mismatch, to hide the shape warp along the
+  way) is unchanged. Opening is unaffected.
+
 ## [0.1.0-beta.17] - 2026-09-10
 
 ### Fixed

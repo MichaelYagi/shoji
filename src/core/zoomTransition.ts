@@ -197,14 +197,21 @@ function transformBetween(pivot: Box, from: Box, to: Box): string {
 /**
  * Same center-to-center landing as `transformBetween`, but independent
  * scaleX/scaleY instead of one uniform factor — `from` is allowed to warp
- * to `to`'s exact aspect ratio rather than merely fitting inside it. Used
- * only for the `'fade'` outcome below: a real bug, reported from real usage
- * on this exact panoramic-photo/square-thumbnail mismatch — `transformBetween`'s
- * "contain" tradeoff avoided visibly distorting the *photo* mid-zoom, but a
- * `'fade'` close/open isn't preserving that undistorted look anyway (opacity
- * is already carrying the transition), so it bought nothing there except
- * landing on a wrong-shaped, visibly-too-small box instead of the thumbnail's
- * own real size once the shrink finished (DESIGN.md §2.3b).
+ * to `to`'s exact aspect ratio rather than merely fitting inside it. Used for
+ * every close (`computeTransformOutcome`'s `direction === 'out'` branch): a
+ * close always lands on `origin`'s real box exactly, on both axes, since
+ * `origin` (often a deliberately cropped thumbnail, e.g. `object-fit: cover`)
+ * essentially never shares the real photo's aspect ratio, and anything short
+ * of an exact landing reads as "didn't quite make it" once the animation
+ * stops and the real thumbnail is sitting right there. Also used for a badly
+ * mismatched *open* (`isMismatch` in the `'fade'` outcome below): same
+ * reasoning as a real bug, reported from real usage on a panoramic-photo/
+ * square-thumbnail mismatch — `transformBetween`'s "contain" tradeoff avoided
+ * visibly distorting the *photo* mid-zoom, but a `'fade'` transition isn't
+ * preserving that undistorted look anyway (opacity is already carrying the
+ * transition), so it bought nothing there except landing on a wrong-shaped,
+ * visibly-too-small box instead of the thumbnail's own real size once the
+ * shrink finished (DESIGN.md §2.3b).
  */
 function transformBetweenStretch(pivot: Box, from: Box, to: Box): string {
   return transformString(pivot, from, to, to.width / from.width, to.height / from.height);
@@ -280,22 +287,22 @@ function effectiveOriginBox(origin: HTMLElement): Box {
 
 /**
  * How much more extreme one box's aspect ratio can be than the other's
- * before `transformBetween`'s single uniform scale (`Math.min`-constrained,
- * same tradeoff `object-fit: contain` makes) stops reading as "shrinking
- * into the thumbnail" and starts reading as "collapsing into a sliver" — a
- * deliberately cropped thumbnail (e.g. a center-cropped square next to a
- * panoramic photo) can differ from the real photo's shape by far more than
- * ordinary letterboxing ever does. `2` (not the `1.5` first proposed):
+ * before landing exactly on `origin`'s box (`transformBetweenStretch`, always
+ * used on close regardless of this threshold — see its own doc comment)
+ * warps the shrinking photo enough to need an opacity fade hiding the warp,
+ * rather than shrinking fully opaque. A mild mismatch (e.g. an ordinary 4:3
+ * photo against a square thumbnail) stretches cleanly enough at the small
+ * size it's shrinking to that the fade isn't needed; a severe one (e.g. a
+ * panoramic photo against that same square thumbnail) visibly warps enough,
+ * for long enough, to need one. `2` (not the `1.5` first proposed):
  * `tests/unit/zoomTransition.test.ts`'s own "never distorts the image's
  * aspect ratio" regression fixture (a square origin against a 16:9 target,
  * ratio 1.778) is a real, intentional case that must still get the plain
- * zoom transform, opacity fade included — it lands at ~56% of the origin's
- * height, letterboxed but clearly still "arriving at the thumbnail," and
- * doesn't need the fade to read correctly. `1.5` would have wrongly routed
- * that case through the fade-plus-transform combo below too. `2` keeps that
- * case (1.778 < 2) while still catching a 3:1 panoramic photo against a
- * square thumbnail (ratio 3.0 > 2), the reported bug — that one lands at
- * ~33% of the origin's height, a visibly thin strip if left fully opaque.
+ * `'zoom'` outcome (stretch transform, no fade) — it lands pixel-exact on
+ * origin without needing the fade to read correctly. `1.5` would have wrongly
+ * routed that case through `'fade'` too. `2` keeps that case (1.778 < 2)
+ * while still catching a 3:1 panoramic photo against a square thumbnail
+ * (ratio 3.0 > 2), the original reported bug this threshold was built for.
  */
 const ASPECT_MISMATCH_THRESHOLD = 2;
 
@@ -398,13 +405,26 @@ function computeTransformOutcome(
   // way, but the photo itself is visible and correctly proportioned at
   // every single frame, the whole time.
   const isMismatch = direction === 'out' && ratioOfRatios > ASPECT_MISMATCH_THRESHOLD;
-  // transformBetweenStretch, not transformBetween, once fading for a real
-  // aspect mismatch: see its own doc comment for why landing pixel-exact on
-  // origin's real box is strictly better there than preserving an
-  // undistorted "contain" fit.
-  const transform = isMismatch
-    ? transformBetweenStretch(pivotRect, targetRect, originRect)
-    : transformBetween(pivotRect, targetRect, originRect);
+  // On close, always transformBetweenStretch, never transformBetween — even
+  // below ASPECT_MISMATCH_THRESHOLD. A real bug, reported from real usage: a
+  // 4:3 photo (ratio 1.333, well under the threshold) closing into a
+  // deliberately-cropped square thumbnail landed short on one axis — correct
+  // width, wrong height — because `transformBetween`'s "contain" scale
+  // preserves the *photo's* aspect ratio, but the origin thumbnail is a hard
+  // crop (`object-fit: cover` in the host's own CSS, common for grid tiles)
+  // with a *different* shape than the photo it was cropped from. `zoomIn`
+  // opening the same mismatch is fine left as "contain" — it's a momentary
+  // starting point, immediately animated away from. `zoomOut` lands there and
+  // stops: any shape gap between the shrinking box and the real thumbnail
+  // sitting right behind it reads as "didn't quite make it," not as a
+  // deliberate letterbox. `ASPECT_MISMATCH_THRESHOLD` still decides `kind`
+  // below — a mild mismatch stretches cleanly enough to skip the fade
+  // entirely (imperceptible at the size it's shrinking to); only a severe one
+  // needs the opacity fade to hide the warp along the way.
+  const transform =
+    direction === 'out'
+      ? transformBetweenStretch(pivotRect, targetRect, originRect)
+      : transformBetween(pivotRect, targetRect, originRect);
   return isMismatch ? { kind: 'fade', transform } : { kind: 'zoom', transform };
 }
 
